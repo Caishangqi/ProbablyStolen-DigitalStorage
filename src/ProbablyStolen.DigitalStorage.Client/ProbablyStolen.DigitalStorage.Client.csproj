@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ProbablyStolen.DigitalStorage.Client</AssemblyName>
+    <RootNamespace>ProbablyStolen.DigitalStorage.Client</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Common\ProbablyStolen.DigitalStorage.Common.csproj" />
+  </ItemGroup>
+</Project>

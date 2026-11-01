@@ -1,0 +1,40 @@
+# Local reference checkouts. Keep these repositories read-only and out of project commits.
+.reference/
+
+# Local secrets and per-machine settings.
+.env
+.env.*
+!.env.example
+*.local.json
+mise.local.toml
+.secrets/
+
+# Build and test output.
+**/bin/
+**/obj/
+**/.vs/
+**/TestResults/
+**/node_modules/
+**/dist/
+**/coverage/
+**/.vite/
+/artifacts/
+**/__pycache__/
+*.py[cod]
+
+# Editor and operating-system files.
+.vscode/
+.idea/*
+!.idea/.idea.*/
+.idea/.idea.*/.idea/*
+!.idea/.idea.*/.idea/runConfigurations/
+!.idea/.idea.*/.idea/runConfigurations/*.xml
+!.idea/.idea.*/.idea/vcs.xml
+!.idea/.idea.*/.idea/.gitignore
+.DS_Store
+Thumbs.db
+*.user
+*.suo
+*.swp
+*.tmp
+*.log
