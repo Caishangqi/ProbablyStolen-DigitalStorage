@@ -26,15 +26,22 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageContentRegistration _content;
     private readonly CellPageAudit _pageAudit;
     private readonly StorageEventBus _events;
+    private readonly DigitalStorageSettings _settings;
+    private readonly StorageVendors _vendors;
+    private readonly ItemTypeBackfill _typeBackfill;
     private bool _isEnabled;
     private bool _isDisposed;
 
     private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
         GridNetworkTooltipPresenter networkTooltipPresenter, CellTooltipPresenter cellTooltipPresenter,
         ItemAppearance appearance,
-        StorageContentRegistration content, CellPageAudit pageAudit, StorageEventBus events)
+        StorageContentRegistration content, CellPageAudit pageAudit, StorageEventBus events,
+        DigitalStorageSettings settings, StorageVendors vendors)
     {
         _events = events;
+        _settings = settings;
+        _vendors = vendors;
+        _typeBackfill = new ItemTypeBackfill(log);
         _log = log;
         _statusPresenter = statusPresenter;
         _modId = modId;
@@ -72,7 +79,8 @@ public sealed class PlatformComposition : IDisposable
         var componentDefinition = new StorageComponent();
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
         var inventory = new DriveCellInventory(recipe);
-        var networkPowerSettings = new NativePowerConfiguration(identity!.Id, text);
+        var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text);
+        networkPowerSettings.ApplyStorageLimits();
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
             message => log.Error(message),
             drive => NativeCellResolver.Get(drive));
@@ -83,7 +91,7 @@ public sealed class PlatformComposition : IDisposable
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellTooltipPresenter);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var component = new StorageComponentFactory(text, appearance, componentDefinition, recipe);
-        var cell = new StorageCellItem(text, appearance, component, recipe, log);
+        var cell = new StorageCellItem(text, appearance, component, recipe, log, networkPowerSettings.GetShowCellPages);
         var housing = new MaterialItem(cell);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, log, networkEvents);
@@ -91,7 +99,8 @@ public sealed class PlatformComposition : IDisposable
         var controller = new ControllerItem(text, appearance, windows);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
-            networkTooltipPresenter, cellTooltipPresenter, appearance, content, new CellPageAudit(text, log), eventBus);
+            networkTooltipPresenter, cellTooltipPresenter, appearance, content, new CellPageAudit(text, log), eventBus,
+            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log));
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -110,10 +119,12 @@ public sealed class PlatformComposition : IDisposable
         try
         {
             _content.Enable();
+            _vendors.Enable();
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
             ModHook.OnGameLoadedNormal += OnGameLoaded;
             ModHook.OnGameLoadedLate += _pageAudit.Run;
+            ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             _log.Log(_statusPresenter.Present(ModuleStartupPhase.Enabled));
         }
@@ -143,9 +154,11 @@ public sealed class PlatformComposition : IDisposable
         ModHook.OnModConfigApplied -= OnConfigApplied;
         ModHook.OnGameLoadedNormal -= OnGameLoaded;
         ModHook.OnGameLoadedLate -= _pageAudit.Run;
+        ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         TerminalStorageWindow.CloseCurrent();
         PartitionConfigurationWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
+        _vendors.Dispose();
         _content.Dispose();
         _events.Dispose();
     }
@@ -160,6 +173,8 @@ public sealed class PlatformComposition : IDisposable
     {
         if (_isEnabled && string.Equals(modId, _modId, StringComparison.Ordinal))
         {
+            _settings.ApplyStorageLimits();
+            _settings.RefreshSectionNames();
             _log.Log("Digital Storage: configuration applied; open network views refresh now.");
             _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
         }
@@ -172,6 +187,7 @@ public sealed class PlatformComposition : IDisposable
             return;
         }
 
+        _settings.RefreshSectionNames();
         ValidateResources();
     }
 

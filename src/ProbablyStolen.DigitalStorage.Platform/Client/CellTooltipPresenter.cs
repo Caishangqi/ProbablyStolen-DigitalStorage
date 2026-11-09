@@ -41,7 +41,9 @@ public sealed class CellTooltipPresenter
             var size = CellPages.SizeOf(root);
             return size.Width * size.Height;
         });
-        Add(builder, "cell_storage_usage", usedCells, layout.TotalCells, view.TypeCount, layout.MaxTypes);
+        // A cell keeps its pages when the limit is lowered, so its capacity is whichever is larger.
+        var capacity = Math.Max(view.Pages.Count, layout.MaxPages) * layout.CellsPerPage;
+        Add(builder, "cell_storage_usage", usedCells, capacity, view.TypeCount, layout.MaxTypes);
         var partition = view.Partition;
         if (!partition.IsValid)
         {

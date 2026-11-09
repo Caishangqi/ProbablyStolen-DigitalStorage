@@ -42,6 +42,10 @@ internal sealed class StorageComponentFactory
             item.name = _text.Get(NameKey);
             item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
+            item.unitValue = ItemPrices.Component1K;
+            // MATERIAL lets engineers and Dr. Jackson buy it. ModuleHelper.InitModuleItem below also makes it a MODULE
+            // (ModuleHelper.cs:76-77), as before this change.
+            item.SetGameItemType(ItemPrices.MaterialType);
             ModuleHelper.InitModuleItem(item, "digital_storage.component_module", isShipModule: false);
             item.mayStackItemFunc = (_, _) => false;
             item.maxSlotAmountItemFunc = (_, _, _) => 1;

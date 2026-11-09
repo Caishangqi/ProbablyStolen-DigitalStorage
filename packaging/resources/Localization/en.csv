@@ -16,7 +16,7 @@ partition_applied,Applied
 partition_cleanup_failed,Source cleanup failed
 partition_applied_cleanup_failed,Applied; source cleanup failed
 partition_failed_cleanup_failed,Apply failed; source cleanup failed
-terminal_desc,Opens the DigitalStorage terminal. Search and extraction require an online network. Whole stacks can also be dropped onto the terminal to store them.
+terminal_desc,Accesses the items stored on the network.
 terminal_storage_title,Terminal
 terminal_storage_drag_hint,Place {0} dragged stack(s) into {1}. Release to attempt storage; rejected items stay at their source.
 terminal_storage_drag_rejected,These dragged items cannot currently be stored. Drag a whole stack and check supported state capacity and network; items stay at their source.
@@ -44,15 +44,15 @@ terminal_storage_recovery_pending,A transfer needs recovery. Keep its machines a
 terminal_storage_unsupported_power,Extraction recovery currently supports ordinary stored-energy batteries. This power source is not supported.
 terminal_storage_unique_split,This legacy native instance ID must be retrieved as one complete stored quantity with enough power.
 drive_name,Drive
-drive_desc,Holds fourteen assembled storage cells in separate bays. Online networks aggregate supported saved item state from those cells through an attached terminal.
+drive_desc,Holds storage cells and connects them to the network.
 controller_name,Controller
-controller_desc,Powers adjacent network machines from its native power slot. A drive or terminal is optional for the network to operate.
+controller_desc,Powers the storage network.
 item_storage_cell_1k_name,1k Item Storage Cell
-item_storage_cell_1k_desc,A digital storage cell that holds up to 63 kinds of items. Insert it into a drive to store and retrieve items through a terminal; items stay in the cell when you take it out. Empty the cell before removing its storage component.
+item_storage_cell_1k_desc,A digital cell that stores items.
 item_cell_housing_name,Item Cell Housing
-item_cell_housing_desc,The casing of a storage cell. Drag a 1k storage component into it to assemble a storage cell.
+item_cell_housing_desc,The casing of a storage cell.
 cell_component_1k_name,1k Storage Component
-cell_component_1k_desc,The core of a 1k storage cell. Install it in an item cell housing to assemble a cell; a module extractor can remove it once the cell is empty.
+cell_component_1k_desc,The core of a 1k storage cell.
 component_panel,Storage Component
 storage_pages_panel,Storage Space
 modules_panel,Modules
@@ -63,12 +63,8 @@ network_power_drive_name,Drive power draw
 network_power_drive_desc,Game power units drawn per native nightly cycle for each connected drive. Default: 2.
 network_power_terminal_name,Terminal power draw
 network_power_terminal_desc,Game power units drawn per native nightly cycle for each connected terminal. Default: 1.
-storage_cell_capacity_name,Storage cell capacity (unused)
-storage_cell_capacity_desc,Not used. A storage cell holds as much as its storage space can fit.
-storage_cell_max_types_name,Storage cell type limit
-storage_cell_max_types_desc,Maximum distinct item types per cell. The hard limit is 63.
-extraction_power_per_item_name,Extraction power per item
-extraction_power_per_item_desc,Game power units charged for each successfully extracted item. Default: 1.
+storage_cell_max_types_name,Item types per cell
+storage_cell_max_types_desc,How many different item types one storage cell can hold. Range 1-1024. Default: 63. Lowering it keeps stored types; only new types are refused.
 network_tooltip_state,Network state: {0}
 network_tooltip_drive_slots,Occupied drive slots: {0}/{1}
 network_module_stats_scope,Native module statistics do not currently change DigitalStorage network consumption or add throughput or quality bonuses.
@@ -115,5 +111,26 @@ terminal_partition_none,No storage cells on this network can be configured.
 terminal_partition_label,Drive {0} slot {1}
 terminal_hint_title,Controls
 terminal_hint_left,Left click: take one stack (one item if it does not stack)
-terminal_hint_right,Right click: take half a stack
+terminal_hint_right,Right click: take half a stack (stored stacks are not split)
 terminal_hint_shift,Shift + left click: take all
+config_section_power,Network power
+config_section_storage,Storage cells
+config_section_debug,Debug
+storage_cell_max_pages_name,Storage pages per cell
+storage_cell_max_pages_desc,How many 12x12 storage pages one storage cell can grow to. Range 1-128. Default: 16. Lowering it keeps existing pages and their items; only new pages are refused.
+debug_show_cell_pages_name,Show storage pages when opening a cell
+debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
+config_section_vendors,Vendors
+upper_engineer_daily_chance_name,Upper-level engineer daily visit chance (%)
+upper_engineer_daily_chance_desc,Chance that the upper-level engineer joins the day's customers. Range 0-100. Default: 25. Set 0 to stop the visits.
+upper_engineer_name,Upper-Level Engineer
+upper_engineer_greet_1,The upper-level data center swapped out another batch of storage hardware. Shame to scrap the old parts.
+upper_engineer_greet_2,I brought some storage cells and components. If you have spare storage parts or network machines I'll buy those too.
+upper_engineer_wrong_item,That's not what I'm after. Storage parts and network machines only.
+upper_engineer_right_item,Yes. That one works.
+upper_engineer_repeat,Storage parts. Network machines. Nothing else.
+upper_engineer_accept,Deal. The data center swaps hardware again next month; I'll be back.
+priority_configure,Priority
+priority_title,Drive Priority
+priority_desc,Items go into higher-priority drives first and come out of lower-priority drives first. Range {0} to {1}.
+priority_invalid,Enter a whole number

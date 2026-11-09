@@ -203,7 +203,10 @@ internal sealed class NetworkStorage
         }
 
         var destination = EmporiumEntry.Instance.invElement;
-        var roots = network.Cells.SelectMany(CellPages.Roots).Where(root => key.Equals(Identify(root))).ToList();
+        // AE2 extracts from the lowest priority first, so higher-priority drives keep their items longest.
+        var priorities = network.Cells.Select(DrivePriorityTag.ReadForCell).ToArray();
+        var roots = StorageRouter.ExtractOrder(priorities).Select(index => network.Cells[index])
+            .SelectMany(CellPages.Roots).Where(root => key.Equals(Identify(root))).ToList();
         if (roots.Count == 0)
         {
             return TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, amount, 0, "terminal_storage_no_items");
@@ -218,7 +221,7 @@ internal sealed class NetworkStorage
             moved += accepted;
             if (accepted < units)
             {
-                // The inventory is full; the remainder went back to its page.
+                // Stop after a partial acceptance; MoveTo has attempted to return any remaining root.
                 break;
             }
         }

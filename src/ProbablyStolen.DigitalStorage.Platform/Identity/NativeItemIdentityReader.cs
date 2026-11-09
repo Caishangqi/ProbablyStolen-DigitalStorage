@@ -1582,10 +1582,22 @@ internal sealed class NativeIdentityAdapter
                 new[] { _owner.WrapGraph(item) };
         }
 
+        // The mod scanner classifies a reflection lookup by tracing its receiver back to a literal type
+        // (typeof(...) or a literal type name, also through a local assigned once). _inventory.GetType() cannot be
+        // traced, counts as a "computed type" (reflection-external) and blocks activation. Each grid type
+        // therefore gets its own literal lookup. childItems would avoid reflection but copies the list on every read.
+        private static readonly FieldInfo? GridItems =
+            typeof(GameGridInventory).GetField("items", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo? ScrollableItems =
+            typeof(GameGridScrollableInventory).GetField("items", BindingFlags.Instance | BindingFlags.NonPublic);
+
         private List<GameItem> ReadItemField()
         {
+            // Exact types only, as before: a subclass may keep its items elsewhere.
             var type = _inventory.GetType();
-            var field = type.GetField("items", BindingFlags.Instance | BindingFlags.NonPublic);
+            var field = type == typeof(GameGridInventory) ? GridItems
+                : type == typeof(GameGridScrollableInventory) ? ScrollableItems
+                : null;
             if (field == null || field.DeclaringType != type || field.FieldType != typeof(List<GameItem>))
             {
                 throw new NativeItemIdentityReader.UnsupportedIdentityException(

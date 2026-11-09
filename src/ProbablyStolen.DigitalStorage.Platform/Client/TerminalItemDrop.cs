@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
@@ -8,7 +9,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// <summary>
 /// Stores a whole stack dropped onto the terminal item itself, without opening the terminal. It uses the native
 /// "use item on item" hooks (<c>mayItemTargetThisFunc</c>, <c>canItemTargetThisFunc</c>, <c>onItemTargetThisFunc</c>),
-/// which <c>ItemMouseDragHandler.EndDrag</c> reaches after child inventory insertion and stacking (Steam build 26496118).
+/// which <c>ItemMouseDragHandler.EndDrag</c> reaches after child inventory insertion and stacking (Steam build 26525552).
 /// </summary>
 internal sealed class TerminalItemDrop
 {
@@ -61,10 +62,22 @@ internal sealed class TerminalItemDrop
     {
         if (Classify(source) != DropKind.Store) return;
         var amount = DraggedAmount(source);
-        // Target receives the whole dragged item without the chosen quantity; the store moves whole roots only.
-        var result = _store(source, amount);
         _cachedItem = null;
-        _log($"Digital Storage: icon drop status={result.Status} units={source.unitCount} dragged={amount} stored={result.StoredAmount}");
+        try
+        {
+            // Target receives the whole dragged item without the chosen quantity; the store moves whole roots only.
+            var result = _store(source, amount);
+            _log($"Digital Storage: icon drop status={result.Status} units={source.unitCount} dragged={amount} stored={result.StoredAmount}");
+        }
+        catch (Exception error)
+        {
+            _log($"Digital Storage: icon drop failed error={error.GetType().Name}");
+        }
+        if (!NativeItemMove.IsSafe(source))
+        {
+            Debug.LogError("Digital Storage: icon drop aborted; item ownership is unconfirmed.");
+            ItemMove.RequireSafeDrag(false);
+        }
     }
 
     private bool CanStoreCached(GameItem source)

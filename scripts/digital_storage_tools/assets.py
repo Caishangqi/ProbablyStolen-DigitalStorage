@@ -246,9 +246,7 @@ def check_content(project: Path, output: Path) -> None:
         "network_power_controller_name", "network_power_controller_desc",
         "network_power_drive_name", "network_power_drive_desc",
         "network_power_terminal_name", "network_power_terminal_desc",
-        "storage_cell_capacity_name", "storage_cell_capacity_desc",
         "storage_cell_max_types_name", "storage_cell_max_types_desc",
-        "extraction_power_per_item_name", "extraction_power_per_item_desc",
         "terminal_storage_title", "terminal_storage_search_placeholder", "terminal_storage_loading",
         "terminal_storage_drag_hint", "terminal_storage_drag_rejected", "terminal_storage_whole_stack_only", "terminal_diagnostics_name", "terminal_diagnostics_desc",
         "terminal_storage_offline", "terminal_storage_empty",
@@ -277,6 +275,13 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_size_small", "terminal_size_medium", "terminal_size_tall", "terminal_size_full",
         "terminal_partition_none", "terminal_partition_label",
         "terminal_hint_title", "terminal_hint_left", "terminal_hint_right", "terminal_hint_shift",
+        "config_section_power", "config_section_storage", "config_section_debug",
+        "storage_cell_max_pages_name", "storage_cell_max_pages_desc",
+        "debug_show_cell_pages_name", "debug_show_cell_pages_desc",
+        "priority_configure", "priority_title", "priority_desc", "priority_invalid",
+        "config_section_vendors", "upper_engineer_daily_chance_name", "upper_engineer_daily_chance_desc",
+        "upper_engineer_name", "upper_engineer_greet_1", "upper_engineer_greet_2", "upper_engineer_wrong_item",
+        "upper_engineer_right_item", "upper_engineer_repeat", "upper_engineer_accept",
     ))
     if (platform / "Diagnostics" / "ItemCommands.cs").exists():
         raise ContentValidationError("Removed custom command source must not be present.")

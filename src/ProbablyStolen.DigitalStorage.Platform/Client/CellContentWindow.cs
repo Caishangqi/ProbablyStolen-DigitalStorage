@@ -27,7 +27,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     internal GameSlotInventory Slot { get; }
 
     internal CellContentWindow(GameItem host, StorageCellDisassemblyRecipe recipe,
-        ItemAppearance appearance, ModText text, ModLog log)
+        ItemAppearance appearance, ModText text, ModLog log, Func<bool> showPages)
     {
         _host = host;
         _appearance = appearance;
@@ -55,10 +55,34 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         };
         Slot.onSlotRemoveItemEndFunc = (_, _, _) => _callbacks.Removed();
         // Panel order is the native save order: the pages panel must stay last.
-        var window = MachineHelper.CreateMachineryWindow(true,
-            MachineHelper.Panel(text.Get("component_panel"), Slot, "component"),
-            CellPages.CreatePanel(text.Get("storage_pages_panel")));
+        var pages = CellPages.CreatePanel(text.Get("storage_pages_panel"));
+        var component = MachineHelper.Panel(text.Get("component_panel"), Slot, "component");
+        var window = MachineHelper.CreateMachineryWindow(true, component, pages);
         host.SetContentWindow(window);
+        // Players reach stored items through the terminal; the pages show only with the debug setting. Hiding keeps
+        // the panel, so the saved inventory order is unchanged.
+        void SyncPages()
+        {
+            var hide = !showPages();
+            if (pages.isHidden == hide) return;
+            // The row stretches every panel to the tallest one and MachineryPanel/MachineryIntake keep that size as
+            // their requested size, so the component panel would stay as tall as the hidden pages.
+            MachineryContainerUtils.TryResize(component.content, 0, 0);
+            component.ResizePixels(0, 0);
+            pages.SetHidden(hide);
+        }
+
+        window.openCallback += SyncPages;
+        // A cell sold by a customer is seeded with an unowned component, and buying it marks only the cell as owned
+        // (GeneralHelper.SetItemOwned does not touch children). The component must be owned to be taken out.
+        window.openCallback += () =>
+        {
+            var part = Slot.childItem;
+            if (part != null && GeneralHelper.IsItemOwned(host) && !GeneralHelper.IsItemOwned(part))
+                GeneralHelper.SetItemOwned(part);
+        };
+        window.openCallback += () => MachineryTitleFit.Fit(window);
+        SyncPages();
         host.onOneSecondItemFunc += (_, _, _) => CheckIntegrity();
         host.mayStackItemFunc = (_, _) => false;
         host.maxSlotAmountItemFunc = (_, _, _) => 1;
@@ -115,6 +139,10 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         _host.identifier = assembled ? StorageCellDisassemblyRecipe.CellId : StorageCellDisassemblyRecipe.HousingId;
         _host.name = assembled ? _cellName : _housingName;
         _host.shortDescription = assembled ? _cellDescription : _housingDescription;
+        // A housing is a material customers buy. An assembled cell is not: its value includes the stored items, so
+        // selling it to a customer would sell its contents. Item types and their tags are both saved.
+        if (assembled) _host.RemoveGameItemType(ItemPrices.MaterialType);
+        else _host.SetGameItemType(ItemPrices.MaterialType);
         _appearance.SetPreparedSprite(_host, assembled ? "item_storage_cell_1k" : "item_cell_housing");
     }
 

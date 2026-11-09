@@ -19,10 +19,12 @@ internal sealed class StorageCellItem
     private readonly StorageComponentFactory _component;
     private readonly StorageCellDisassemblyRecipe _recipe;
     private readonly ModLog _log;
+    private readonly Func<bool> _showPages;
 
     internal StorageCellItem(ModText text, ItemAppearance appearance, StorageComponentFactory component,
-        StorageCellDisassemblyRecipe recipe, ModLog log)
+        StorageCellDisassemblyRecipe recipe, ModLog log, Func<bool> showPages)
     {
+        _showPages = showPages ?? throw new ArgumentNullException(nameof(showPages));
         _text = text;
         _appearance = appearance;
         _component = component;
@@ -40,7 +42,10 @@ internal sealed class StorageCellItem
         try
         {
             _appearance.Apply(item, assembled ? SpriteKey : "item_cell_housing", Width, Height);
-            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log);
+            // The housing carries the cell price; the native value adds the component inside it, so assembling and
+            // disassembling never change the total.
+            item.unitValue = ItemPrices.CellHousing;
+            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages);
             var initializeSample = assembled && !SaveManager.IsDecoding;
             item.onSlotAddItemFunc += (_, _, _) =>
             {

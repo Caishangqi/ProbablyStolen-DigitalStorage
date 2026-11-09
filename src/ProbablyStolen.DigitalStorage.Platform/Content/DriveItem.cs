@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
@@ -49,6 +47,7 @@ internal sealed class DriveItem
             item.name = _text.Get(NameKey);
             item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
+            item.unitValue = ItemPrices.Drive;
             var bays = new GridPixelElement(7, 2);
             var slots = new GameSlotInventory[GetCellCount()];
             var ports = new ICellBayPort[GetCellCount()];
@@ -75,10 +74,7 @@ internal sealed class DriveItem
                 _events.AttachSlot(bay, NetworkChangeReason.CellInserted, NetworkChangeReason.CellRemoved);
             }
 
-            _windows.Attach(item, bays, configurePartitions: () =>
-                new PartitionConfigurationWindow(_text,
-                    slots.Select((_, index) => (index + 1).ToString(CultureInfo.InvariantCulture)).ToArray(),
-                    index => new CellPartitionSource(slots[index]), CaptureDraggedIdentity).Open());
+            _windows.Attach(item, bays, drivePriority: true);
             return item;
         }
         catch

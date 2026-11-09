@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Identity;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -47,7 +48,8 @@ internal sealed class TerminalStorageWindow
     private ItemKey? _hoverKey;
     private GameItemElement? _hoverSample;
     private bool _showingTooltip;
-    private readonly TooltipSideBox _hintBox = new();
+    // One box serves every terminal; only one terminal window shows at a time.
+    private static readonly TooltipSideBox HintBox = new();
     private RichText? _hintText;
     private CustomUIWindow? _window;
     private CustomUIElement? _status;
@@ -100,8 +102,16 @@ internal sealed class TerminalStorageWindow
             // Reached when the native window was shown without the patched OpenContentAction, for example by a
             // direct Show call (OverlayHandler.ShowInventory) or when the patch is missing. Show has already
             // finished, so hiding here only leaves a one-frame flash.
-            Open();
-            native.Hide();
+            try
+            {
+                Open();
+                native.Hide();
+            }
+            catch (Exception error)
+            {
+                // Show is still running; keep the native window so the click still opens something.
+                _writeDiagnostic($"Digital Storage: terminal window failed to open ({error.GetType().Name}); native window kept");
+            }
         };
     }
 
@@ -588,11 +598,32 @@ internal sealed class TerminalStorageWindow
         {
             return _readSnapshot();
         }
-        catch
+        catch (Exception error)
         {
-            _diagnostics?.Record("inventory_read_failed", "entries_cleared=true");
+            // Identity failures carry their failure code. Other messages come from native code and are not
+            // controlled here, so only the first line is kept, capped at 120 characters.
+            _diagnostics?.Record("inventory_read_failed",
+                $"entries_cleared=true error={error.GetType().Name} detail={DescribeReadFailure(error)}");
             return new TerminalInventorySnapshot(false, Array.Empty<TerminalEntry>());
         }
+    }
+
+    private static readonly char[] LineBreaks = { (char)13, (char)10 };
+
+    private static string DescribeReadFailure(Exception error)
+    {
+        switch (error)
+        {
+            case NativeItemIdentityReader.UnsupportedIdentityException unsupported:
+                return unsupported.Failure.ToString();
+            case NativeItemIdentityReader.StaleIdentityException stale:
+                return stale.Failure.ToString();
+        }
+
+        var message = error.Message ?? string.Empty;
+        var end = message.IndexOfAny(LineBreaks);
+        if (end >= 0) message = message.Substring(0, end);
+        return message.Length <= 120 ? message : message.Substring(0, 120);
     }
 
     private void PollSnapshot()
@@ -746,7 +777,7 @@ internal sealed class TerminalStorageWindow
         overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f), _hoverSample.GetTooltip(),
             NativeTooltipWidth(_hoverSample));
         _showingTooltip = true;
-        _hintBox.Show(_hintText ??= BuildHintText());
+        HintBox.Show(_hintText ??= BuildHintText());
     }
 
     /// <summary>Uses the same maximum width rules as the native ItemTooltipHandler.</summary>
@@ -795,7 +826,7 @@ internal sealed class TerminalStorageWindow
         if (_showingTooltip)
         {
             OverlayHandler.current?.HideTooltip();
-            _hintBox.Hide();
+            HintBox.Hide();
         }
 
         _showingTooltip = false;
@@ -837,6 +868,8 @@ internal sealed class TerminalStorageWindow
         _diagnostics?.Record("window_closed", "controls_cleared=true");
         _diagnostics = null;
         _messageKey = null;
+        // Rebuilt on the next hover, so a language change shows after the window reopens.
+        _hintText = null;
         _screen.SetLoading();
     }
 

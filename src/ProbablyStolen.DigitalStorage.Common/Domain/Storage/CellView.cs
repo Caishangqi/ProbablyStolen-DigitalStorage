@@ -88,16 +88,15 @@ public sealed class CellView
 
     /// <summary>Creates a cell projection.</summary>
     public CellView(CellLayout layout, IEnumerable<PageView> pages, IEnumerable<ItemKey> storedTypes,
-        CellPartition partition)
+        CellPartition partition, int priority = DrivePriority.Default)
     {
+        Priority = DrivePriority.Clamp(priority);
         Layout = layout ?? throw new ArgumentNullException(nameof(layout));
         Pages = (pages ?? throw new ArgumentNullException(nameof(pages))).ToArray();
         _types = new HashSet<ItemKey>(storedTypes ?? throw new ArgumentNullException(nameof(storedTypes)));
+        // A cell can hold more pages than the current limit after the limit was lowered. Those pages stay usable;
+        // the planner only refuses to add another one.
         Partition = partition ?? throw new ArgumentNullException(nameof(partition));
-        if (Pages.Count > Layout.MaxPages)
-        {
-            throw new ArgumentException("A cell cannot hold more pages than its layout allows.", nameof(pages));
-        }
     }
 
     /// <summary>Gets the tier layout.</summary>
@@ -111,6 +110,9 @@ public sealed class CellView
 
     /// <summary>Gets the partition filter.</summary>
     public CellPartition Partition { get; }
+
+    /// <summary>Gets the priority of the drive the cell is mounted in.</summary>
+    public int Priority { get; }
 
     /// <summary>Gets whether this cell already stores a type.</summary>
     public bool Contains(ItemKey key) => _types.Contains(key);

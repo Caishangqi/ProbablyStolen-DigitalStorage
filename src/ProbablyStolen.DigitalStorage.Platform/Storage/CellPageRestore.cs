@@ -29,7 +29,7 @@ public static class CellPageRestore
         {
             if (item != null && CellPages.Tabs(item) != null)
             {
-                CellPages.EnsurePageCount(item, CellTags.ReadPageCount(item, CellPages.Layout));
+                CellPages.EnsurePageCount(item, CellTags.ReadPageCount(item));
             }
         }
         catch (Exception error)

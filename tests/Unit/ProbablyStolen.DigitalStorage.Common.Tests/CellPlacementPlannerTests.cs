@@ -145,10 +145,19 @@ public sealed class CellPlacementPlannerTests
     }
 
     [Test]
-    public void CellView_RejectsMorePagesThanLayoutAllows()
+    public void LoweredPageLimit_KeepsExistingPagesUsableButAddsNoMore()
     {
-        var pages = Enumerable.Repeat(PageView.Free, 17);
-        Assert.Throws<ArgumentException>(new Action(() => _ = Cell(pages: pages.ToArray())));
+        // Six saved pages under a limit lowered to four: the pages stay, a free one is still used, none is added.
+        var layout = CellLayout.Cell1K.WithLimits(4, 63);
+        var full = new PageView(TwoByTwo, Enumerable.Range(0, 36));
+        var pages = Enumerable.Repeat(full, 5).Append(PageView.Free).ToArray();
+        var cell = new CellView(layout, pages, Array.Empty<ItemKey>(), CellPartition.Unfiltered);
+
+        var placement = Plan(cell, Item(TwoByTwo));
+        Assert.That((placement.Page, placement.Slot, placement.AppendsPage), Is.EqualTo((5, 0, false)));
+
+        var fullCell = new CellView(layout, Enumerable.Repeat(full, 6), Array.Empty<ItemKey>(), CellPartition.Unfiltered);
+        Assert.That(Plan(fullCell, Item(TwoByTwo)).Rejection, Is.EqualTo(PlacementRejection.NoSpace));
     }
 
     private static Placement Plan(CellView cell, ItemFootprint item) => CellPlacementPlanner.Plan(cell, item);

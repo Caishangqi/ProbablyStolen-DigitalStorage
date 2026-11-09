@@ -12,6 +12,15 @@ public sealed class CellLayout
     /// <summary>The 1k tier: 12×12 pages, at most 16 pages and 63 item types.</summary>
     public static readonly CellLayout Cell1K = new(12, 12, 16, 63);
 
+    /// <summary>
+    /// The largest page count any cell restores or a setting may allow. Saved pages up to this count are always
+    /// rebuilt, whatever the current limit, so lowering the limit never drops a page that holds items.
+    /// </summary>
+    public const int AbsoluteMaxPages = 128;
+
+    /// <summary>The largest item type limit a setting may allow.</summary>
+    public const int AbsoluteMaxTypes = 1024;
+
     /// <summary>Creates a tier layout.</summary>
     public CellLayout(int pageWidth, int pageHeight, int maxPages, int maxTypes)
     {
@@ -20,6 +29,13 @@ public sealed class CellLayout
         MaxPages = maxPages > 0 ? maxPages : throw new ArgumentOutOfRangeException(nameof(maxPages));
         MaxTypes = maxTypes > 0 ? maxTypes : throw new ArgumentOutOfRangeException(nameof(maxTypes));
     }
+
+    /// <summary>
+    /// Gets this tier with configured limits, clamped to [1, <see cref="AbsoluteMaxPages"/>] and
+    /// [1, <see cref="AbsoluteMaxTypes"/>]. The page size never changes: it decides where stored items sit.
+    /// </summary>
+    public CellLayout WithLimits(int maxPages, int maxTypes) => new(PageWidth, PageHeight,
+        Math.Max(1, Math.Min(maxPages, AbsoluteMaxPages)), Math.Max(1, Math.Min(maxTypes, AbsoluteMaxTypes)));
 
     /// <summary>Gets the page width in grid cells.</summary>
     public int PageWidth { get; }

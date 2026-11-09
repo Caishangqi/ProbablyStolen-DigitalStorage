@@ -35,6 +35,27 @@ public sealed class NativeCellResolverTests
     }
 
     [Test]
+    public void Resolver_TwoMountedCells_GetDistinctStableInstances()
+    {
+        // Regression: a shared instance made GridStorage reject every network with two or more cells.
+        var drive = new GameItem("digital_storage.storage_drive");
+        var first = Bay();
+        first.childItem = CompleteCell();
+        var second = Bay();
+        second.childItem = CompleteCell();
+        drive.Slots.Add(first);
+        drive.Slots.Add(second);
+
+        var cells = NativeCellResolver.Get(drive);
+        var again = NativeCellResolver.Get(drive);
+
+        Assert.That(cells, Has.Count.EqualTo(2));
+        Assert.That(cells[0], Is.Not.SameAs(cells[1]));
+        Assert.That(again[0], Is.SameAs(cells[0]));
+        Assert.That(again[1], Is.SameAs(cells[1]));
+    }
+
+    [Test]
     public void Resolver_NonBaySlotIncompleteCellOrMissingComponent_ReportsNoCell()
     {
         var drive = new GameItem("digital_storage.storage_drive");

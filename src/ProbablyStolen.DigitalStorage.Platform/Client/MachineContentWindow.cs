@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Ports;
@@ -22,31 +23,32 @@ internal sealed class MachineContentWindow
     }
 
     internal void Attach(GameItem machine, GridPixelElement? cellBays = null,
-        bool acceptsBattery = false, bool consumesNetworkPower = false, Action? configurePartitions = null)
+        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false)
     {
         var battery = new GameSlotInventory();
         var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG,
             MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
         var power = MachineHelper.PowerPanel(battery);
-        var panels = cellBays == null
-            ? new[]
-            {
-                power,
-                MachineHelper.Panel(_text.Get("modules_panel"), modules, "module")
-            }
-            : new[]
-            {
-                power,
-                MachineHelper.Panel(_text.Get("modules_panel"), modules, "module"),
-                MachineHelper.Panel(_text.Get("cells_panel"), cellBays, "cells")
-            };
-        machine.SetContentWindow(MachineHelper.CreateMachineryWindow(true, panels));
-        if (configurePartitions != null)
+        var priority = drivePriority ? new DrivePriorityWindow(machine) : null;
+        var panels = new List<MachineryPanel>
         {
-            machine.contentWindow.AddHeaderButton(new MachineryButton(_text.Get("partition_configure"), configurePartitions));
+            power,
+            MachineHelper.Panel(_text.Get("modules_panel"), modules, "module")
+        };
+        if (cellBays != null)
+        {
+            panels.Add(MachineHelper.Panel(_text.Get("cells_panel"), cellBays, "cells"));
         }
+        if (priority != null)
+        {
+            panels.Add(MachineHelper.Panel(_text.Get("priority_configure"), priority.Content, "priority"));
+        }
+        machine.SetContentWindow(MachineHelper.CreateMachineryWindow(true, panels.ToArray()));
+        if (priority != null) machine.contentWindow.openCallback += priority.Refresh;
         MachineryHelper.InitMachinery(machine);
         machine.EnableTag(MachineHelper.STANDARD_MACHINE_TAG);
+        // Classified like vanilla machines: no nesting in containers, counted as machinery when bought.
+        machine.SetGameItemType("MACHINE");
         if (acceptsBattery)
         {
             MachineHelper.SetupBatterySlot(battery, machine);
@@ -83,6 +85,7 @@ internal sealed class MachineContentWindow
 
         // Loading replaces the name with the saved string (SaveManager.decompiled.cs:165), so a save from an older
         // name keeps showing it. A player's label lives in CUSTOM_NAME_TAG and still wins in GetDisplayName.
+        // Writing the localized name back with the next save is a user-approved update of the saved name field.
         var localizedName = machine.name;
         void RestoreName()
         {
@@ -93,6 +96,7 @@ internal sealed class MachineContentWindow
         {
             RestoreName();
             machine.contentWindow.SetTitle(machine.GetDisplayName(preferCustomName: true));
+            MachineryTitleFit.Fit(machine.contentWindow, Array.Empty<int>());
         };
         machine.onOneSecondItemFunc += (_, _, _) => RestoreName();
     }

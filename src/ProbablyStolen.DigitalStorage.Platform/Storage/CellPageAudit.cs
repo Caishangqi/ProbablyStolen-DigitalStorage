@@ -37,7 +37,7 @@ internal sealed class CellPageAudit
                 continue;
             }
 
-            if (CellPages.Pages(item).Count < CellTags.ReadPageCount(item, CellPages.Layout))
+            if (CellPages.Pages(item).Count < CellTags.ReadPageCount(item))
             {
                 Unavailable.Add(item);
                 failed++;

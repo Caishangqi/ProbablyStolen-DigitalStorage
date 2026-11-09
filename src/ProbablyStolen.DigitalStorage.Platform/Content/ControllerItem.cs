@@ -31,6 +31,7 @@ internal sealed class ControllerItem
             item.name = _text.Get(NameKey);
             item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
+            item.unitValue = ItemPrices.Controller;
             _windows.Attach(item, acceptsBattery: true, consumesNetworkPower: true);
             return item;
         }

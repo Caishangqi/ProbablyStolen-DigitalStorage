@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -28,8 +29,16 @@ public static class TerminalOpenRouter
     public static bool TryOpen(GameItem? item)
     {
         if (_nativeRequested || item == null || !Windows.TryGetValue(item, out var window)) return false;
-        window.Toggle();
-        return true;
+        try
+        {
+            window.Toggle();
+            return true;
+        }
+        catch (Exception error)
+        {
+            UnityEngine.Debug.LogError($"Digital Storage: terminal window failed to open ({error.GetType().Name}); opening the native window");
+            return false;
+        }
     }
 
     /// <summary>Opens the terminal's native machinery window, with the game's own title, position and sound.</summary>

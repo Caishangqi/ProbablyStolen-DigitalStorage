@@ -20,6 +20,18 @@ public sealed class CellLayoutTests
         Assert.That(Layout.TotalCells, Is.EqualTo(2304));
     }
 
+    [TestCase(32, 100, 32, 100)]
+    [TestCase(0, 0, 1, 1)]
+    [TestCase(-5, 63, 1, 63)]
+    [TestCase(500, 5000, CellLayout.AbsoluteMaxPages, CellLayout.AbsoluteMaxTypes)]
+    public void WithLimits_ClampsLimitsAndKeepsThePageSize(int pages, int types, int expectedPages, int expectedTypes)
+    {
+        var configured = Layout.WithLimits(pages, types);
+        Assert.That((configured.MaxPages, configured.MaxTypes), Is.EqualTo((expectedPages, expectedTypes)));
+        Assert.That((configured.PageWidth, configured.PageHeight), Is.EqualTo((12, 12)));
+        Assert.That((Layout.MaxPages, Layout.MaxTypes), Is.EqualTo((16, 63)));
+    }
+
     [TestCase(1, 1, 144)]
     [TestCase(2, 2, 36)]
     [TestCase(3, 4, 12)]

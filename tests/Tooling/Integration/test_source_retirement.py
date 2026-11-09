@@ -114,6 +114,11 @@ class RetirementContractTests(unittest.TestCase):
         self.assertIn("internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive)", resolver)
         for forbidden in ("CellMetadataStore", "JsonConvert", "TransferContext", "GetAvailableStacks"):
             self.assertNotIn(forbidden, resolver)
+        # GridStorage rejects one cell instance mounted twice, so every mounted cell needs its own instance,
+        # cached per native cell; a shared instance made any network with two or more cells unreadable. The
+        # behaviour is covered by NativeCellResolverTests.Resolver_TwoMountedCells_GetDistinctStableInstances.
+        self.assertIn("ConditionalWeakTable<GameItem, MountedCell>", resolver)
+        self.assertNotIn("MountedCell.Instance", resolver)
 
     def test_terminal_storage_goes_through_network_storage_only(self):
         coordinator = (NETWORK / "GridNetworkPowerCoordinator.cs").read_text(encoding="utf-8")

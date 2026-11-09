@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
@@ -11,9 +12,14 @@ namespace ProbablyStolen.DigitalStorage.Platform.Network;
 /// <summary>Finds the assembled storage cells mounted in a drive's bays, in bay order.</summary>
 internal static class NativeCellResolver
 {
+    // One instance per native cell, reused across scans. GridStorage rejects one instance mounted twice by reference:
+    // a single shared instance made every network with two or more cells unreadable, and keying by cell keeps that
+    // check meaningful if a scan ever lists the same cell twice.
+    private static readonly ConditionalWeakTable<GameItem, MountedCell> Mounted = new();
+
     /// <summary>Gets grid-status cells for a drive; per-cell availability is checked by the storage operations.</summary>
     internal static IReadOnlyList<IStorageCell> Get(GameItem drive) =>
-        GetCellItems(drive).Select(_ => (IStorageCell)MountedCell.Instance).ToArray();
+        GetCellItems(drive).Select(cell => (IStorageCell)Mounted.GetValue(cell, _ => new MountedCell())).ToArray();
 
     /// <summary>Gets the native cell items mounted in a drive, in bay order.</summary>
     internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive) =>
@@ -47,8 +53,6 @@ internal static class NativeCellResolver
 
     private sealed class MountedCell : IStorageCell
     {
-        internal static readonly MountedCell Instance = new();
-
         public CellState GetStatus() => CellState.Empty;
     }
 }

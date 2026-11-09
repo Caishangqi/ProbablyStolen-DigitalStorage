@@ -15,11 +15,15 @@ internal static class CellTags
     internal const string PageCountTag = "digital_storage.page_count";
     internal const string PartitionTag = "digital_storage.partition";
 
-    /// <summary>Gets the recorded page count, clamped to [1, layout limit]; a cell without the tag has one page.</summary>
-    internal static int ReadPageCount(GameItem cell, CellLayout layout)
+    /// <summary>
+    /// Gets the recorded page count, clamped to [1, <see cref="CellLayout.AbsoluteMaxPages"/>]; a cell without the
+    /// tag has one page. It is deliberately not clamped to the configured limit: saves restore child items by page
+    /// position, so a page that is not rebuilt loses its items.
+    /// </summary>
+    internal static int ReadPageCount(GameItem cell)
     {
         var count = cell.IsTag(PageCountTag) ? cell.GetTagReadonly(PageCountTag).GetInt() : 1;
-        return Math.Max(1, Math.Min(count, layout.MaxPages));
+        return Math.Max(1, Math.Min(count, CellLayout.AbsoluteMaxPages));
     }
 
     internal static void WritePageCount(GameItem cell, int count) =>

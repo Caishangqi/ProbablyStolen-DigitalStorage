@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -20,7 +21,12 @@ internal static class CellPages
     /// </summary>
     internal const string PanelRole = "digital_storage.pages";
 
-    internal static readonly CellLayout Layout = CellLayout.Cell1K;
+    /// <summary>Gets the 1k layout with the configured page and type limits.</summary>
+    internal static CellLayout Layout { get; private set; } = CellLayout.Cell1K;
+
+    /// <summary>Applies configured limits; existing pages beyond a lowered page limit are kept (see CellTags).</summary>
+    internal static void Configure(int maxPages, int maxTypes) =>
+        Layout = CellLayout.Cell1K.WithLimits(maxPages, maxTypes);
 
     /// <summary>Creates the pages panel with its first page.</summary>
     internal static MachineryPanel CreatePanel(string label)
@@ -125,10 +131,12 @@ internal static class CellPages
             pages.Add(new PageView(label, occupied));
         }
 
-        return new CellView(Layout, pages, types, CellTags.ReadPartition(cell));
+        return new CellView(Layout, pages, types, CellTags.ReadPartition(cell), DrivePriorityTag.ReadForCell(cell));
     }
 
-    /// <summary>Moves an item from wherever it is into the planned page slot. Returns false and leaves the item where it was on failure.</summary>
+    /// <summary>
+    /// Moves an item into the planned page slot. A failed move attempts one direct return to its source.
+    /// </summary>
     internal static bool Place(GameItem cell, GameItem item, Placement placement)
     {
         if (!placement.IsAccepted)
@@ -145,27 +153,14 @@ internal static class CellPages
             return false;
         }
 
-        var source = item.parentInventory;
-        var original = item.modifiedShape;
-        if (source != null && !source.Expel(item))
-        {
-            return false;
-        }
-
-        item.modifiedShape = target;
-        if (page.UncheckedAccept(item))
-        {
-            return true;
-        }
-
-        item.modifiedShape = original;
-        source?.UncheckedAccept(item);
-        return false;
+        var result = ItemMove.Run(NativeItemMove.Into(item, page, target));
+        NativeItemMove.Report(result, item, "store");
+        return result.Outcome == ItemMoveOutcome.Moved;
     }
 
     /// <summary>
     /// Moves a page root into a destination inventory, keeping its orientation. Returns the units moved; whatever
-    /// the destination did not take goes back to its original page position.
+    /// the destination did not take is offered back to its original page position once.
     /// </summary>
     internal static int MoveTo(GameItem root, GameGridInventory destination)
     {
@@ -177,19 +172,23 @@ internal static class CellPages
 
         var original = root.modifiedShape;
         var requested = root.unitCount;
-        if (!page.Expel(root))
+        var moved = 0;
+        Exception? error = null;
+        try
         {
-            return 0;
+            if (!page.Expel(root)) return 0;
+            // The page is remove-locked, so the native slot search only works once the root has left it.
+            moved = destination.TryFindOneValidInventorySlot(root, keepOrientation: true)?.TryAcceptOnce(requested) ?? 0;
         }
-
-        // The page is remove-locked, so the native slot search only works once the root has left it.
-        var moved = destination.TryFindOneValidInventorySlot(root, keepOrientation: true)?.TryAcceptOnce(requested) ?? 0;
-        if (root.parentInventory == null && !(root is GameItemElement element && element.IsDestroyed()))
+        catch (Exception exception)
         {
-            root.modifiedShape = original;
-            page.UncheckedAccept(root);
+            error = exception;
         }
-
+        finally
+        {
+            var result = ItemMove.Recover(NativeItemMove.ReturnTo(root, page, original), error);
+            NativeItemMove.Report(result, root, "extract");
+        }
         return moved;
     }
 

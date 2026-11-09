@@ -46,6 +46,7 @@ internal sealed class TerminalItem
             item.name = _text.Get(NameKey);
             item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
+            item.unitValue = ItemPrices.Terminal;
             _windows.Attach(item);
             var storageWindow = new TerminalStorageWindow(_text,
                 () => _networkPower.ReadTerminalInventory(item),

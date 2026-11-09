@@ -38,6 +38,26 @@ class ContentContractTests(unittest.TestCase):
             r"item\.useSpriteFromMod = true;\s*item\.SetSpriteQuick\(_modId, spriteKey\);",
         )
 
+    def test_drive_priority_panel_and_input_wiring(self):
+        original = REPOSITORY / "src" / self.platform.name
+        window = (original / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
+        panel_order = ('power,', '"modules_panel"', '"cells_panel"', '"priority_configure"')
+        positions = [window.index(part) for part in panel_order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('priority.Content, "priority"', window)
+        self.assertIn("openCallback += priority.Refresh", window)
+        self.assertNotIn("AddHeaderButton", window)
+
+        priority = (original / "Client/DrivePriorityWindow.cs").read_text(encoding="utf-8")
+        self.assertRegex(priority, r"Button\(100\), Button\(10\), Button\(1\), _fieldHost,\s*"
+                                   r"Button\(-1\), Button\(-10\), Button\(-100\)")
+        self.assertIn("TextAlignmentOptions.Center", priority)
+        self.assertIn("_field.onValueChanged.AddListener(Typed)", priority)
+        self.assertIn("_field.onEndEdit.AddListener(_ => ShowCurrent())", priority)
+        self.assertRegex(priority, r"if \(!DrivePriority\.TryParse\(text\?\.Trim\(\), out var priority\)\) return;\s*"
+                                   r"DrivePriorityTag\.Write\(_drive, priority\);")
+        self.assertIn("DrivePriority.Clamp((long)DrivePriorityTag.Read(_drive) + delta)", priority)
+
     def test_native_content_callbacks_use_the_tested_production_coordinators(self):
         original = REPOSITORY / "src" / self.platform.name
         cell = (original / "Client/CellContentWindow.cs").read_text(encoding="utf-8")
@@ -56,7 +76,7 @@ class ContentContractTests(unittest.TestCase):
 
     def test_network_power_config_and_native_controller_battery_wiring(self):
         original = REPOSITORY / "src" / self.platform.name
-        config = (original / "Energy/NativePowerConfiguration.cs").read_text(encoding="utf-8")
+        config = (original / "Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")
         self.assertIn("ModHelper.GetConfig(modId)", config)
         for key, default in (("controller_power_usage", "3"), ("drive_power_usage", "2"), ("terminal_power_usage", "1")):
             self.assertIn(f'"{key}", {default}', config)
@@ -64,8 +84,10 @@ class ContentContractTests(unittest.TestCase):
                     "network_power_drive_name", "network_power_drive_desc",
                     "network_power_terminal_name", "network_power_terminal_desc"):
             self.assertIn(f'text.Get("{key}")', config)
-        self.assertIn("min: 0, max: MaximumPowerUsage", config)
-        self.assertIn("private const int MaximumPowerUsage = 1000", config)
+        # Numbers are typed into text boxes: no slider range, every read is clamped instead.
+        self.assertNotIn("min:", config)
+        self.assertIn("internal const int MaximumPowerUsage = 1000", config)
+        self.assertIn("}, 0, MaximumPowerUsage);", config)
         window = (original / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
         self.assertIn("if (acceptsBattery)", window)
         self.assertIn("MachineHelper.SetupBatterySlot(battery, machine)", window)
@@ -76,8 +98,9 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("acceptsBattery: true, consumesNetworkPower: true", controller)
         drive = (original / "Content/DriveItem.cs").read_text(encoding="utf-8")
         terminal = (original / "Content/TerminalItem.cs").read_text(encoding="utf-8")
-        self.assertIn("_windows.Attach(item, bays, configurePartitions:", drive)
-        self.assertIn("new CellPartitionSource(slots[index])", drive)
+        self.assertIn("_windows.Attach(item, bays, drivePriority: true)", drive)
+        self.assertNotIn("configurePartitions:", drive)
+        self.assertNotIn("new CellPartitionSource(slots[index])", drive)
         self.assertIn("_windows.Attach(item)", terminal)
         scanner = (original / "Network/NativeNetworkScanner.cs").read_text(encoding="utf-8")
         self.assertIn("FindAdjacentType<GameItem>()", scanner)
