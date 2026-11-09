@@ -11,7 +11,7 @@ from unittest.mock import patch
 REPOSITORY = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
 from digital_storage_tools.assets import (  # noqa: E402
-    ASSETS, ContentValidationError, check_assets, check_image, image_api,
+    ASSETS, ContentValidationError, check_assets, check_image, check_matches_source, image_api,
     check_content, format_parameters, main, prepare_assets, read_localization, validate_write_root,
 )
 
@@ -41,7 +41,7 @@ class ContentAssetTests(unittest.TestCase):
         before = {p.name: p.read_bytes() for p in self.source.iterdir()}
         prepare_assets(self.source, self.output)
         first = self.snapshot()
-        check_assets(self.source, self.output)
+        check_assets(self.output)
         self.assertEqual(self.snapshot(), first)
         prepare_assets(self.source, self.output)
         self.assertEqual(self.snapshot(), first)
@@ -69,7 +69,7 @@ class ContentAssetTests(unittest.TestCase):
         self.runtime("item_storage_cell_1k").unlink()
         before = self.snapshot()
         with self.assertRaises(ContentValidationError):
-            check_assets(self.source, self.output)
+            check_assets(self.output)
         self.assertEqual(self.snapshot(), before)
 
     def test_wrong_source_size_is_rejected(self):
@@ -83,10 +83,12 @@ class ContentAssetTests(unittest.TestCase):
             with self.subTest(size=size):
                 self.Image.new("RGBA", size, "white").save(self.runtime("drive"))
                 with self.assertRaisesRegex(ContentValidationError, "dimensions"):
-                    check_image(self.source, self.output, "drive")
+                    check_image(self.output, "drive")
 
     def test_changed_source_pixel_and_opaque_padding_are_rejected(self):
-        for position in ((1, 1), (47, 1)):
+        checks = (((1, 1), "pixels", lambda: check_matches_source(self.source, self.output, "drive")),
+                  ((47, 1), "Padding", lambda: check_image(self.output, "drive")))
+        for position, message, check in checks:
             with self.subTest(position=position):
                 prepare_assets(self.source, self.output)
                 path = self.runtime("drive")
@@ -94,8 +96,8 @@ class ContentAssetTests(unittest.TestCase):
                     image = opened.copy()
                 image.putpixel(position, (1, 2, 3, 255))
                 image.save(path)
-                with self.assertRaisesRegex(ContentValidationError, "pixels|Padding"):
-                    check_image(self.source, self.output, "drive")
+                with self.assertRaisesRegex(ContentValidationError, message):
+                    check()
 
     def test_transparent_grid_center_is_rejected_even_if_source_matches(self):
         path = self.source / "drive.png"
@@ -106,14 +108,20 @@ class ContentAssetTests(unittest.TestCase):
         with self.assertRaisesRegex(ContentValidationError, "grid center"):
             prepare_assets(self.source, self.output)
 
-    def test_wrong_image_with_correct_size_is_rejected(self):
+    def test_wrong_image_with_correct_size_is_rejected_against_its_source(self):
         prepare_assets(self.source, self.output)
         self.Image.new("RGBA", (48, 48), "white").save(self.runtime("terminal"))
         with self.assertRaisesRegex(ContentValidationError, "pixels"):
-            check_assets(self.source, self.output)
+            check_matches_source(self.source, self.output, "terminal")
+
+    def test_check_validates_runtime_images_without_art_sources(self):
+        prepare_assets(self.source, self.output)
+        shutil.rmtree(self.source)
+        check_assets(self.output)
+        self.assertEqual(main(["--check", "--output-dir", str(self.output), "--items", "drive"]), 0)
 
     def test_source_overlap_and_repository_protected_paths_are_rejected(self):
-        for output in (self.source, self.source / "runtime", self.root, REPOSITORY / "rawassets", REPOSITORY / ".reference" / "out"):
+        for output in (self.source, self.source / "runtime", self.root, REPOSITORY / "art", REPOSITORY / ".reference" / "out"):
             with self.subTest(output=output), self.assertRaises(ContentValidationError):
                 validate_write_root(self.source, output)
 
@@ -131,6 +139,8 @@ class ContentAssetTests(unittest.TestCase):
     def test_cli_requires_explicit_mode_and_reports_failure_nonzero(self):
         with self.assertRaises(SystemExit):
             main([])
-        self.assertEqual(main(["--check", "--source-dir", str(self.source), "--output-dir", str(self.output)]), 1)
+        with self.assertRaises(SystemExit):
+            main(["--write", "--output-dir", str(self.output)])
+        self.assertEqual(main(["--check", "--output-dir", str(self.output)]), 1)
 
 

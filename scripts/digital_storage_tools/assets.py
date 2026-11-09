@@ -97,37 +97,44 @@ def expected_png(source: Path, name: str) -> bytes:
     return stream.getvalue()
 
 
-def check_image(source: Path, output: Path, name: str) -> None:
-    source_data, original = source_png(source, name)
+def runtime_png(output: Path, name: str):
     path = plain_path(output / "Textures" / "Items" / (name + ".png"))
-    Image = image_api()
     try:
-        actual_data = path.read_bytes()
-        with Image.open(io.BytesIO(actual_data)) as opened:
+        data = path.read_bytes()
+        with image_api().open(io.BytesIO(data)) as opened:
             if opened.format != "PNG" or getattr(opened, "n_frames", 1) != 1:
                 raise ContentValidationError(f"Expected a single runtime PNG: {name}")
             if opened.size != ASSETS[name][1]:
                 raise ContentValidationError(f"Runtime dimensions mismatch for {name}: {opened.size}")
-            actual = opened.convert("RGBA")
-        width, height = original.size
-        if actual.crop((0, 0, width, height)).tobytes() != original.tobytes():
-            raise ContentValidationError(f"Source pixels changed: {name}")
-        if ASSETS[name][0] == ASSETS[name][1]:
-            if actual_data != source_data:
-                raise ContentValidationError(f"Unchanged asset must retain original bytes: {name}")
-        else:
-            for y in range(actual.height):
-                for x in range(actual.width):
-                    if (x >= width or y >= height) and actual.getpixel((x, y)) != (0, 0, 0, 0):
-                        raise ContentValidationError(f"Padding must be transparent RGBA zero: {name}")
-        for y in range(8, actual.height, 16):
-            for x in range(8, actual.width, 16):
-                if actual.getpixel((x, y))[3] == 0:
-                    raise ContentValidationError(f"Transparent occupied grid center at {x},{y}: {name}")
+            return data, opened.convert("RGBA")
     except (OSError, ValueError) as error:
         if isinstance(error, ContentValidationError):
             raise
         raise ContentValidationError(f"Could not read runtime {name}: {error}") from error
+
+
+def check_image(output: Path, name: str) -> None:
+    """Validate a committed runtime PNG on its own; art source files are not part of the repository."""
+    _, actual = runtime_png(output, name)
+    width, height = ASSETS[name][0]
+    for y in range(actual.height):
+        for x in range(actual.width):
+            if (x >= width or y >= height) and actual.getpixel((x, y)) != (0, 0, 0, 0):
+                raise ContentValidationError(f"Padding must be transparent RGBA zero: {name}")
+    for y in range(8, actual.height, 16):
+        for x in range(8, actual.width, 16):
+            if actual.getpixel((x, y))[3] == 0:
+                raise ContentValidationError(f"Transparent occupied grid center at {x},{y}: {name}")
+
+
+def check_matches_source(source: Path, output: Path, name: str) -> None:
+    source_data, original = source_png(source, name)
+    actual_data, actual = runtime_png(output, name)
+    width, height = original.size
+    if actual.crop((0, 0, width, height)).tobytes() != original.tobytes():
+        raise ContentValidationError(f"Source pixels changed: {name}")
+    if ASSETS[name][0] == ASSETS[name][1] and actual_data != source_data:
+        raise ContentValidationError(f"Unchanged asset must retain original bytes: {name}")
 
 
 def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
@@ -152,12 +159,13 @@ def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSE
         finally:
             if temporary_name and Path(temporary_name).exists():
                 Path(temporary_name).unlink()
-        check_image(source, output, name)
+        check_matches_source(source, output, name)
+        check_image(output, name)
 
 
-def check_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
+def check_assets(output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
     for name in names:
-        check_image(source, output, name)
+        check_image(output, name)
 
 
 def read_localization(path: Path) -> dict[str, str]:
@@ -277,14 +285,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
-    parser.add_argument("--source-dir", type=Path, default=REPOSITORY / "rawassets")
+    parser.add_argument("--source-dir", type=Path, help="art source folder; required with --write")
     parser.add_argument("--output-dir", type=Path, default=REPOSITORY / "packaging" / "resources")
     parser.add_argument("--items", choices=tuple(ASSETS), nargs="+", default=tuple(ASSETS))
     args = parser.parse_args(argv)
+    if args.write and args.source_dir is None:
+        parser.error("--write requires --source-dir pointing at the local art source folder")
     try:
         if args.write:
             prepare_assets(args.source_dir, args.output_dir, args.items)
-        check_assets(args.source_dir, args.output_dir, args.items)
+        check_assets(args.output_dir, args.items)
         if args.check and tuple(args.items) == tuple(ASSETS):
             check_content(REPOSITORY, args.output_dir)
     except (ContentValidationError, OSError) as error:
