@@ -69,6 +69,20 @@ internal sealed class GridNetworkTooltipPresenter
             builder.AddLine(_text.Get("network_module_stats_scope"),
                 ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
         }
+
+        AddOpenHint(builder, item);
+    }
+
+    /// <summary>
+    /// Adds the game's own "Double-Click To Open" line, as ContainerHelper.CreateContainerTooltip does for items with
+    /// CONTAINER_TOOLTIP_TAG (Steam build 26496118). The line is added here rather than through the tag because
+    /// loading replaces item state with the saved tags, and the tag would then be written into saves.
+    /// </summary>
+    private static void AddOpenHint(RichTextBuilder builder, GameItem item)
+    {
+        if (item.IsTag("CONTAINER_TAG") || item.IsTag("CONTAINER_TOOLTIP_TAG")) return;
+        builder.AddLine(" " + LocHelper.GetLocalizedMechanic("mech_container_tooltip"),
+            ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
     }
 
     private static string GetStatusKey(GridNetworkDisplayStatus status) => status switch

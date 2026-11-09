@@ -27,15 +27,16 @@ internal sealed class MachineContentWindow
         var battery = new GameSlotInventory();
         var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG,
             MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
+        var power = MachineHelper.PowerPanel(battery);
         var panels = cellBays == null
             ? new[]
             {
-                MachineHelper.PowerPanel(battery),
+                power,
                 MachineHelper.Panel(_text.Get("modules_panel"), modules, "module")
             }
             : new[]
             {
-                MachineHelper.PowerPanel(battery),
+                power,
                 MachineHelper.Panel(_text.Get("modules_panel"), modules, "module"),
                 MachineHelper.Panel(_text.Get("cells_panel"), cellBays, "cells")
             };
@@ -53,10 +54,16 @@ internal sealed class MachineContentWindow
         }
         else
         {
-            // Keep storage node zero stable for existing saves and allow any legacy battery to be removed.
+            // Saves restore child items by breadth-first inventory position and MachineHelper reads the battery at
+            // position 0 and modules at 1 (Steam build 26496118, SaveManager.EncodeNode/MachineHelper.GetModuleInv),
+            // so the slot stays and is only hidden. A legacy battery keeps it visible until the player removes it.
             battery.mayInventoryAddItemFunc = (_, _) => false;
             battery.maxSlotAddItemFunc = (_, _, _) => 0;
             battery.maxSlotAmountItemFunc = (_, _, _) => 0;
+            void SyncPowerPanel() => power.SetHidden(battery.childItem == null);
+            machine.contentWindow.openCallback += SyncPowerPanel;
+            battery.onSlotRemoveItemEndFunc += (_, _, _) => SyncPowerPanel();
+            SyncPowerPanel();
         }
 
         MachineHelper.SetupModuleBay(modules, machine);
@@ -73,6 +80,21 @@ internal sealed class MachineContentWindow
         var lifecycle = new MachineContentLifecycle(new NativeMachineContents(machine));
         machine.contentWindow.openCallback += () => lifecycle.RestoreIfReady(SaveManager.IsDecoding);
         machine.onOneSecondItemFunc += (_, _, _) => lifecycle.RestoreIfReady(SaveManager.IsDecoding);
+
+        // Loading replaces the name with the saved string (SaveManager.decompiled.cs:165), so a save from an older
+        // name keeps showing it. A player's label lives in CUSTOM_NAME_TAG and still wins in GetDisplayName.
+        var localizedName = machine.name;
+        void RestoreName()
+        {
+            if (!SaveManager.IsDecoding && machine.name != localizedName) machine.name = localizedName;
+        }
+
+        machine.contentWindow.openCallback += () =>
+        {
+            RestoreName();
+            machine.contentWindow.SetTitle(machine.GetDisplayName(preferCustomName: true));
+        };
+        machine.onOneSecondItemFunc += (_, _, _) => RestoreName();
     }
 
     private sealed class NativeMachineContents : IMachineContentsPort
