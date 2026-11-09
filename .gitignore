@@ -1,12 +1,32 @@
-# Local reference checkouts. Keep these repositories read-only and out of project commits.
-.reference/
+# Allowlist: ignore every top-level entry, then admit only the project files below.
+# A new top-level file or directory must be added here explicitly before it can be committed.
+/*
+!/.editorconfig
+!/.gitattributes
+!/.gitignore
+!/.github/
+!/.idea/
+!/.run/
+!/DigitalStorage.Core.slnf
+!/DigitalStorage.sln
+!/Directory.Build.props
+!/Directory.Build.targets
+!/Directory.Packages.props
+!/global.json
+!/mise.local.toml.example
+!/mise.toml
+!/packaging/
+!/pyproject.toml
+!/scripts/
+!/src/
+!/tests/
+!/uv.lock
 
-# Local secrets and per-machine settings.
+# Local secrets and per-machine settings inside admitted directories.
 .env
 .env.*
 !.env.example
 *.local.json
-mise.local.toml
 .secrets/
 
 # Build and test output.
@@ -17,20 +37,20 @@ mise.local.toml
 **/node_modules/
 **/dist/
 **/coverage/
+**/.venv/
 **/.vite/
-/artifacts/
 **/__pycache__/
+**/.pytest_cache/
 *.py[cod]
 
+# Rider: keep only the shared solution settings.
+/.idea/*
+!/.idea/.idea.*/
+/.idea/.idea.*/.idea/*
+!/.idea/.idea.*/.idea/vcs.xml
+!/.idea/.idea.*/.idea/.gitignore
+
 # Editor and operating-system files.
-.vscode/
-.idea/*
-!.idea/.idea.*/
-.idea/.idea.*/.idea/*
-!.idea/.idea.*/.idea/runConfigurations/
-!.idea/.idea.*/.idea/runConfigurations/*.xml
-!.idea/.idea.*/.idea/vcs.xml
-!.idea/.idea.*/.idea/.gitignore
 .DS_Store
 Thumbs.db
 *.user
