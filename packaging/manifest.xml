@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Manifest>
+  <ID>digital_storage</ID>
+  <Name>Digital Storage</Name>
+  <Author>Caizii</Author>
+  <ModVersion>0.1.0</ModVersion>
+  <Description>1k storage cell assembly, native machine modules and fourteen drive bays. Digital item storage and networking are not implemented.</Description>
+  <GameVersions>
+    <Version>0.46D</Version>
+  </GameVersions>
+  <Prerequisites />
+  <Assemblies>
+    <Assembly>ProbablyStolen.DigitalStorage.Common.dll</Assembly>
+    <Assembly>ProbablyStolen.DigitalStorage.Client.dll</Assembly>
+    <Assembly>ProbablyStolen.DigitalStorage.Platform.dll</Assembly>
+    <Assembly>ProbablyStolen.DigitalStorage.Mod.dll</Assembly>
+  </Assemblies>
+  <Capabilities />
+</Manifest>

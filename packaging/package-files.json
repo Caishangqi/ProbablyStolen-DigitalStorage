@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "current": [
+    "manifest.xml",
+    "ProbablyStolen.DigitalStorage.Common.dll",
+    "ProbablyStolen.DigitalStorage.Client.dll",
+    "ProbablyStolen.DigitalStorage.Platform.dll",
+    "ProbablyStolen.DigitalStorage.Mod.dll",
+    "Textures/Items/terminal.png",
+    "Textures/Items/drive.png",
+    "Textures/Items/controller.png",
+    "Textures/Items/item_storage_cell_1k.png",
+    "Textures/Items/item_cell_housing.png",
+    "Textures/Items/cell_component_1k.png",
+    "Localization/en.csv",
+    "Localization/zh.csv"
+  ],
+  "legacy": [
+    "manifest.xml",
+    "ProbablyStolen.DigitalStorage.Common.dll",
+    "ProbablyStolen.DigitalStorage.Client.dll",
+    "ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.dll",
+    "ProbablyStolen.DigitalStorage.Mod.dll"
+  ],
+  "previous": [
+    "manifest.xml",
+    "ProbablyStolen.DigitalStorage.Common.dll",
+    "ProbablyStolen.DigitalStorage.Client.dll",
+    "ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.dll",
+    "ProbablyStolen.DigitalStorage.Mod.dll",
+    "Textures/Items/storage_terminal.png",
+    "Textures/Items/storage_drive.png",
+    "Textures/Items/storage_cell.png",
+    "Textures/Items/storage_network_controller.png",
+    "Localization/en.csv",
+    "Localization/zh.csv"
+  ]
+}

@@ -1,0 +1,92 @@
+terminal_name,Terminal
+partition_configure,Configure partition
+partition_title,Drive partition
+partition_capture,Add dragged item
+partition_contents,Set from contents
+partition_clear,Clear
+partition_apply,Apply
+partition_cancel,Cancel
+partition_remove,Remove
+partition_unavailable,Partition unavailable
+partition_ready,Ready
+partition_invalid,Unsupported identity or contents
+partition_limit,Filter limit reached
+partition_failed,Apply failed; draft retained
+partition_applied,Applied
+partition_cleanup_failed,Source cleanup failed
+partition_applied_cleanup_failed,Applied; source cleanup failed
+partition_failed_cleanup_failed,Apply failed; source cleanup failed
+terminal_desc,Opens the native machine window and the DigitalStorage inventory view. Search and extraction require an online network.
+terminal_storage_title,DigitalStorage Inventory
+terminal_storage_drag_hint,Place {0} dragged stack(s) into {1}. Release to attempt storage; rejected items stay at their source.
+terminal_storage_drag_rejected,These dragged items cannot currently be stored. Drag a whole stack and check supported state capacity and network; items stay at their source.
+terminal_storage_whole_stack_only,Drag storage currently requires a whole stack. The selected partial quantity was not stored; items stay at their source.
+terminal_diagnostics_name,Terminal diagnostics
+terminal_diagnostics_desc,Write bounded UI layer and drag event diagnostics to Player.log. Item names and saved state are excluded.
+terminal_storage_search_placeholder,Search items
+terminal_storage_loading,Loading inventory...
+terminal_storage_offline,Network offline
+terminal_storage_empty,No matching items
+terminal_storage_amount_placeholder,Amount
+terminal_storage_invalid_amount,Enter a positive whole amount.
+terminal_storage_no_items,No items available.
+terminal_storage_insufficient_power,Not enough power.
+terminal_storage_target_rejected,Player inventory cannot accept the complete stack.
+terminal_storage_unsupported_item,This item state is not safely supported.
+terminal_storage_commit_failed,Transfer stopped. Confirmed amount: {0}. Check retained items and any recovery message.
+terminal_storage_extracted,Extracted {0} item(s).
+terminal_storage_store,Store supported items
+terminal_storage_inserted,Stored {0} item(s).
+terminal_storage_capacity_rejected,No complete supported stack fits.
+storage_cell_not_empty,Empty the storage cell before removing its component.
+storage_cell_bytes_used,Grid cells used: {0} / {1}.
+storage_cell_types_used,Types used: {0} / {1}.
+terminal_storage_unavailable,Stored contents are unavailable or a transfer needs recovery. Original data has been retained.
+terminal_storage_recovery_pending,A transfer needs recovery. Keep its machines and power source; stored records have been retained.
+terminal_storage_unsupported_power,Extraction recovery currently supports ordinary stored-energy batteries. This power source is not supported.
+terminal_storage_unique_split,This legacy native instance ID must be retrieved as one complete stored quantity with enough power.
+drive_name,Drive
+drive_desc,Holds fourteen assembled storage cells in separate bays. Online networks aggregate supported saved item state from those cells through an attached terminal.
+controller_name,Controller
+controller_desc,Powers adjacent network machines from its native power slot. A drive or terminal is optional for the network to operate.
+item_storage_cell_1k_name,1k Item Storage Cell
+item_storage_cell_1k_desc,A digital storage cell that holds up to 63 kinds of items. Insert it into a drive to store and retrieve items through a terminal; items stay in the cell when you take it out. Empty the cell before removing its storage component.
+item_cell_housing_name,Item Cell Housing
+item_cell_housing_desc,The casing of a storage cell. Drag a 1k storage component into it to assemble a storage cell.
+cell_component_1k_name,1k Storage Component
+cell_component_1k_desc,The core of a 1k storage cell. Install it in an item cell housing to assemble a cell; a module extractor can remove it once the cell is empty.
+component_panel,Storage Component
+storage_pages_panel,Storage Space
+modules_panel,Modules
+cells_panel,Storage Cells
+network_power_controller_name,Controller power draw
+network_power_controller_desc,Game power units drawn per native nightly cycle for the connected controller. Default: 3.
+network_power_drive_name,Drive power draw
+network_power_drive_desc,Game power units drawn per native nightly cycle for each connected drive. Default: 2.
+network_power_terminal_name,Terminal power draw
+network_power_terminal_desc,Game power units drawn per native nightly cycle for each connected terminal. Default: 1.
+storage_cell_capacity_name,Storage cell capacity (unused)
+storage_cell_capacity_desc,Not used. A storage cell holds as much as its storage space can fit.
+storage_cell_max_types_name,Storage cell type limit
+storage_cell_max_types_desc,Maximum distinct item types per cell. The hard limit is 63.
+extraction_power_per_item_name,Extraction power per item
+extraction_power_per_item_desc,Game power units charged for each successfully extracted item. Default: 1.
+network_tooltip_state,Network state: {0}
+network_tooltip_drive_slots,Occupied drive slots: {0}/{1}
+network_module_stats_scope,Native module statistics do not currently change DigitalStorage network consumption or add throughput or quality bonuses.
+network_status_online,Online
+network_status_unpowered,Offline (unpowered)
+network_status_no_controller,No controller
+network_status_controller_conflict,Controller conflict
+cell_storage_partition_invalid,Partition settings invalid and disabled
+storage_restore_failed_title,Storage cells were not fully loaded
+storage_restore_failed_body,Some storage cells did not get all their contents back while loading. Do not save. Quit the game and report this to the mod author. The items are still in your last save.
+storage_restore_unavailable,Storing is disabled: storage cells cannot load correctly in this game version. You can still take items out.
+terminal_storage_inserted_partial,Stored {0} items. Some items stayed where they were: no cell could take them.
+terminal_storage_reject_no_cell,No storage cell accepts this item. Check partitions and drives.
+terminal_storage_reject_type_limit,The storage cells already hold their maximum number of item types.
+terminal_storage_reject_too_large,This item is too large to fit in a storage cell.
+terminal_storage_reject_no_space,The storage cells are full.
+cell_storage_usage,{0}/{1} space used, {2}/{3} item kinds
+cell_storage_partitioned,Partitioned ({0} item kinds)
+cell_storage_unavailable,Storage unavailable

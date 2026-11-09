@@ -1,0 +1,92 @@
+terminal_name,终端
+partition_configure,配置分区
+partition_title,驱动器分区
+partition_capture,添加拖动的物品
+partition_contents,按当前内容设置
+partition_clear,清空
+partition_apply,应用
+partition_cancel,取消
+partition_remove,移除
+partition_unavailable,分区不可用
+partition_ready,就绪
+partition_invalid,不支持的身份或内容
+partition_limit,已达到过滤项上限
+partition_failed,应用失败; 草稿已保留
+partition_applied,已应用
+partition_cleanup_failed,数据源清理失败
+partition_applied_cleanup_failed,已应用; 数据源清理失败
+partition_failed_cleanup_failed,应用失败; 数据源清理失败
+terminal_desc,打开原生机器窗口和 DigitalStorage 库存视图. 搜索和取出需要在线网络.
+terminal_storage_title,DigitalStorage 库存
+terminal_storage_drag_hint,将拖动的 {0} 个堆叠放入「{1}」. 松开鼠标尝试存入; 拒收物品留在原处.
+terminal_storage_drag_rejected,当前拖动物品无法存入. 请使用整堆拖动, 并检查物品支持状态、容量和网络; 物品保留在原处.
+terminal_storage_whole_stack_only,拖入目前需要整个堆叠. 所选部分数量未存入, 物品保留在原处.
+terminal_diagnostics_name,终端诊断日志
+terminal_diagnostics_desc,将限量的 UI 层级和拖拽事件写入 Player.log. 不记录物品名称或保存状态.
+terminal_storage_search_placeholder,搜索物品
+terminal_storage_loading,正在加载库存...
+terminal_storage_offline,网络离线
+terminal_storage_empty,没有匹配物品
+terminal_storage_amount_placeholder,数量
+terminal_storage_invalid_amount,请输入正整数数量.
+terminal_storage_no_items,没有可取出的物品.
+terminal_storage_insufficient_power,电力不足.
+terminal_storage_target_rejected,玩家库存无法接收完整堆叠.
+terminal_storage_unsupported_item,此物品状态不受安全支持.
+terminal_storage_commit_failed,转移已停止, 已确认数量: {0}. 请核对保留的物品和恢复提示.
+terminal_storage_extracted,已取出 {0} 个物品.
+terminal_storage_store,存入受支持物品
+terminal_storage_inserted,已存入 {0} 个物品.
+terminal_storage_capacity_rejected,没有完整的受支持堆叠可以放入.
+storage_cell_not_empty,拆出存储组件前必须先清空存储元件.
+storage_cell_bytes_used,已用格子: {0} / {1}.
+storage_cell_types_used,已用类型: {0} / {1}.
+terminal_storage_unavailable,存储内容不可用或转移需要恢复. 原始数据已保留.
+terminal_storage_recovery_pending,有一笔转移需要恢复. 请保留参与的机器和电源; 原始记录已保留.
+terminal_storage_unsupported_power,取出恢复当前支持普通储能电池. 此电源尚不受支持.
+terminal_storage_unique_split,此旧格式实例 ID 必须在电力足够时一次取回其完整存量.
+drive_name,驱动器
+drive_desc,十四个独立槽位用于放入组装后的存储元件. 在线网络可通过终端汇总这些元件中已保存且受支持的物品状态.
+controller_name,控制器
+controller_desc,通过原生电源槽为相邻网络机器供电. 网络运行不要求存在驱动器或终端.
+item_storage_cell_1k_name,1k 物品存储元件
+item_storage_cell_1k_desc,数字存储元件, 最多可存放 63 种物品. 放入驱动器后即可通过终端存取; 取出元件时, 物品会留在元件中一起带走. 拆出存储组件前须先清空元件.
+item_cell_housing_name,物品元件外壳
+item_cell_housing_desc,存储元件的外壳. 将 1k 存储组件拖入即可组装成存储元件.
+cell_component_1k_name,1k 存储组件
+cell_component_1k_desc,1k 存储元件的核心部件. 装入物品元件外壳即可组装成存储元件; 元件清空后才能用模块提取器拆出.
+component_panel,存储组件
+storage_pages_panel,存储空间
+modules_panel,模块
+cells_panel,存储元件
+network_power_controller_name,控制器耗电
+network_power_controller_desc,每次原生夜间结算为接入网络的控制器扣除的游戏功率单位. 默认: 3.
+network_power_drive_name,驱动器耗电
+network_power_drive_desc,每次原生夜间结算为每台接入的驱动器扣除的游戏功率单位. 默认: 2.
+network_power_terminal_name,终端耗电
+network_power_terminal_desc,每次原生夜间结算为每台接入的终端扣除的游戏功率单位. 默认: 1.
+storage_cell_capacity_name,存储元件容量（未使用）
+storage_cell_capacity_desc,未使用. 存储元件的容量由其存储空间决定.
+storage_cell_max_types_name,存储元件类型上限
+storage_cell_max_types_desc,每个存储元件可保存的不同物品种类数量。硬上限为 63。
+extraction_power_per_item_name,每个物品取出耗电
+extraction_power_per_item_desc,每个成功取出的物品扣除的游戏功率单位. 默认: 1.
+network_tooltip_state,网络状态: {0}
+network_tooltip_drive_slots,驱动器已占用槽位: {0}/{1}
+network_module_stats_scope,原生模块属性当前不改变本网络耗电, 也不提供数字吞吐或质量加成.
+network_status_online,在线
+network_status_unpowered,离线 (未供电)
+network_status_no_controller,无控制器
+network_status_controller_conflict,控制器冲突
+cell_storage_partition_invalid,分区设置无效, 已停用
+storage_restore_failed_title,存储元件未能完整读取
+storage_restore_failed_body,读档时部分存储元件的内容没有完全恢复. 请不要存档, 直接退出游戏, 并反馈给模组作者. 物品仍在你上一次的存档中.
+storage_restore_unavailable,存入已禁用: 当前游戏版本下存储元件无法正常读档. 仍可以取出物品.
+terminal_storage_inserted_partial,已存入 {0} 个物品。其余物品没有元件可以接收，已留在原处。
+terminal_storage_reject_no_cell,没有存储元件可以接收此物品。请检查分区和驱动器。
+terminal_storage_reject_type_limit,存储元件的物品种类已达上限。
+terminal_storage_reject_too_large,此物品尺寸过大, 无法放入存储元件.
+terminal_storage_reject_no_space,存储元件已满。
+cell_storage_usage,已用 {0}/{1} 格, {2}/{3} 种物品
+cell_storage_partitioned,已分区 ({0} 种物品)
+cell_storage_unavailable,存储不可用
