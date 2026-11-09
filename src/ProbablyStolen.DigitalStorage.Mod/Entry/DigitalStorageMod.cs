@@ -1,5 +1,5 @@
 using System;
-using ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.Composition;
+using ProbablyStolen.DigitalStorage.Platform.Composition;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Entry;
 

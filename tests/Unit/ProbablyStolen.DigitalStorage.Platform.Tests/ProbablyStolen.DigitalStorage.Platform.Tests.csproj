@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DigitalStorageManagedDirectory)' != ''">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(DigitalStorageManagedDirectory)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\ProbablyStolen.DigitalStorage.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DigitalStorageManagedDirectory)' != ''">
+    <Reference Include="0Harmony">
+      <HintPath>$(DigitalStorageManagedDirectory)\0Harmony.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(DigitalStorageManagedDirectory)\Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

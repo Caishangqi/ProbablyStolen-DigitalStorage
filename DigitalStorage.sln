@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStora
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Client", "src\ProbablyStolen.DigitalStorage.Client\ProbablyStolen.DigitalStorage.Client.csproj", "{6A236452-1749-4300-8034-C507924DCD4A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Platform.ProbablyStolen", "src\ProbablyStolen.DigitalStorage.Platform.ProbablyStolen\ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.csproj", "{03F63378-21C9-4985-98FC-CA6E3E1E0803}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Platform", "src\ProbablyStolen.DigitalStorage.Platform\ProbablyStolen.DigitalStorage.Platform.csproj", "{03F63378-21C9-4985-98FC-CA6E3E1E0803}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Mod", "src\ProbablyStolen.DigitalStorage.Mod\ProbablyStolen.DigitalStorage.Mod.csproj", "{FB8EF6D5-EC31-4082-BF56-5BB43FB2F455}"
 EndProject
@@ -28,6 +28,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Architecture", "Architecture", "{875CD587-DE2F-08EE-74FB-D6BE4E474EF3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.ArchitectureTests", "tests\Architecture\ProbablyStolen.DigitalStorage.ArchitectureTests\ProbablyStolen.DigitalStorage.ArchitectureTests.csproj", "{F3835C92-F8EB-4CE6-9B50-788F1817A139}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Platform.Tests", "tests\Unit\ProbablyStolen.DigitalStorage.Platform.Tests\ProbablyStolen.DigitalStorage.Platform.Tests.csproj", "{20CBF9B7-151C-4F0B-9590-214C7BA04B43}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -135,6 +137,18 @@ Global
 		{F3835C92-F8EB-4CE6-9B50-788F1817A139}.Release|x64.Build.0 = Release|Any CPU
 		{F3835C92-F8EB-4CE6-9B50-788F1817A139}.Release|x86.ActiveCfg = Release|Any CPU
 		{F3835C92-F8EB-4CE6-9B50-788F1817A139}.Release|x86.Build.0 = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|x64.Build.0 = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Debug|x86.Build.0 = Debug|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|x64.ActiveCfg = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|x64.Build.0 = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|x86.ActiveCfg = Release|Any CPU
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -151,5 +165,6 @@ Global
 		{59A92B53-1706-4A0E-97D5-C178FE057E59} = {28A6993C-471E-82FE-7D9E-AD3B1EC22BD9}
 		{875CD587-DE2F-08EE-74FB-D6BE4E474EF3} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{F3835C92-F8EB-4CE6-9B50-788F1817A139} = {875CD587-DE2F-08EE-74FB-D6BE4E474EF3}
+		{20CBF9B7-151C-4F0B-9590-214C7BA04B43} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 	EndGlobalSection
 EndGlobal

@@ -13,6 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeNetworkScanner.cs" Link="NativeNetwork\NativeNetworkScanner.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\ProbablyStolen.DigitalStorage.Common.csproj" />
     <ProjectReference Include="..\..\..\src\ProbablyStolen.DigitalStorage.Client\ProbablyStolen.DigitalStorage.Client.csproj" />
   </ItemGroup>

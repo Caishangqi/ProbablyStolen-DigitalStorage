@@ -8,9 +8,17 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- The game's loader only runs PatchAll on the assembly that implements IMod, so Harmony patches live here. -->
+  <ItemGroup Condition="'$(DigitalStorageManagedDirectory)' != ''">
+    <Reference Include="0Harmony">
+      <HintPath>$(DigitalStorageManagedDirectory)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Common\ProbablyStolen.DigitalStorage.Common.csproj" />
     <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Client\ProbablyStolen.DigitalStorage.Client.csproj" />
-    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Platform.ProbablyStolen\ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.csproj" />
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Platform\ProbablyStolen.DigitalStorage.Platform.csproj" />
   </ItemGroup>
 </Project>

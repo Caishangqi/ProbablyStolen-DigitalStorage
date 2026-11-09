@@ -1,0 +1,13 @@
+{
+  "solution": {
+    "path": "DigitalStorage.sln",
+    "projects": [
+      "src/ProbablyStolen.DigitalStorage.Common/ProbablyStolen.DigitalStorage.Common.csproj",
+      "src/ProbablyStolen.DigitalStorage.Client/ProbablyStolen.DigitalStorage.Client.csproj",
+      "tests/Unit/ProbablyStolen.DigitalStorage.Common.Tests/ProbablyStolen.DigitalStorage.Common.Tests.csproj",
+      "tests/Unit/ProbablyStolen.DigitalStorage.Client.Tests/ProbablyStolen.DigitalStorage.Client.Tests.csproj",
+      "tests/Integration/ProbablyStolen.DigitalStorage.IntegrationTests/ProbablyStolen.DigitalStorage.IntegrationTests.csproj",
+      "tests/Architecture/ProbablyStolen.DigitalStorage.ArchitectureTests/ProbablyStolen.DigitalStorage.ArchitectureTests.csproj"
+    ]
+  }
+}

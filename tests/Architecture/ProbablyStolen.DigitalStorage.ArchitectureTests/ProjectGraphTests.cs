@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using NUnit.Framework;
 
@@ -18,8 +20,8 @@ public sealed class ProjectGraphTests
         {
             ["Common"] = new HashSet<string>(StringComparer.Ordinal),
             ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "Common" },
-            ["Platform.ProbablyStolen"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client" },
-            ["Mod"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client", "Platform.ProbablyStolen" }
+            ["Platform"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client" },
+            ["Mod"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client", "Platform" }
         };
 
     private static readonly IReadOnlyDictionary<string, HashSet<string>> AllowedCoreAssemblyReferences =
@@ -29,7 +31,11 @@ public sealed class ProjectGraphTests
             ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard", "ProbablyStolen.DigitalStorage.Common" }
         };
 
-    private static string RepositoryRoot => FindRepositoryRoot(AppContext.BaseDirectory);
+    private static string RepositoryRoot => GetBuildMetadata("RepositoryRoot");
+
+    private static string GetBuildMetadata(string key) => typeof(ProjectGraphTests).Assembly
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .Single(attribute => attribute.Key == key).Value!;
 
     [Test]
     public void ProductProjects_DeclareOnlyApprovedReferences()
@@ -42,10 +48,10 @@ public sealed class ProjectGraphTests
     }
 
     [TestCase("Common", "Client")]
-    [TestCase("Common", "Platform.ProbablyStolen")]
+    [TestCase("Common", "Platform")]
     [TestCase("Common", "Mod")]
-    [TestCase("Client", "Platform.ProbablyStolen")]
-    [TestCase("Platform.ProbablyStolen", "Mod")]
+    [TestCase("Client", "Platform")]
+    [TestCase("Platform", "Mod")]
     public void DependencyRule_RejectsForbiddenProjectEdge(string source, string target)
     {
         var references = AllowedReferences[source]
@@ -53,7 +59,7 @@ public sealed class ProjectGraphTests
             .Select(module => new XElement("ProjectReference", new XAttribute("Include", $"../ProbablyStolen.DigitalStorage.{module}/ProbablyStolen.DigitalStorage.{module}.csproj")));
         var document = new XDocument(
             new XElement("Project",
-                new XElement("PropertyGroup", new XElement("RequireProbablyStolenReferences", source is "Platform.ProbablyStolen" or "Mod" ? "true" : "false")),
+                new XElement("PropertyGroup", new XElement("RequireProbablyStolenReferences", source is "Platform" or "Mod" ? "true" : "false")),
                 new XElement("ItemGroup", references)));
 
         var error = Assert.Throws<InvalidOperationException>(new Action(() => ValidateProductProject(document, source)));
@@ -68,6 +74,9 @@ public sealed class ProjectGraphTests
     [TestCase("Common", "0Harmony")]
     [TestCase("Common", "HarmonyLib")]
     [TestCase("Common", "Steamworks.NET")]
+    [TestCase("Common", "QFSW.QC")]
+    [TestCase("Client", "QFSW.QC.Suggestors")]
+    [TestCase("Common", "QFSW.QC.ScanRules")]
     [TestCase("Common", "ProbablyStolen.DigitalStorage.Client")]
     [TestCase("Client", "Unexpected.Runtime")]
     public void CompiledCoreAssembly_RejectsForbiddenReference(string module, string assemblyName)
@@ -82,6 +91,8 @@ public sealed class ProjectGraphTests
     [TestCase("UnityEngine", "Transform")]
     [TestCase("", "IMod")]
     [TestCase("Steamworks", "SteamClient")]
+    [TestCase("QFSW.QC", "CommandData")]
+    [TestCase("QFSW.QC.Suggestors", "InlineSuggestor")]
     public void CompiledCoreAssembly_RejectsForbiddenType(string typeNamespace, string typeName)
     {
         using var fixture = CreateMetadataFixture("netstandard", typeNamespace, typeName);
@@ -93,31 +104,34 @@ public sealed class ProjectGraphTests
 
     [TestCase("Common")]
     [TestCase("Client")]
+    public void ProductProject_RejectsCoreConsoleReference(string module)
+    {
+        var document = XDocument.Load(GetProductProjectPath(module));
+        document.Root!.Add(new XElement("ItemGroup", new XElement("Reference", new XAttribute("Include", "QFSW.QC"))));
+
+        var error = Assert.Throws<InvalidOperationException>(new Action(() => ValidateProductProject(document, module)));
+
+        Assert.That(error!.Message, Does.Contain("QFSW.QC"));
+    }
+
+    [Test]
+    public void ProductProjects_DoNotDeclareConsoleSdkReferences()
+    {
+        foreach (var module in AllowedReferences.Keys)
+        {
+            var document = XDocument.Load(GetProductProjectPath(module));
+            var consoleReferences = document.Descendants("Reference")
+                .Select(element => (string?)element.Attribute("Include") ?? string.Empty)
+                .Where(name => name.StartsWith("QFSW.", StringComparison.Ordinal));
+            Assert.That(consoleReferences, Is.Empty, module);
+        }
+    }
+
+    [TestCase("Common")]
+    [TestCase("Client")]
     public void CompiledCoreAssembly_ContainsOnlyApprovedReferences(string module)
     {
-        var configuration =
-#if DEBUG
-            "Debug";
-#else
-            "Release";
-#endif
-        var outputDirectory = Environment.GetEnvironmentVariable("DIGITAL_STORAGE_OUTPUT_DIR");
-        if (string.IsNullOrWhiteSpace(outputDirectory))
-        {
-            outputDirectory = Path.Combine(RepositoryRoot, "artifacts");
-        }
-        else if (!Path.IsPathRooted(outputDirectory))
-        {
-            outputDirectory = Path.Combine(RepositoryRoot, outputDirectory);
-        }
-
-        var assemblyPath = Path.Combine(
-            Path.GetFullPath(outputDirectory),
-            "build",
-            $"ProbablyStolen.DigitalStorage.{module}",
-            configuration,
-            "netstandard2.1",
-            $"ProbablyStolen.DigitalStorage.{module}.dll");
+        var assemblyPath = GetBuildMetadata(module + "TargetPath");
 
         Assert.That(File.Exists(assemblyPath), Is.True, $"Build the core projects before running architecture checks: {assemblyPath}");
 
@@ -136,13 +150,25 @@ public sealed class ProjectGraphTests
             throw new InvalidOperationException($"{module} has an invalid project graph: {string.Join(", ", references.OrderBy(value => value, StringComparer.Ordinal))}.");
         }
 
+        if (module is "Common" or "Client")
+        {
+            foreach (var reference in document.Descendants("Reference"))
+            {
+                var name = ((string?)reference.Attribute("Include") ?? string.Empty).Split(',')[0];
+                if (!AllowedCoreAssemblyReferences[module].Contains(name))
+                {
+                    throw new InvalidOperationException($"{module} declares forbidden assembly {name}.");
+                }
+            }
+        }
+
         if (document.Descendants("PackageReference").Any())
         {
             throw new InvalidOperationException($"{module} has an undeclared package dependency.");
         }
 
         var requiresGame = document.Descendants("RequireProbablyStolenReferences").SingleOrDefault()?.Value == "true";
-        if (requiresGame != (module is "Platform.ProbablyStolen" or "Mod"))
+        if (requiresGame != (module is "Platform" or "Mod"))
         {
             throw new InvalidOperationException($"{module} has an invalid game reference requirement.");
         }
@@ -219,25 +245,11 @@ public sealed class ProjectGraphTests
             return typeName is "IMod" or "ModManifest" or "ModLog";
         }
 
-        return typeNamespace is "UnityEngine" or "HarmonyLib" or "Steamworks" ||
+        return typeNamespace is "UnityEngine" or "HarmonyLib" or "Steamworks" or "QFSW.QC" ||
+               typeNamespace.StartsWith("QFSW.QC.", StringComparison.Ordinal) ||
                typeNamespace.StartsWith("UnityEngine.", StringComparison.Ordinal) ||
                typeNamespace.StartsWith("HarmonyLib.", StringComparison.Ordinal) ||
                typeNamespace.StartsWith("Steamworks.", StringComparison.Ordinal);
     }
 
-    private static string FindRepositoryRoot(string startDirectory)
-    {
-        var directory = new DirectoryInfo(startDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "DigitalStorage.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate DigitalStorage.sln from the test output directory.");
-    }
 }
