@@ -1,0 +1,99 @@
+[h1]Digital Storage[/h1]
+
+Connect your inventory to a searchable digital storage network. Craft storage cells, place them in drives, then use a controller and terminal to manage items across the network.
+
+[b]Inspired by[/b]
+
+The digital storage and network terminal design in this mod is inspired by [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url], adapted to Probably Stolen's item, machine, and inventory rules.
+
+[h2]Current Content[/h2]
+
+[h3]Machines[/h3]
+
+[b]Controller[/b]
+Provides the network connection and power. The controller needs a battery in its power slot, and each network can have only one controller.
+
+[b]Drive[/b]
+A connected drive holds 14 individual storage cells. Drives can connect to other drives, terminals, and controllers as part of the same network.
+
+[b]Terminal[/b]
+The player's access point to the digital inventory. The terminal lets you search, sort, store, and take items from the network, as well as configure storage cell partitions.
+
+[h3]Storage Components[/h3]
+
+[b]Item Cell Housing[/b]
+The empty housing for a storage cell. Insert a storage component into the housing to assemble a complete item storage cell.
+
+[b]1k Storage Component[/b]
+The core component required to assemble an item storage cell. Once installed, the component remains inside the cell. Empty the cell before disassembling it.
+
+[b]1k Item Storage Cell[/b]
+The digital storage medium that holds items. Place it in a drive slot to make its contents available through the network terminal.
+
+By default, each 1k cell can grow to 16 storage pages, each measuring 12x12, and can hold up to 63 different item types. Storage pages are grouped by item size. They are locked against direct player access, so items move in and out through a terminal. The page and item type limits can be changed in the mod settings. Lowering either limit does not delete existing contents.
+
+[h2]Basic Setup[/h2]
+
+[list]
+[*]Craft an Item Cell Housing and a 1k Storage Component.
+[*]Insert the component into the housing to assemble a 1k Item Storage Cell.
+[*]Place the storage cell in one of the drive's 14 slots.
+[*]Place the controller, drive, and terminal in the same network, then power the controller.
+[*]Open the terminal to search, store, or take items.
+[/list]
+
+[h2]How the Network Works[/h2]
+
+A network is made from machines that are physically connected. Machines connect when their occupied edges touch. Corner contact does not connect them. Machines can form a chain or branch from an existing connection. Machines in different native inventory grids cannot connect to each other.
+
+[b]Network Status[/b]
+
+[list]
+[*][b]Online[/b]: The network has one controller and enough power to cover its current usage.
+[*][b]Offline (unpowered)[/b]: The machines are still connected, but the controller does not have enough power. Restore the power source to bring the network back online.
+[*][b]No controller[/b]: The current connected group does not contain a controller.
+[*][b]Controller conflict[/b]: Multiple controllers are in the same network. Separate them into different networks.
+[/list]
+
+The controller, each drive, and each terminal consume network power during the game's nightly cycle. Their default usage is 3, 2, and 1 respectively. These values can be changed in the mod settings.
+
+[b]Partitions[/b]
+
+A partition is a list of items that a storage cell is allowed to accept. Once configured, a cell only accepts items on its list. Partitions help keep different items in separate cells and let you control which cells are preferred when storing items.
+
+[b]Drive Priority[/b]
+
+Drives can have a priority value. When storing items, the system uses higher-priority drives first. When taking items, it uses lower-priority drives first.
+
+[h2]Terminal Controls[/h2]
+
+[list]
+[*]Enter part of an item name or item ID in the search box to filter the network inventory.
+[*]Left-click to take one stack. Non-stackable items are taken one at a time.
+[*]Right-click to take half a stack. Stored stacks are not split.
+[*]Shift + left-click to take the entire available amount of that item.
+[*]Drag a whole stack onto the terminal grid or an item already shown in the terminal to try to store it.
+[*]Rejected items stay where they were. Common reasons include insufficient capacity, the item type limit being reached, an item being too large, a partition mismatch, or an offline network.
+[/list]
+
+The terminal and drive can open the game's native module panel. In the current version, native module properties do not change Digital Storage capacity, throughput, or power consumption.
+
+[h2]Planned Features[/h2]
+
+The following features are planned for later updates and are not available in the current version:
+
+[list]
+[*][b]Pinyin search[/b]: Search for items using the pinyin of their Chinese names.
+[*][b]Tag prefix search[/b]: Add prefixes such as [b]#[/b] and [b]@[/b] to filter the inventory by tags or other categories.
+[*][b]Machine operation module[/b]: Let machines with this module continue operating while connected to the digital network.
+[*][b]Charging module[/b]: Charge items through the network.
+[*][b]Stolen and contraband module[/b]: Remove an illegal status from items placed in storage cells.
+[*][b]Item interface[/b]: Let other machines or devices insert items into and take items from the network.
+[*][b]Storage interface[/b]: Connect the digital network to other storage containers and expose their inventories through the network.
+[/list]
+
+[h2]Compatibility and Notes[/h2]
+
+The current version targets Probably Stolen 0.46D (Steam build 26525552). Compatibility with other game versions is not guaranteed.
+
+Before disabling or uninstalling the mod, take all items out of every storage cell through a terminal. Treat a storage cell with contents, or a drive with storage cells, as a container holding a complete inventory.

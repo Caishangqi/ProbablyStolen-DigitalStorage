@@ -17,12 +17,9 @@ from typing import Sequence
 EXPECTED_ID = "digital_storage"
 EXPECTED_NAME = "Digital Storage"
 EXPECTED_AUTHOR = "Caizii"
-EXPECTED_VERSION = "0.1.0"
-EXPECTED_DESCRIPTION = (
-    "1k storage cell assembly, native machine modules and fourteen drive bays. "
-    "Digital item storage and networking are not implemented."
-)
-EXPECTED_GAME_VERSION = "0.46D"
+# The mods menu compares only the leading digits and dots of Application.version ("0.46D" in Steam build 26525552),
+# so "0.46" matches every 0.46 letter release.
+EXPECTED_GAME_VERSION = "0.46"
 CURRENT_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.dll"
 EXPECTED_ASSEMBLIES = (
     "ProbablyStolen.DigitalStorage.Common.dll",
@@ -140,11 +137,11 @@ def _validate_manifest(
     if identity != EXPECTED_ID:
         raise PackageValidationError(f"Expected package ID {EXPECTED_ID!r}, got {identity!r}.")
 
+    _element_text(fields["ModVersion"], "ModVersion")
+    _element_text(fields["Description"], "Description")
     expected_values = {
         "Name": EXPECTED_NAME,
         "Author": EXPECTED_AUTHOR,
-        "ModVersion": EXPECTED_VERSION,
-        "Description": EXPECTED_DESCRIPTION,
     }
     for name, expected in expected_values.items():
         value = _element_text(fields[name], name)

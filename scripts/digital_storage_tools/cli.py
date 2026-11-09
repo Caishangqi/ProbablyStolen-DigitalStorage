@@ -45,7 +45,7 @@ def _iter_tests(suite):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from .commands import PUBLIC
-    commands = ("environment", "assets", "internal-deployment", "verify-layout", "inventory-tests", "verify-platform-review", "validate-trx") + PUBLIC
+    commands = ("environment", "assets", "internal-deployment", "internal-workshop-upload", "verify-layout", "inventory-tests", "verify-platform-review", "validate-trx") + PUBLIC
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command in commands:
         subparsers.add_parser(command, add_help=command in ("verify-layout", "test-tools-unit", "test-tools-integration"))
@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=1).run(suite)
         return 0 if result.wasSuccessful() and not result.skipped else 1
-    from . import assets, decompile, deployment, environment, extract_assets, package
+    from . import assets, decompile, deployment, environment, extract_assets, package, workshop
     if args.command in ("check-assets", "prepare-assets"):
         remaining = ["--check" if args.command == "check-assets" else "--write", *remaining]
         return assets.main(remaining)
@@ -132,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Configuration error: {error}", file=sys.stderr)
             return 2
     commands = {"environment": environment.main, "assets": assets.main, "decompile": decompile.main,
-                "extract-assets": extract_assets.main, "verify-package": package.main, "internal-deployment": deployment.main}
+                "extract-assets": extract_assets.main, "verify-package": package.main,
+                "internal-deployment": deployment.main, "internal-workshop-upload": workshop.main}
     if args.command == "verify-layout":
         if remaining:
             parser.error("verify-layout takes no arguments")

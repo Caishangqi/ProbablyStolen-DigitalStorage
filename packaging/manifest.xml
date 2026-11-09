@@ -3,10 +3,10 @@
   <ID>digital_storage</ID>
   <Name>Digital Storage</Name>
   <Author>Caizii</Author>
-  <ModVersion>0.1.0</ModVersion>
-  <Description>1k storage cell assembly, native machine modules and fourteen drive bays. Digital item storage and networking are not implemented.</Description>
+  <ModVersion>0.3.0</ModVersion>
+  <Description>A digital storage network. Search, store and take items across the network from a terminal.</Description>
   <GameVersions>
-    <Version>0.46D</Version>
+    <Version>0.46</Version>
   </GameVersions>
   <Prerequisites />
   <Assemblies>

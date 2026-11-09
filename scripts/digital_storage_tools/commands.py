@@ -8,7 +8,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LOCAL_ENV = {"DIGITAL_STORAGE_GAME_DIR", "DIGITAL_STORAGE_STEAM_LIBRARY_DIR", "DIGITAL_STORAGE_ILSPYCMD", "DIGITAL_STORAGE_ASSET_RIPPER_EXE", "DIGITAL_STORAGE_PACKAGE_DIR", "DIGITAL_STORAGE_DEPLOY_DIR", "ArtifactsPath"}
+LOCAL_ENV = {"DIGITAL_STORAGE_GAME_DIR", "DIGITAL_STORAGE_STEAM_LIBRARY_DIR", "DIGITAL_STORAGE_ILSPYCMD", "DIGITAL_STORAGE_ASSET_RIPPER_EXE", "DIGITAL_STORAGE_PACKAGE_DIR", "DIGITAL_STORAGE_DEPLOY_DIR", "DIGITAL_STORAGE_STEAMCMD_DIR", "DIGITAL_STORAGE_STEAM_USERNAME", "DIGITAL_STORAGE_WORKSHOP_VDF", "DIGITAL_STORAGE_WORKSHOP_PREVIEW", "DIGITAL_STORAGE_WORKSHOP_VISIBILITY", "DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE", "DIGITAL_STORAGE_WORKSHOP_LOCALE", "ArtifactsPath"}
 SCRIPTS = {
     "build-core": ("build.ps1", "-Target", "Core"), "build-game": ("build.ps1", "-Target", "Game"),
     **{f"test-{name.lower()}": ("test.ps1", "-Target", name) for name in ("Core", "Platform", "Common", "Client", "Integration", "Architecture", "All")},
@@ -16,6 +16,7 @@ SCRIPTS = {
     "remove": ("deploy.ps1", "-Action", "Remove"), "launch": ("start-game.ps1",),
     "launch-plan": ("start-game.ps1", "-BuildAndDeploy", "-Plan"),
     "build-deploy-launch": ("start-game.ps1", "-BuildAndDeploy"),
+    "publish-workshop": ("publish-workshop.ps1",),
 }
 CHECKS = {"check-source": ("scripts/check_quality.py", "--scope", "all")}
 PUBLIC = tuple(SCRIPTS) + tuple(CHECKS) + ("doctor", "check-assets", "check-ci", "check-format", "ci-core", "test-tools-unit", "test-tools-integration", "verify-package", "decompile", "extract-assets", "prepare-assets")

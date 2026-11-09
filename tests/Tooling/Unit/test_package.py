@@ -63,11 +63,14 @@ class PackageValidationTests(unittest.TestCase):
         self.assertEqual([item["name"] for item in inventory], list(CURRENT_FILES))
         self.assertTrue(all(len(str(item["sha256"])) == 64 for item in inventory))
 
-    def test_existing_package_allows_old_version_for_safe_replacement(self) -> None:
-        self._replace_manifest_text("<ModVersion>0.1.0</ModVersion>", "<ModVersion>0.0.9</ModVersion>")
-        inventory = validate_package_directory(self.package_directory, require_current_metadata=False)
+    def test_current_package_allows_mod_version_changes(self) -> None:
+        self._replace_manifest_text("<ModVersion>0.3.0</ModVersion>", "<ModVersion>0.4.0</ModVersion>")
+        inventory = validate_package_directory(self.package_directory)
         self.assertEqual(len(inventory), len(CURRENT_FILES))
-        with self.assertRaisesRegex(PackageValidationError, "ModVersion"):
+
+    def test_mod_version_must_not_be_empty(self) -> None:
+        self._replace_manifest_text("<ModVersion>0.3.0</ModVersion>", "<ModVersion></ModVersion>")
+        with self.assertRaisesRegex(PackageValidationError, "ModVersion must not be empty"):
             validate_package_directory(self.package_directory)
 
     def test_known_layouts_require_their_own_manifest_platform_assembly(self) -> None:

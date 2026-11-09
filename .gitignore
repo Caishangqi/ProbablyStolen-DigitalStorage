@@ -21,6 +21,7 @@
 !/src/
 !/tests/
 !/uv.lock
+!/workshop/
 
 # Local secrets and per-machine settings inside admitted directories.
 .env

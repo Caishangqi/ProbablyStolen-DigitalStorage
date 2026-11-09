@@ -53,6 +53,10 @@ run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-all'
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py package'
 
+[tasks.publish-workshop]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py publish-workshop'
+
 [tasks.deploy]
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py deploy'
