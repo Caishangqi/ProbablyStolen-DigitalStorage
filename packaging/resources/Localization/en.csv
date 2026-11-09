@@ -16,8 +16,8 @@ partition_applied,Applied
 partition_cleanup_failed,Source cleanup failed
 partition_applied_cleanup_failed,Applied; source cleanup failed
 partition_failed_cleanup_failed,Apply failed; source cleanup failed
-terminal_desc,Opens the native machine window and the DigitalStorage inventory view. Search and extraction require an online network.
-terminal_storage_title,DigitalStorage Inventory
+terminal_desc,Opens the DigitalStorage terminal. Search and extraction require an online network. Whole stacks can also be dropped onto the terminal to store them.
+terminal_storage_title,Terminal
 terminal_storage_drag_hint,Place {0} dragged stack(s) into {1}. Release to attempt storage; rejected items stay at their source.
 terminal_storage_drag_rejected,These dragged items cannot currently be stored. Drag a whole stack and check supported state capacity and network; items stay at their source.
 terminal_storage_whole_stack_only,Drag storage currently requires a whole stack. The selected partial quantity was not stored; items stay at their source.
@@ -27,7 +27,6 @@ terminal_storage_search_placeholder,Search items
 terminal_storage_loading,Loading inventory...
 terminal_storage_offline,Network offline
 terminal_storage_empty,No matching items
-terminal_storage_amount_placeholder,Amount
 terminal_storage_invalid_amount,Enter a positive whole amount.
 terminal_storage_no_items,No items available.
 terminal_storage_insufficient_power,Not enough power.
@@ -35,7 +34,6 @@ terminal_storage_target_rejected,Player inventory cannot accept the complete sta
 terminal_storage_unsupported_item,This item state is not safely supported.
 terminal_storage_commit_failed,Transfer stopped. Confirmed amount: {0}. Check retained items and any recovery message.
 terminal_storage_extracted,Extracted {0} item(s).
-terminal_storage_store,Store supported items
 terminal_storage_inserted,Stored {0} item(s).
 terminal_storage_capacity_rejected,No complete supported stack fits.
 storage_cell_not_empty,Empty the storage cell before removing its component.
@@ -90,3 +88,32 @@ terminal_storage_reject_no_space,The storage cells are full.
 cell_storage_usage,{0}/{1} space used, {2}/{3} item kinds
 cell_storage_partitioned,Partitioned ({0} item kinds)
 cell_storage_unavailable,Storage unavailable
+terminal_button_modules,M
+terminal_button_modules_tip,Open the module panel
+terminal_button_sort_name,N
+terminal_button_sort_amount,#
+terminal_button_sort_tip,Sort by: {0}
+terminal_sort_name,Name
+terminal_sort_amount,Amount
+terminal_button_direction_asc,^
+terminal_button_direction_desc,v
+terminal_button_direction_tip,Sort direction: {0}
+terminal_direction_asc,Ascending
+terminal_direction_desc,Descending
+terminal_button_partitions,P
+terminal_button_partitions_tip,Configure partitions of storage cells on this network
+terminal_button_size_small,S
+terminal_button_size_medium,M
+terminal_button_size_tall,T
+terminal_button_size_full,F
+terminal_button_size_tip,Terminal size: {0}
+terminal_size_small,Small
+terminal_size_medium,Medium
+terminal_size_tall,Tall
+terminal_size_full,Full
+terminal_partition_none,No storage cells on this network can be configured.
+terminal_partition_label,Drive {0} slot {1}
+terminal_hint_title,Controls
+terminal_hint_left,Left click: take one stack (one item if it does not stack)
+terminal_hint_right,Right click: take half a stack
+terminal_hint_shift,Shift + left click: take all

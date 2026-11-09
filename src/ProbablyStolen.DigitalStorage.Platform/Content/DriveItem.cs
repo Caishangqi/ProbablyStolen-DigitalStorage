@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
@@ -74,8 +76,9 @@ internal sealed class DriveItem
             }
 
             _windows.Attach(item, bays, configurePartitions: () =>
-                new PartitionConfigurationWindow(_text, index => new CellPartitionSource(slots[index]),
-                    CaptureDraggedIdentity).Open());
+                new PartitionConfigurationWindow(_text,
+                    slots.Select((_, index) => (index + 1).ToString(CultureInfo.InvariantCulture)).ToArray(),
+                    index => new CellPartitionSource(slots[index]), CaptureDraggedIdentity).Open());
             return item;
         }
         catch
@@ -85,7 +88,7 @@ internal sealed class DriveItem
         }
     }
 
-    private static ItemKey? CaptureDraggedIdentity()
+    internal static ItemKey? CaptureDraggedIdentity()
     {
         var drag = ItemMouseDragHandler.current;
         if (drag?.IsDraggingItem != true || drag.GetCurrentItem() is not GameItem current) return null;

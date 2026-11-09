@@ -210,13 +210,9 @@ internal sealed class NetworkStorage
         }
 
         long moved = 0;
-        foreach (var root in roots)
+        foreach (var index in TerminalExtractionPlan.Select(roots.Select(root => (long)root.unitCount).ToArray(), amount))
         {
-            if (moved >= amount)
-            {
-                break;
-            }
-
+            var root = roots[index];
             var units = root.unitCount;
             var accepted = CellPages.MoveTo(root, destination);
             moved += accepted;
@@ -306,6 +302,45 @@ internal sealed class NetworkStorage
 
     private bool IsRestoreApplied() => _restoreApplied ??= CellPageRestore.IsApplied();
 
+    /// <summary>
+    /// Gets the native stack limit of a stored type, measured on a stored sample in its page the way the game's own
+    /// stacking does (<c>GameItem.MaxNumAdd</c>: the larger inventory or item <c>maxSlotAmountItemFunc</c>, or 1 when
+    /// neither is set). Returns 1 when no sample is stored.
+    /// </summary>
+    internal long StackLimit(GameItem terminal, ItemKey key)
+    {
+        var sample = FindSample(terminal, key);
+        if (sample == null || !IsStored(sample)) return 1;
+        var room = sample.MaxNumAdd();
+        return room >= int.MaxValue - sample.unitCount ? long.MaxValue : Math.Max(1, sample.unitCount + Math.Max(0, room));
+    }
+
+    /// <summary>
+    /// Lists the bays holding a cell on the terminal's grid, numbered by drive order and bay position, for partition
+    /// editing. Power is not required: partitions only change cell tags, never stored items.
+    /// </summary>
+    internal IReadOnlyList<CellBayReference> ListCellBays(GameItem terminal)
+    {
+        var snapshot = _scanner.Capture(terminal);
+        var grid = snapshot.FindGrid(terminal);
+        var result = new List<CellBayReference>();
+        var drive = 0;
+        foreach (var node in grid.Nodes.Where(node => node.Kind == GridNodeKind.Drive))
+        {
+            drive++;
+            var bays = NativeCellResolver.GetBays(snapshot.FindMachine(node));
+            for (var index = 0; index < bays.Count; index++)
+            {
+                if (NativeCellResolver.IsMountedCell(bays[index].childItem))
+                {
+                    result.Add(new CellBayReference(drive, index + 1, bays[index]));
+                }
+            }
+        }
+
+        return result;
+    }
+
     private Network Connect(GameItem terminal)
     {
         var snapshot = _scanner.Capture(terminal);
@@ -359,4 +394,21 @@ internal sealed class NetworkStorage
 
         internal IReadOnlyList<GameItem> Cells { get; }
     }
+}
+
+/// <summary>One cell bay found on a grid, with 1-based drive and bay numbers for display.</summary>
+internal sealed class CellBayReference
+{
+    internal CellBayReference(int drive, int slot, GameSlotInventory bay)
+    {
+        Drive = drive;
+        Slot = slot;
+        Bay = bay;
+    }
+
+    internal int Drive { get; }
+
+    internal int Slot { get; }
+
+    internal GameSlotInventory Bay { get; }
 }

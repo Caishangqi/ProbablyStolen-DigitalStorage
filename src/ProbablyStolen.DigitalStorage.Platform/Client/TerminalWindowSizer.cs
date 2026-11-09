@@ -47,7 +47,9 @@ internal sealed class TerminalWindowSizer : MonoBehaviour
         // Native window roots need not fill the screen or use a centered origin.
         _viewport.localPosition = new Vector3((minimum.x + maximum.x) / 2f, (minimum.y + maximum.y) / 2f, 0f);
         _viewport.sizeDelta = new Vector2(Mathf.Abs(maximum.x - minimum.x), Mathf.Abs(maximum.y - minimum.y));
-        var scale = TerminalWindowMetrics.GetScale(width, height, canvasScale);
+        // The window height follows the chosen terminal size; only a window larger than the viewport shrinks.
+        var designHeight = Mathf.RoundToInt(window.rect.height);
+        var scale = TerminalWindowMetrics.GetScale(width, height, canvasScale, designHeight);
         window.localScale = new Vector3(scale, scale, 1f);
         var position = window.anchoredPosition;
         window.anchoredPosition = new Vector2(
@@ -65,7 +67,7 @@ internal sealed class TerminalWindowSizer : MonoBehaviour
         _y = y;
         _canvasScale = canvasScale;
         _diagnostics?.Record("window_size",
-            $"design={TerminalWindowMetrics.Width}x{TerminalWindowMetrics.Height} local_scale={scale:0.###} canvas_scale={canvasScale:0.###} viewport={width}x{height}");
+            $"design={TerminalWindowMetrics.Width}x{designHeight} local_scale={scale:0.###} canvas_scale={canvasScale:0.###} viewport={width}x{height}");
         _diagnostics?.Record("window_position",
             $"viewport_origin={x},{y} viewport_local={_viewport.rect.width:0.##}x{_viewport.rect.height:0.##} offset={window.anchoredPosition.x:0.##},{window.anchoredPosition.y:0.##} clamped=true");
     }

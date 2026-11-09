@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -16,12 +15,17 @@ internal sealed class TerminalStorageWindow
 {
     private const string WindowId = "digital_storage_terminal_storage";
     private const int Columns = TerminalWindowMetrics.Columns;
-    private const int Rows = TerminalWindowMetrics.Rows;
     private const int CellPixels = TerminalWindowMetrics.CellPixels;
+    // Session-only view settings shared by every terminal, like AE2's client-side terminal style; never saved.
+    private static TerminalSortOrder _sortOrder = TerminalSortOrder.Name;
+    private static TerminalSortDirection _sortDirection = TerminalSortDirection.Ascending;
+    private static TerminalSize _size = TerminalSize.Small;
     private readonly ModText _text;
     private readonly Func<TerminalInventorySnapshot> _readSnapshot;
     private readonly Func<TerminalEntry, long, TerminalExtractionResult> _extract;
-    private readonly Func<TerminalInsertionResult> _store;
+    private readonly Func<ItemKey, long> _stackLimit;
+    private readonly Action _openModules;
+    private readonly Func<bool> _openPartitions;
     private readonly Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> _storeSelection;
     private readonly Func<GameItem, int, Action<string>, TerminalInsertionResult> _storeSingle;
     private readonly Func<GameItem, int, bool> _canStore;
@@ -30,7 +34,9 @@ internal sealed class TerminalStorageWindow
     private readonly Func<bool> _diagnosticsEnabled;
     private readonly Action<string> _writeDiagnostic;
     private TerminalDiagnostics? _diagnostics;
-    private readonly StorageScreen _screen = new(Columns, Rows, CellPixels);
+    private readonly StorageScreen _screen = new(Columns, TerminalWindowMetrics.Rows, CellPixels);
+    private int _rows = TerminalWindowMetrics.Rows;
+    private TerminalScrollbar? _scrollbar;
     private readonly StorageMenu _menu = new();
     // Pages are locked to players, so outside the terminal's own operations contents only change when cells,
     // machines, batteries or controller power change; those raise NetworkChanged and the next frame rereads.
@@ -41,10 +47,10 @@ internal sealed class TerminalStorageWindow
     private ItemKey? _hoverKey;
     private GameItemElement? _hoverSample;
     private bool _showingTooltip;
+    private readonly TooltipSideBox _hintBox = new();
+    private RichText? _hintText;
     private CustomUIWindow? _window;
     private CustomUIElement? _status;
-    private CustomUIElement? _page;
-    private CustomUIElement? _amount;
     private CustomUIElement?[] _buttons = Array.Empty<CustomUIElement?>();
     private Image?[] _icons = Array.Empty<Image?>();
     private RectTransform?[] _views = Array.Empty<RectTransform?>();
@@ -55,8 +61,8 @@ internal sealed class TerminalStorageWindow
     private bool _storageUnavailable;
 
     internal TerminalStorageWindow(ModText text, Func<TerminalInventorySnapshot> readSnapshot,
-        Func<TerminalEntry, long, TerminalExtractionResult> extract,
-        Func<TerminalInsertionResult> store,
+        Func<TerminalEntry, long, TerminalExtractionResult> extract, Func<ItemKey, long> stackLimit,
+        Action openModules, Func<bool> openPartitions,
         Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
         Func<GameItem, int, bool> canStore, Func<ItemKey, GameItem?> findSample,
@@ -68,7 +74,9 @@ internal sealed class TerminalStorageWindow
         _text = text ?? throw new ArgumentNullException(nameof(text));
         _readSnapshot = readSnapshot ?? throw new ArgumentNullException(nameof(readSnapshot));
         _extract = extract ?? throw new ArgumentNullException(nameof(extract));
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _stackLimit = stackLimit ?? throw new ArgumentNullException(nameof(stackLimit));
+        _openModules = openModules ?? throw new ArgumentNullException(nameof(openModules));
+        _openPartitions = openPartitions ?? throw new ArgumentNullException(nameof(openPartitions));
         _storeSelection = storeSelection ?? throw new ArgumentNullException(nameof(storeSelection));
         _storeSingle = storeSingle ?? throw new ArgumentNullException(nameof(storeSingle));
         _canStore = canStore ?? throw new ArgumentNullException(nameof(canStore));
@@ -76,7 +84,7 @@ internal sealed class TerminalStorageWindow
         _writeDiagnostic = writeDiagnostic;
     }
 
-    /// <summary>Attaches opening to the existing terminal content window only.</summary>
+    /// <summary>Makes this window the one that opens for the terminal, in place of its native machinery window.</summary>
     internal void Attach(GameItem terminal)
     {
         if (terminal == null)
@@ -84,7 +92,24 @@ internal sealed class TerminalStorageWindow
             throw new ArgumentNullException(nameof(terminal));
         }
 
-        terminal.contentWindow.openCallback += Open;
+        TerminalOpenRouter.Register(terminal, this);
+        var native = terminal.contentWindow;
+        native.openCallback += () =>
+        {
+            if (TerminalOpenRouter.IsNativeRequested) return;
+            // Reached when the native window was shown without the patched OpenContentAction, for example by a
+            // direct Show call (OverlayHandler.ShowInventory) or when the patch is missing. Show has already
+            // finished, so hiding here only leaves a one-frame flash.
+            Open();
+            native.Hide();
+        };
+    }
+
+    /// <summary>Closes the window when it is showing, otherwise opens it, like double-clicking a native container.</summary>
+    internal void Toggle()
+    {
+        if (_window != null && _window.IsAlive && _window.IsVisible) _window.Close();
+        else Open();
     }
 
     private void Open()
@@ -106,6 +131,7 @@ internal sealed class TerminalStorageWindow
         }
 
         _session = PlayerStore.Instance;
+        _menu.SetSort(_sortOrder, _sortDirection);
         _networkSubscription?.Dispose();
         _networkSubscription = _subscribeNetwork(_ => _inventoryMonitor.MarkDirty());
         _inventoryMonitor.Reset(Time.unscaledTime);
@@ -117,6 +143,8 @@ internal sealed class TerminalStorageWindow
     private void Build()
     {
         _diagnostics = new TerminalDiagnostics(_diagnosticsEnabled, _writeDiagnostic);
+        _rows = CountRows();
+        _screen.SetRows(_rows);
         var builder = CustomUIManager.Instance.CreateWindow(WindowId, _text.Get("terminal_storage_title"),
             "overlay", null, CustomUIManager.Style.Machinery);
         if (builder == null)
@@ -124,49 +152,50 @@ internal sealed class TerminalStorageWindow
             return;
         }
 
-        builder.SetDraggable(true).SetCloseOnEscape().SetSize(TerminalWindowMetrics.Width, TerminalWindowMetrics.Height)
+        const float gap = 4f;
+        var bodyWidth = TerminalWindowMetrics.ToolbarButton + gap + TerminalWindowMetrics.GridWidth + gap +
+            TerminalWindowMetrics.ScrollbarWidth;
+        builder.SetDraggable(true).SetCloseOnEscape()
+            .SetSize(TerminalWindowMetrics.Width, TerminalWindowMetrics.GetHeight(_rows))
             .OnClose(ClearControls);
-        builder.BeginRow(spacing: 4f);
+
+        // AE2 layout: the search field sits above the grid, the toolbar runs down its left side and the scrollbar
+        // down its right side.
+        builder.BeginRow(spacing: gap);
+        builder.AddSpace(TerminalWindowMetrics.ToolbarButton);
         builder.AddInput(_text.Get("terminal_storage_search_placeholder"), _screen.GetPage().SearchText, id: "search",
             onTyping: query =>
             {
                 _screen.SetSearchText(query);
                 Refresh();
             });
-        SetControlSize(builder.Last, 196f);
-        builder.AddButton("<", () =>
-        {
-            _screen.PreviousPage();
-            Refresh();
-        }, "previous");
-        SetControlSize(builder.Last, 28f);
-        builder.AddLabel(string.Empty, "page");
-        SetControlSize(builder.Last, 36f);
-        builder.AddButton(">", () =>
-        {
-            _screen.NextPage();
-            Refresh();
-        }, "next");
-        SetControlSize(builder.Last, 28f);
+        SetControlSize(builder.Last, bodyWidth - TerminalWindowMetrics.ToolbarButton - gap);
         builder.End();
-        builder.BeginRow(spacing: 4f);
-        builder.AddInput(_text.Get("terminal_storage_amount_placeholder"), "1", id: "amount");
-        SetControlSize(builder.Last, 68f);
-        builder.AddButton(_text.Get("terminal_storage_store"), Store, "store");
-        SetControlSize(builder.Last, 228f);
+
+        builder.BeginRow(spacing: gap);
+        builder.BeginColumn(spacing: TerminalWindowMetrics.ToolbarSpacing);
+        AddToolbarButton(builder, "tool_modules", _openModules);
+        AddToolbarButton(builder, "tool_sort", CycleSortOrder);
+        AddToolbarButton(builder, "tool_direction", CycleSortDirection);
+        AddToolbarButton(builder, "tool_partitions", OpenPartitions);
+        AddToolbarButton(builder, "tool_size", CycleSize);
         builder.End();
+
         builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
-        _buttons = new CustomUIElement?[Columns * Rows];
-        _icons = new Image?[Columns * Rows];
-        _views = new RectTransform?[Columns * Rows];
-        _viewLayers = new List<Image>[Columns * Rows];
-        for (var index = 0; index < _buttons.Length; index++)
+        var slotCount = Columns * _rows;
+        _buttons = new CustomUIElement?[slotCount];
+        _icons = new Image?[slotCount];
+        _views = new RectTransform?[slotCount];
+        _viewLayers = new List<Image>[slotCount];
+        for (var index = 0; index < slotCount; index++)
         {
             var slotIndex = index;
             builder.BeginPanel(CellPixels, CellPixels, padding: 2f, spacing: 0f, id: $"slot_{index}");
             if (index == 0) _slotRoot = builder.Last.Rect.parent as RectTransform;
             ConfigureSlotBorder(builder.Last);
-            builder.AddButton(string.Empty, () => Extract(slotIndex), $"button_{index}");
+            builder.AddButton(string.Empty, () => Extract(slotIndex, IsShiftHeld() ? TerminalClick.All : TerminalClick.Stack),
+                $"button_{index}");
+            builder.Last.root.AddComponent<TerminalSlotClick>().Initialize(() => Extract(slotIndex, TerminalClick.Half));
             _buttons[index] = builder.Last;
             _icons[index] = ConfigureSlotButton(builder.Last);
             _views[index] = CreateItemView(builder.Last);
@@ -177,8 +206,16 @@ internal sealed class TerminalStorageWindow
         }
 
         builder.End();
+        _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
+            TerminalWindowMetrics.GetGridHeight(_rows), TerminalWindowMetrics.ScrollbarHandle, row =>
+            {
+                _screen.SetScroll(row);
+                Refresh();
+            });
+        builder.End();
+
         builder.AddLabel(string.Empty, "status");
-        SetControlSize(builder.Last, 320f, 40f);
+        SetControlSize(builder.Last, bodyWidth, 40f);
         if (builder.Last.text != null)
         {
             builder.Last.text.fontSize = 14f;
@@ -192,8 +229,7 @@ internal sealed class TerminalStorageWindow
             contentLayout.spacing = 6f;
         }
         _status = _window.Get("status");
-        _page = _window.Get("page");
-        _amount = _window.Get("amount");
+        UpdateToolbar();
         AttachToNativeWindowLayer();
         AttachNativeInputShield();
         CreateDropHighlight();
@@ -201,6 +237,99 @@ internal sealed class TerminalStorageWindow
         dropInput.Initialize(_window, IsCurrentSession, StoreSelection, _diagnostics,
             count => ShowDragHint(count), StoreSingle, _canStore, SetDropHighlight, IsPointerOverSlots);
         _window.root.AddComponent<TerminalInventoryRefreshHandler>().Initialize(PollSnapshot);
+    }
+
+    /// <summary>Counts rows for the current size from the native window canvas, falling back to the default.</summary>
+    private static int CountRows()
+    {
+        var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
+        return TerminalWindowMetrics.GetRows(_size, LetterboxManager.GameAreaHeight,
+            canvas == null ? 0f : canvas.scaleFactor);
+    }
+
+    private static void AddToolbarButton(CustomUIBuilder builder, string id, Action onClick)
+    {
+        builder.AddButton(string.Empty, onClick, id);
+        SetControlSize(builder.Last, TerminalWindowMetrics.ToolbarButton, TerminalWindowMetrics.ToolbarButton);
+        if (builder.Last.text != null)
+        {
+            builder.Last.text.fontSize = 14f;
+            builder.Last.text.alignment = TextAlignmentOptions.Center;
+        }
+    }
+
+    /// <summary>Shows each toolbar button's current setting as its label and its full meaning as its tooltip.</summary>
+    private void UpdateToolbar()
+    {
+        if (_window == null) return;
+        SetToolbar("tool_modules", _text.Get("terminal_button_modules"), _text.Get("terminal_button_modules_tip"));
+        var byAmount = _sortOrder == TerminalSortOrder.Amount;
+        SetToolbar("tool_sort", _text.Get(byAmount ? "terminal_button_sort_amount" : "terminal_button_sort_name"),
+            _text.Get("terminal_button_sort_tip", _text.Get(byAmount ? "terminal_sort_amount" : "terminal_sort_name")));
+        var descending = _sortDirection == TerminalSortDirection.Descending;
+        SetToolbar("tool_direction",
+            _text.Get(descending ? "terminal_button_direction_desc" : "terminal_button_direction_asc"),
+            _text.Get("terminal_button_direction_tip",
+                _text.Get(descending ? "terminal_direction_desc" : "terminal_direction_asc")));
+        SetToolbar("tool_partitions", _text.Get("terminal_button_partitions"),
+            _text.Get("terminal_button_partitions_tip"));
+        var size = _size.ToString().ToLowerInvariant();
+        SetToolbar("tool_size", _text.Get("terminal_button_size_" + size),
+            _text.Get("terminal_button_size_tip", _text.Get("terminal_size_" + size)));
+    }
+
+    private void SetToolbar(string id, string label, string tooltip)
+    {
+        var button = _window?.Get(id);
+        button?.SetText(label);
+        TerminalTooltipPresenter.SetText(button, tooltip);
+    }
+
+    private void CycleSortOrder()
+    {
+        _sortOrder = _sortOrder == TerminalSortOrder.Name ? TerminalSortOrder.Amount : TerminalSortOrder.Name;
+        ApplySort();
+    }
+
+    private void CycleSortDirection()
+    {
+        _sortDirection = _sortDirection == TerminalSortDirection.Ascending
+            ? TerminalSortDirection.Descending
+            : TerminalSortDirection.Ascending;
+        ApplySort();
+    }
+
+    private void ApplySort()
+    {
+        if (!IsCurrentSession()) return;
+        _menu.SetSort(_sortOrder, _sortDirection);
+        UpdateToolbar();
+        ApplyMenuView(preserveView: true);
+    }
+
+    private void OpenPartitions()
+    {
+        if (!IsCurrentSession()) return;
+        if (!_openPartitions())
+        {
+            _messageKey = "terminal_partition_none";
+            Refresh();
+        }
+    }
+
+    /// <summary>Cycles AE2's terminal styles and rebuilds the grid, keeping the search, scroll row and position.</summary>
+    private void CycleSize()
+    {
+        if (!IsCurrentSession() || _window == null) return;
+        _size = _size == TerminalSize.Full ? TerminalSize.Small : _size + 1;
+        var position = _window.Rect.anchoredPosition;
+        var scroll = _screen.ScrollRow;
+        _window.Close();
+        Open();
+        if (_window == null) return;
+        _window.Rect.anchoredPosition = position;
+        _screen.SetScroll(scroll);
+        Refresh();
     }
 
     private void AttachNativeInputShield()
@@ -234,8 +363,7 @@ internal sealed class TerminalStorageWindow
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
         // A two-unit gutter keeps the native border visible behind opaque slot panels.
         rect.anchoredPosition = new Vector2(-2f, 2f);
-        rect.sizeDelta = new Vector2(Columns * CellPixels + (Columns - 1) * TerminalWindowMetrics.CellSpacing + 4f,
-            Rows * CellPixels + (Rows - 1) * TerminalWindowMetrics.CellSpacing + 4f);
+        rect.sizeDelta = new Vector2(TerminalWindowMetrics.GridWidth + 4f, TerminalWindowMetrics.GetGridHeight(_rows) + 4f);
         root.AddComponent<LayoutElement>().ignoreLayout = true;
         _dropHighlight = root.AddComponent<Image>();
         _dropHighlight.type = Image.Type.Sliced;
@@ -471,7 +599,8 @@ internal sealed class TerminalStorageWindow
     {
         if (_window == null || !IsCurrentSession()) return;
         UpdateHoverTooltip();
-        var viewChanged = _menu.SetPaused(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+        ApplyWheel();
+        var viewChanged = _menu.SetPaused(IsShiftHeld());
         var reason = _inventoryMonitor.BeginRefresh(Time.unscaledTime, _window.IsVisible, _diagnosticsEnabled());
         if (reason == TerminalRefreshReason.None)
         {
@@ -493,6 +622,28 @@ internal sealed class TerminalStorageWindow
         Refresh(snapshot, preserveView: true);
     }
 
+    /// <summary>
+    /// Scrolls one page per wheel notch while the pointer is over the window, as AE2 does. During a native drag the
+    /// wheel belongs to the game (rotation and drag amount), so it is left alone.
+    /// </summary>
+    private void ApplyWheel()
+    {
+        var delta = Input.mouseScrollDelta.y;
+        if (delta == 0f || _scrollbar == null || _window == null || !_window.IsVisible) return;
+        if (ItemMouseDragHandler.current?.IsDraggingItem == true ||
+            ItemMultiSelectHandler.current?.IsGroupDragging == true)
+        {
+            return;
+        }
+
+        var canvas = _window.root.GetComponentInParent<Canvas>();
+        var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        if (RectTransformUtility.RectangleContainsScreenPoint(_window.Rect, Input.mousePosition, camera))
+        {
+            _scrollbar.Wheel(delta);
+        }
+    }
+
     private void Refresh(TerminalInventorySnapshot snapshot, bool preserveView = false)
     {
         // Stored items may have moved; the next hover reads a fresh sample.
@@ -512,20 +663,23 @@ internal sealed class TerminalStorageWindow
         Refresh();
     }
 
-    private void Store()
+    private long StackLimit(ItemKey key)
     {
-        if (!IsCurrentSession())
+        try
         {
-            return;
+            return _stackLimit(key);
         }
-
-        var result = _menu.HandleInsertion(_store);
-        _messageKey = result.MessageKey;
-        _messageAmount = result.StoredAmount;
-        Refresh(ReadSnapshot(), preserveView: true);
+        catch
+        {
+            // Without a readable limit a click still takes one stored stack.
+            return 1;
+        }
     }
 
-    private void Extract(int index)
+    private static bool IsShiftHeld() => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
+    /// <summary>Takes from a slot like AE2: left click one stack, right click half, Shift + left click everything.</summary>
+    private void Extract(int index, TerminalClick click)
     {
         if (!IsCurrentSession())
         {
@@ -540,18 +694,11 @@ internal sealed class TerminalStorageWindow
 
         var entry = page.Slots[index].Entry!;
         if (entry.Amount <= 0 || entry.Serial < 0) return;
-        // An empty amount box means a plain click: take one item.
-        var amountText = _amount?.GetString();
-        var amount = 1L;
-        if (!string.IsNullOrWhiteSpace(amountText) && (!long.TryParse(amountText, NumberStyles.None,
-            CultureInfo.InvariantCulture, out amount) || amount <= 0))
-        {
-            _messageKey = "terminal_storage_invalid_amount";
-            Refresh();
-            return;
-        }
-
+        var limit = StackLimit(entry.Key);
+        var amount = TerminalClickAmount.For(click, entry.Amount, limit);
         var result = _menu.HandleInteraction(entry.Serial, amount, _extract);
+        _diagnostics?.Record("extract_result",
+            $"click={click} stored={entry.Amount} stack_limit={limit} requested={amount} moved={result.ExtractedAmount} status={result.Status}");
         _messageKey = result.MessageKey;
         _messageAmount = result.ExtractedAmount;
         Refresh(ReadSnapshot(), preserveView: true);
@@ -599,6 +746,7 @@ internal sealed class TerminalStorageWindow
         overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f), _hoverSample.GetTooltip(),
             NativeTooltipWidth(_hoverSample));
         _showingTooltip = true;
+        _hintBox.Show(_hintText ??= BuildHintText());
     }
 
     /// <summary>Uses the same maximum width rules as the native ItemTooltipHandler.</summary>
@@ -634,11 +782,20 @@ internal sealed class TerminalStorageWindow
         return null;
     }
 
+    /// <summary>Lists the slot clicks, shown in a box under the hovered item's tooltip.</summary>
+    private RichText BuildHintText() => new RichTextBuilder(60)
+        .AddLine(_text.Get("terminal_hint_title"), ignoreEmpty: true, RenderHandler.ColorPalette.White)
+        .AddLine(_text.Get("terminal_hint_left"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
+        .AddLine(_text.Get("terminal_hint_right"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
+        .AddLine(_text.Get("terminal_hint_shift"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
+        .Build();
+
     private void HideHoverTooltip()
     {
         if (_showingTooltip)
         {
             OverlayHandler.current?.HideTooltip();
+            _hintBox.Hide();
         }
 
         _showingTooltip = false;
@@ -666,8 +823,7 @@ internal sealed class TerminalStorageWindow
         _dropHighlight = null;
         _slotRoot = null;
         _status = null;
-        _page = null;
-        _amount = null;
+        _scrollbar = null;
         _session = null;
         _networkSubscription?.Dispose();
         _networkSubscription = null;
@@ -750,6 +906,6 @@ internal sealed class TerminalStorageWindow
         }
 
         _messageKey = null;
-        _page?.SetText($"{page.Page + 1} / {page.PageCount}");
+        _scrollbar?.SetRange(page.MaxScroll, _screen.PageSize, page.ScrollRow);
     }
 }

@@ -263,6 +263,36 @@ public sealed class StorageMenuTests
         Assert.That(menu.GetLinkState().StatusDescription, Is.EqualTo("terminal_storage_unavailable"));
     }
 
+    [TestCase(TerminalSortOrder.Name, TerminalSortDirection.Ascending, new[] { "apple", "banana", "cherry", "date" })]
+    [TestCase(TerminalSortOrder.Name, TerminalSortDirection.Descending, new[] { "date", "cherry", "banana", "apple" })]
+    [TestCase(TerminalSortOrder.Amount, TerminalSortDirection.Ascending, new[] { "banana", "date", "apple", "cherry" })]
+    [TestCase(TerminalSortOrder.Amount, TerminalSortDirection.Descending, new[] { "cherry", "apple", "banana", "date" })]
+    public void SetSort_OrdersByNameOrAmountWithStableTies(TerminalSortOrder order, TerminalSortDirection direction,
+        string[] expected)
+    {
+        var menu = new StorageMenu();
+        menu.BroadcastChanges(Snapshot(true, ("cherry", 9), ("apple", 5), ("date", 2), ("banana", 2)));
+
+        menu.SetSort(order, direction);
+
+        // Equal amounts (banana and date) keep name order in both directions.
+        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void SetSort_WhilePausedKeepsVisiblePositionsUntilResumed()
+    {
+        var menu = new StorageMenu();
+        menu.BroadcastChanges(Snapshot(true, ("apple", 1), ("banana", 9)));
+        menu.SetPaused(true);
+
+        menu.SetSort(TerminalSortOrder.Amount, TerminalSortDirection.Descending);
+        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "apple", "banana" }));
+
+        menu.SetPaused(false);
+        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "banana", "apple" }));
+    }
+
     private static InventoryEntryUpdate Entry(StorageMenu menu, string id) =>
         menu.GetRepository().GetAllEntries().Single(entry => entry.What?.GetPrimaryKey() == id);
 

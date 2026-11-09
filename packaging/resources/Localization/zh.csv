@@ -16,8 +16,8 @@ partition_applied,已应用
 partition_cleanup_failed,数据源清理失败
 partition_applied_cleanup_failed,已应用; 数据源清理失败
 partition_failed_cleanup_failed,应用失败; 数据源清理失败
-terminal_desc,打开原生机器窗口和 DigitalStorage 库存视图. 搜索和取出需要在线网络.
-terminal_storage_title,DigitalStorage 库存
+terminal_desc,打开 DigitalStorage 终端. 搜索和取出需要在线网络. 整堆物品也可以直接拖到终端上存入.
+terminal_storage_title,终端
 terminal_storage_drag_hint,将拖动的 {0} 个堆叠放入「{1}」. 松开鼠标尝试存入; 拒收物品留在原处.
 terminal_storage_drag_rejected,当前拖动物品无法存入. 请使用整堆拖动, 并检查物品支持状态、容量和网络; 物品保留在原处.
 terminal_storage_whole_stack_only,拖入目前需要整个堆叠. 所选部分数量未存入, 物品保留在原处.
@@ -27,7 +27,6 @@ terminal_storage_search_placeholder,搜索物品
 terminal_storage_loading,正在加载库存...
 terminal_storage_offline,网络离线
 terminal_storage_empty,没有匹配物品
-terminal_storage_amount_placeholder,数量
 terminal_storage_invalid_amount,请输入正整数数量.
 terminal_storage_no_items,没有可取出的物品.
 terminal_storage_insufficient_power,电力不足.
@@ -35,7 +34,6 @@ terminal_storage_target_rejected,玩家库存无法接收完整堆叠.
 terminal_storage_unsupported_item,此物品状态不受安全支持.
 terminal_storage_commit_failed,转移已停止, 已确认数量: {0}. 请核对保留的物品和恢复提示.
 terminal_storage_extracted,已取出 {0} 个物品.
-terminal_storage_store,存入受支持物品
 terminal_storage_inserted,已存入 {0} 个物品.
 terminal_storage_capacity_rejected,没有完整的受支持堆叠可以放入.
 storage_cell_not_empty,拆出存储组件前必须先清空存储元件.
@@ -90,3 +88,32 @@ terminal_storage_reject_no_space,存储元件已满。
 cell_storage_usage,已用 {0}/{1} 格, {2}/{3} 种物品
 cell_storage_partitioned,已分区 ({0} 种物品)
 cell_storage_unavailable,存储不可用
+terminal_button_modules,模
+terminal_button_modules_tip,打开模块面板
+terminal_button_sort_name,名
+terminal_button_sort_amount,量
+terminal_button_sort_tip,排序方式: {0}
+terminal_sort_name,名称
+terminal_sort_amount,数量
+terminal_button_direction_asc,升
+terminal_button_direction_desc,降
+terminal_button_direction_tip,排序方向: {0}
+terminal_direction_asc,升序
+terminal_direction_desc,降序
+terminal_button_partitions,分
+terminal_button_partitions_tip,配置网络中存储元件的分区
+terminal_button_size_small,小
+terminal_button_size_medium,中
+terminal_button_size_tall,高
+terminal_button_size_full,全
+terminal_button_size_tip,终端尺寸: {0}
+terminal_size_small,小
+terminal_size_medium,中
+terminal_size_tall,高
+terminal_size_full,全屏
+terminal_partition_none,网络中没有可配置的存储元件.
+terminal_partition_label,驱动器 {0} 槽位 {1}
+terminal_hint_title,操作
+terminal_hint_left,左键: 取出一组 (不可堆叠的物品每次 1 个)
+terminal_hint_right,右键: 取出半组
+terminal_hint_shift,Shift+左键: 取出全部

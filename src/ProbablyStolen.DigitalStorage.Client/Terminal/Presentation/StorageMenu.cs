@@ -112,6 +112,9 @@ public sealed class StorageMenu
         return changed;
     }
 
+    /// <summary>Changes the repository ordering used by <see cref="GetEntries"/>.</summary>
+    public void SetSort(TerminalSortOrder order, TerminalSortDirection direction) => _repository.SetSort(order, direction);
+
     /// <summary>Returns the current item entries in repository view order.</summary>
     public IReadOnlyList<TerminalEntry> GetEntries() => _repository.GetView()
         .Where(entry => entry.What is not null)

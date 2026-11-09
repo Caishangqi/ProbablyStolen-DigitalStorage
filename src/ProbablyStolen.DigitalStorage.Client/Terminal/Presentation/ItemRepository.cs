@@ -10,6 +10,8 @@ public sealed class ItemRepository : IItemRepository
     private readonly Dictionary<long, InventoryEntryUpdate> _entries = new();
     private readonly List<InventoryEntryUpdate> _view = new();
     private bool _paused;
+    private TerminalSortOrder _sortOrder = TerminalSortOrder.Name;
+    private TerminalSortDirection _sortDirection = TerminalSortDirection.Ascending;
 
     /// <summary>Applies a complete snapshot or an incremental batch from the menu.</summary>
     public void HandleUpdate(bool fullUpdate, IReadOnlyList<InventoryEntryUpdate> entries)
@@ -66,9 +68,26 @@ public sealed class ItemRepository : IItemRepository
         _view.AddRange(Sort(_entries.Values.Where(entry => entry.IsMeaningful())));
     }
 
-    private static IOrderedEnumerable<InventoryEntryUpdate> Sort(IEnumerable<InventoryEntryUpdate> entries) => entries
-        .OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
-        .ThenBy(entry => entry.What);
+    private IOrderedEnumerable<InventoryEntryUpdate> Sort(IEnumerable<InventoryEntryUpdate> entries)
+    {
+        var descending = _sortDirection == TerminalSortDirection.Descending;
+        var ordered = _sortOrder == TerminalSortOrder.Amount
+            ? descending ? entries.OrderByDescending(entry => entry.StoredAmount) : entries.OrderBy(entry => entry.StoredAmount)
+            : descending
+                ? entries.OrderByDescending(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
+                : entries.OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase);
+        // Ties fall back to a fixed name then key order so equal amounts never swap between refreshes.
+        return ordered.ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.What);
+    }
+
+    /// <summary>Changes the ordering; while paused the visible positions stay until resorting resumes.</summary>
+    public void SetSort(TerminalSortOrder order, TerminalSortDirection direction)
+    {
+        if (_sortOrder == order && _sortDirection == direction) return;
+        _sortOrder = order;
+        _sortDirection = direction;
+        if (!_paused) UpdateView();
+    }
 
     /// <summary>Removes all current entries and visible positions.</summary>
     public void Clear()

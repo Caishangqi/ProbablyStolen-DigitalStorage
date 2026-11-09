@@ -31,10 +31,9 @@ internal sealed class GridNetworkPowerCoordinator
 
     internal GameItem? FindStoredSample(GameItem terminal, ItemKey key) => _storage.FindSample(terminal, key);
 
-    /// <summary>Stores every storable root in the player's main inventory.</summary>
-    internal TerminalInsertionResult StoreFromPlayer(GameItem terminal) =>
-        _storage.Store(terminal, EmporiumEntry.Instance.invElement.childItems
-            .Where(NetworkStorage.IsStorable).ToArray());
+    internal IReadOnlyList<CellBayReference> ListCellBays(GameItem terminal) => _storage.ListCellBays(terminal);
+
+    internal long StackLimit(GameItem terminal, ItemKey key) => _storage.StackLimit(terminal, key);
 
     internal TerminalInsertionResult StoreSelected(GameItem terminal, IReadOnlyList<GameItem> items,
         Action<string>? reportDiagnostic = null) => _storage.Store(terminal, items);

@@ -16,33 +16,33 @@ internal static class NativeCellResolver
         GetCellItems(drive).Select(_ => (IStorageCell)MountedCell.Instance).ToArray();
 
     /// <summary>Gets the native cell items mounted in a drive, in bay order.</summary>
-    internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive)
+    internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive) =>
+        GetBays(drive).Select(bay => bay.childItem).Where(IsMountedCell).Select(cell => cell!).ToArray();
+
+    /// <summary>Gets every cell bay slot of a drive, empty or not, in bay order.</summary>
+    internal static IReadOnlyList<GameSlotInventory> GetBays(GameItem drive)
     {
         if (drive == null)
         {
             throw new ArgumentNullException(nameof(drive));
         }
 
-        var cells = new List<GameItem>();
-        foreach (var slot in GraphUtils.FindAllChildrenType<GameSlotInventory>(drive))
+        return GraphUtils.FindAllChildrenType<GameSlotInventory>(drive)
+            .Where(slot => slot.identifier != null &&
+                slot.identifier.StartsWith(CellContentWindow.BayPrefix, StringComparison.Ordinal))
+            .ToArray();
+    }
+
+    /// <summary>Gets whether a bay holds an assembled storage cell with its storage component.</summary>
+    internal static bool IsMountedCell(GameItem? cell)
+    {
+        if (cell == null || cell.identifier != StorageCellDisassemblyRecipe.CellId)
         {
-            var cell = slot.childItem;
-            if (slot.identifier == null || !slot.identifier.StartsWith(CellContentWindow.BayPrefix,
-                StringComparison.Ordinal) || cell == null || cell.identifier != StorageCellDisassemblyRecipe.CellId)
-            {
-                continue;
-            }
-
-            var component = CellContentWindow.Component(cell);
-            if (component == null || component.identifier != StorageComponent.ItemId)
-            {
-                continue;
-            }
-
-            cells.Add(cell);
+            return false;
         }
 
-        return cells;
+        var component = CellContentWindow.Component(cell);
+        return component != null && component.identifier == StorageComponent.ItemId;
     }
 
     private sealed class MountedCell : IStorageCell

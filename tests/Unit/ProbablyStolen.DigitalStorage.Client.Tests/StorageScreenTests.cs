@@ -25,8 +25,8 @@ public sealed class StorageScreenTests
         var page = screen.GetPage();
 
         Assert.That(page.State, Is.EqualTo(TerminalDisplayState.Ready));
-        Assert.That(page.Page, Is.Zero);
-        Assert.That(page.PageCount, Is.EqualTo(1));
+        Assert.That(page.ScrollRow, Is.Zero);
+        Assert.That(page.MaxScroll, Is.Zero);
         Assert.That(page.Slots, Has.Count.EqualTo(4));
         Assert.That(page.Slots[0].Entry!.DisplayName, Is.EqualTo("Alpha"));
         Assert.That(page.Slots[0].SpriteWidthPixels, Is.EqualTo(32));
@@ -35,7 +35,7 @@ public sealed class StorageScreenTests
     }
 
     [Test]
-    public void Search_ResetsPageAndFiltersDisplayAndIdentifier()
+    public void Search_ResetsScrollAndFiltersDisplayAndIdentifier()
     {
         var screen = new StorageScreen(columns: 1, rows: 1);
         screen.SetEntries(new[]
@@ -44,20 +44,20 @@ public sealed class StorageScreenTests
             Entry("banana", 2, "Banana", "banana"),
             Entry("copper_wire", 3, "Wire", "wire")
         });
-        screen.NextPage();
-        Assert.That(screen.GetPage().Page, Is.EqualTo(1));
+        screen.ScrollBy(1);
+        Assert.That(screen.GetPage().ScrollRow, Is.EqualTo(1));
 
         screen.SetSearchText("wire");
         var page = screen.GetPage();
 
-        Assert.That(page.Page, Is.Zero);
-        Assert.That(page.PageCount, Is.EqualTo(1));
+        Assert.That(page.ScrollRow, Is.Zero);
+        Assert.That(page.MaxScroll, Is.Zero);
         Assert.That(page.State, Is.EqualTo(TerminalDisplayState.Ready));
         Assert.That(page.Slots[0].Entry!.Key.Identifier, Is.EqualTo("copper_wire"));
     }
 
     [Test]
-    public void Pagination_ClampsAndKeepsDeterministicStateAwareOrder()
+    public void Scroll_ClampsToLastFullRowsAndKeepsDeterministicStateAwareOrder()
     {
         var screen = new StorageScreen(columns: 1, rows: 2);
         screen.SetEntries(new[]
@@ -68,14 +68,63 @@ public sealed class StorageScreenTests
         });
 
         Assert.That(screen.GetPage().Slots[0].Entry!.DisplayName, Is.EqualTo("Apple"));
-        screen.SetPage(99);
+        screen.SetScroll(99);
         var last = screen.GetPage();
 
-        Assert.That(last.Page, Is.EqualTo(1));
-        Assert.That(last.Slots[0].Entry!.Key.Components[0].Value, Is.EqualTo("b"));
-        Assert.That(last.Slots[1].Entry, Is.Null);
-        screen.PreviousPage();
-        Assert.That(screen.GetPage().Page, Is.Zero);
+        // AE2 stops at totalRows - visibleRows, so the last view is full rather than one leftover row.
+        Assert.That(last.ScrollRow, Is.EqualTo(1));
+        Assert.That(last.MaxScroll, Is.EqualTo(1));
+        Assert.That(last.Slots[0].Entry!.Key.Components[0].Value, Is.EqualTo("a"));
+        Assert.That(last.Slots[1].Entry!.Key.Components[0].Value, Is.EqualTo("b"));
+        screen.ScrollBy(-5);
+        Assert.That(screen.GetPage().ScrollRow, Is.Zero);
+    }
+
+    [Test]
+    public void ScrollRange_CountsWholeRowsAndIsZeroWhenEverythingFits()
+    {
+        var screen = new StorageScreen(columns: 3, rows: 2);
+        screen.SetEntries(Enumerable.Range(0, 6).Select(index => Entry($"item{index}", 1, $"Item {index}", "s")));
+        Assert.That(screen.GetTotalRows(), Is.EqualTo(2));
+        Assert.That(screen.GetMaxScroll(), Is.Zero);
+        screen.ScrollBy(1);
+        Assert.That(screen.ScrollRow, Is.Zero);
+
+        screen.SetEntries(Enumerable.Range(0, 7).Select(index => Entry($"item{index}", 1, $"Item {index}", "s")));
+        Assert.That(screen.GetTotalRows(), Is.EqualTo(3));
+        Assert.That(screen.GetMaxScroll(), Is.EqualTo(1));
+        screen.ScrollBy(1);
+        var page = screen.GetPage();
+        Assert.That(page.Slots[0].Entry!.DisplayName, Is.EqualTo("Item 3"));
+        Assert.That(page.Slots[3].Entry!.DisplayName, Is.EqualTo("Item 6"));
+        Assert.That(page.Slots[4].Entry, Is.Null);
+    }
+
+    [TestCase(2, 1)]
+    [TestCase(5, 1)]
+    [TestCase(6, 1)]
+    [TestCase(11, 1)]
+    [TestCase(12, 2)]
+    [TestCase(19, 3)]
+    public void PageSize_FollowsAe2RowsDividedBySix(int rows, int expected)
+    {
+        Assert.That(new StorageScreen(columns: 7, rows: rows).PageSize, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void SetRows_ChangesSlotCountAndClampsScroll()
+    {
+        var screen = new StorageScreen(columns: 1, rows: 1);
+        screen.SetEntries(Enumerable.Range(0, 5).Select(index => Entry($"item{index}", 1, $"Item {index}", "s")));
+        screen.SetScroll(4);
+        Assert.That(screen.ScrollRow, Is.EqualTo(4));
+
+        screen.SetRows(3);
+        var page = screen.GetPage();
+        Assert.That(page.Slots, Has.Count.EqualTo(3));
+        Assert.That(page.ScrollRow, Is.EqualTo(2));
+        Assert.That(page.Slots[2].Entry!.DisplayName, Is.EqualTo("Item 4"));
+        Assert.Throws<ArgumentOutOfRangeException>(new Action(() => screen.SetRows(0)));
     }
 
     [Test]
@@ -157,7 +206,7 @@ public sealed class StorageScreenTests
     }
 
     [Test]
-    public void LiveInventoryUpdate_PreservesSearchAndCurrentPageUntilEntriesRequireClamping()
+    public void LiveInventoryUpdate_PreservesSearchAndScrollUntilEntriesRequireClamping()
     {
         var screen = new StorageScreen(columns: 1, rows: 1);
         screen.SetEntries(new[]
@@ -167,7 +216,7 @@ public sealed class StorageScreenTests
             Entry("copper_wire", 3, "Wire", "wire")
         });
         screen.SetSearchText("a");
-        screen.SetPage(1);
+        screen.SetScroll(1);
 
         screen.UpdateEntries(new[]
         {
@@ -178,13 +227,13 @@ public sealed class StorageScreenTests
 
         var page = screen.GetPage();
         Assert.That(page.SearchText, Is.EqualTo("a"));
-        Assert.That(page.Page, Is.EqualTo(1));
+        Assert.That(page.ScrollRow, Is.EqualTo(1));
         Assert.That(page.Slots[0].Entry!.Key.Identifier, Is.EqualTo("banana"));
         Assert.That(page.Slots[0].Entry!.Amount, Is.EqualTo(4));
 
         screen.UpdateEntries(new[] { Entry("apple", 2, "Apple", "apple") });
         page = screen.GetPage();
-        Assert.That(page.Page, Is.Zero);
+        Assert.That(page.ScrollRow, Is.Zero);
         Assert.That(page.State, Is.EqualTo(TerminalDisplayState.Ready));
         Assert.That(page.Slots[0].Entry!.Amount, Is.EqualTo(2));
         screen.SetSearchText("missing");
@@ -195,7 +244,7 @@ public sealed class StorageScreenTests
     }
 
     [Test]
-    public void OrderedInventoryUpdate_PreservesCallerOrderSearchAndValidPage()
+    public void OrderedInventoryUpdate_PreservesCallerOrderSearchAndValidScroll()
     {
         var screen = new StorageScreen(columns: 1, rows: 1);
         screen.SetEntriesInOrder(new[]
@@ -205,7 +254,7 @@ public sealed class StorageScreenTests
             Entry("banana", 3, "Banana", "banana")
         });
         screen.SetSearchText(string.Empty);
-        screen.SetPage(2);
+        screen.SetScroll(2);
         screen.UpdateEntriesInOrder(new[]
         {
             Entry("zebra", 4, "Zebra", "zebra"),
@@ -215,12 +264,12 @@ public sealed class StorageScreenTests
 
         var page = screen.GetPage();
         Assert.That(page.SearchText, Is.Empty);
-        Assert.That(page.Page, Is.EqualTo(2));
+        Assert.That(page.ScrollRow, Is.EqualTo(2));
         Assert.That(page.Slots[0].Entry!.Key.Identifier, Is.EqualTo("banana"));
         screen.SetLoading();
         page = screen.GetPage();
         Assert.That(page.SearchText, Is.Empty);
-        Assert.That(page.Page, Is.Zero);
+        Assert.That(page.ScrollRow, Is.Zero);
         Assert.That(page.State, Is.EqualTo(TerminalDisplayState.Loading));
     }
 
@@ -235,7 +284,7 @@ public sealed class StorageScreenTests
         screen.SetLoading();
         Assert.That(screen.GetPage().State, Is.EqualTo(TerminalDisplayState.Loading));
         Assert.That(screen.GetPage().SearchText, Is.EqualTo("missing"));
-        Assert.That(screen.GetPage().Page, Is.Zero);
+        Assert.That(screen.GetPage().ScrollRow, Is.Zero);
         Assert.That(screen.GetPage().Slots[0].Entry, Is.Null);
         screen.SetOffline();
         Assert.That(screen.GetPage().State, Is.EqualTo(TerminalDisplayState.Offline));

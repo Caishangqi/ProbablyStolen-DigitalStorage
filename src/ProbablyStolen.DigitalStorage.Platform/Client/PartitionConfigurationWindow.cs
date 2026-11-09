@@ -12,6 +12,7 @@ internal sealed class PartitionConfigurationWindow
 {
     private const string WindowId = "digital_storage_partition";
     private readonly ModText _text;
+    private readonly IReadOnlyList<string> _labels;
     private readonly Func<int, IPartitionWindowSource> _source;
     private readonly Func<ItemKey?> _captureGhost;
     private readonly PartitionWindowController _controller = new();
@@ -22,10 +23,13 @@ internal sealed class PartitionConfigurationWindow
     private int _selected;
     private static PartitionConfigurationWindow? _current;
 
-    internal PartitionConfigurationWindow(ModText text, Func<int, IPartitionWindowSource> source,
-        Func<ItemKey?> captureGhost)
+    /// <summary>Creates a window whose dropdown entry <c>i</c> edits <c>source(i)</c>.</summary>
+    internal PartitionConfigurationWindow(ModText text, IReadOnlyList<string> labels,
+        Func<int, IPartitionWindowSource> source, Func<ItemKey?> captureGhost)
     {
+        if (labels == null || labels.Count == 0) throw new ArgumentException("At least one cell is required.", nameof(labels));
         _text = text;
+        _labels = labels;
         _source = source;
         _captureGhost = captureGhost;
     }
@@ -35,11 +39,9 @@ internal sealed class PartitionConfigurationWindow
         if (CustomUIManager.Instance == null) return;
         CloseCurrent();
         _current = this;
-        var labels = new List<string>();
-        for (var i = 0; i < 14; i++) labels.Add((i + 1).ToString());
         var builder = CustomUIManager.Window(WindowId, _text.Get("partition_title"), CustomUIManager.LAYER_PAPER)
             .SetSize(380, 440).SetDraggable(true).SetCloseOnEscape().OnClose(OnClose)
-            .AddDropdown(labels, 0, Select)
+            .AddDropdown(new List<string>(_labels), 0, Select)
             .AddLabel("", "status")
             .BeginScroll(260);
         _list = builder.CurrentContainer;

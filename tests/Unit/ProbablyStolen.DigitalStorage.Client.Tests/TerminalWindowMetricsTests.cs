@@ -55,16 +55,68 @@ public sealed class TerminalWindowMetricsTests
     }
 
     [Test]
-    public void CompactGrid_KeepsAllTwentyEightSlotsAndFitsTheContent()
+    public void DefaultGrid_KeepsTwentyEightSlotsAndFitsToolbarGridAndScrollbar()
     {
         Assert.That(TerminalWindowMetrics.Columns * TerminalWindowMetrics.Rows, Is.EqualTo(28));
-        var gridWidth = TerminalWindowMetrics.Columns * TerminalWindowMetrics.CellPixels +
-            (TerminalWindowMetrics.Columns - 1) * TerminalWindowMetrics.CellSpacing;
-        var gridHeight = TerminalWindowMetrics.Rows * TerminalWindowMetrics.CellPixels +
-            (TerminalWindowMetrics.Rows - 1) * TerminalWindowMetrics.CellSpacing;
-        Assert.That(gridWidth, Is.LessThanOrEqualTo(TerminalWindowMetrics.Width - 32));
-        Assert.That(32 + 32 + gridHeight + 40 + 3 * 6,
+        Assert.That(TerminalWindowMetrics.ToolbarButton + 4 + TerminalWindowMetrics.GridWidth + 4 +
+            TerminalWindowMetrics.ScrollbarWidth, Is.LessThanOrEqualTo(TerminalWindowMetrics.Width - 32));
+        // Search row, grid and status row with the content spacing, below the title and window padding.
+        Assert.That(32 + TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.Rows) + 40 + 2 * 6,
             Is.LessThanOrEqualTo(TerminalWindowMetrics.Height - 74));
+        Assert.That(TerminalWindowMetrics.GetHeight(TerminalWindowMetrics.Rows), Is.EqualTo(TerminalWindowMetrics.Height));
         Assert.That(TerminalWindowMetrics.GetScale(2560, 1440, 2.67f), Is.EqualTo(0.5f));
+    }
+
+    [Test]
+    public void ShortGrid_KeepsRoomForTheWholeToolbar()
+    {
+        Assert.That(TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.MinimumRows),
+            Is.LessThan(TerminalWindowMetrics.ToolbarHeight));
+        Assert.That(TerminalWindowMetrics.GetHeight(TerminalWindowMetrics.MinimumRows),
+            Is.EqualTo(TerminalWindowMetrics.Chrome + TerminalWindowMetrics.ToolbarHeight));
+    }
+
+    [TestCase(TerminalSize.Small, 4)]
+    [TestCase(TerminalSize.Medium, 9)]
+    [TestCase(TerminalSize.Tall, 14)]
+    [TestCase(TerminalSize.Full, 19)]
+    public void Rows_FollowAe2QuarterSizesOfTheRowsThatFit(TerminalSize size, int expected)
+    {
+        // 1080 px at canvas scale 2 is 1080 design units: (1080 - 80 - 169 + 3) / 43 = 19 rows fit.
+        Assert.That(TerminalWindowMetrics.GetRows(size, 1080f, 2f), Is.EqualTo(expected));
+    }
+
+    [TestCase(1080f, 2f)]
+    [TestCase(720f, 1.335f)]
+    [TestCase(1440f, 2.67f)]
+    [TestCase(2160f, 4f)]
+    [TestCase(480f, 2f)]
+    public void FullSize_FitsTheViewportWithoutShrinking(float height, float canvas)
+    {
+        var width = height * 16f / 9f;
+        var rows = TerminalWindowMetrics.GetRows(TerminalSize.Full, height, canvas);
+        var scale = TerminalWindowMetrics.GetScale(width, height, canvas, TerminalWindowMetrics.GetHeight(rows));
+        Assert.That(TerminalWindowMetrics.GetHeight(rows) * scale * canvas, Is.LessThanOrEqualTo(height));
+        // The counted rows already fit, so height never shrinks the window more than the width bound does.
+        Assert.That(scale, Is.EqualTo(TerminalWindowMetrics.GetScale(width, height, canvas, 1)));
+    }
+
+    [TestCase(300f, 2f)]
+    [TestCase(100f, 1f)]
+    public void Rows_NeverDropBelowTheAe2Minimum(float height, float canvas)
+    {
+        foreach (TerminalSize size in System.Enum.GetValues(typeof(TerminalSize)))
+        {
+            Assert.That(TerminalWindowMetrics.GetRows(size, height, canvas), Is.EqualTo(TerminalWindowMetrics.MinimumRows));
+        }
+    }
+
+    [TestCase(0f, 2f)]
+    [TestCase(1080f, 0f)]
+    [TestCase(float.NaN, 2f)]
+    [TestCase(1080f, float.PositiveInfinity)]
+    public void Rows_InvalidViewportFallsBackToTheDefault(float height, float canvas)
+    {
+        Assert.That(TerminalWindowMetrics.GetRows(TerminalSize.Full, height, canvas), Is.EqualTo(TerminalWindowMetrics.Rows));
     }
 }

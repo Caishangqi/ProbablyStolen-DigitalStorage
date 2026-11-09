@@ -251,10 +251,10 @@ def check_content(project: Path, output: Path) -> None:
         "extraction_power_per_item_name", "extraction_power_per_item_desc",
         "terminal_storage_title", "terminal_storage_search_placeholder", "terminal_storage_loading",
         "terminal_storage_drag_hint", "terminal_storage_drag_rejected", "terminal_storage_whole_stack_only", "terminal_diagnostics_name", "terminal_diagnostics_desc",
-        "terminal_storage_offline", "terminal_storage_empty", "terminal_storage_amount_placeholder",
+        "terminal_storage_offline", "terminal_storage_empty",
         "terminal_storage_invalid_amount", "terminal_storage_no_items", "terminal_storage_insufficient_power",
         "terminal_storage_target_rejected", "terminal_storage_unsupported_item",
-        "terminal_storage_commit_failed", "terminal_storage_extracted", "terminal_storage_store",
+        "terminal_storage_commit_failed", "terminal_storage_extracted",
         "terminal_storage_inserted", "terminal_storage_capacity_rejected", "storage_cell_not_empty",
         "storage_cell_bytes_used", "storage_cell_types_used",
         "terminal_storage_unavailable", "terminal_storage_recovery_pending",
@@ -268,6 +268,15 @@ def check_content(project: Path, output: Path) -> None:
         "partition_unavailable", "partition_ready", "partition_invalid", "partition_limit",
         "partition_failed", "partition_applied", "partition_cleanup_failed",
         "partition_applied_cleanup_failed", "partition_failed_cleanup_failed",
+        "terminal_button_modules", "terminal_button_modules_tip", "terminal_button_sort_name",
+        "terminal_button_sort_amount", "terminal_button_sort_tip", "terminal_sort_name", "terminal_sort_amount",
+        "terminal_button_direction_asc", "terminal_button_direction_desc", "terminal_button_direction_tip",
+        "terminal_direction_asc", "terminal_direction_desc", "terminal_button_partitions",
+        "terminal_button_partitions_tip", "terminal_button_size_small", "terminal_button_size_medium",
+        "terminal_button_size_tall", "terminal_button_size_full", "terminal_button_size_tip",
+        "terminal_size_small", "terminal_size_medium", "terminal_size_tall", "terminal_size_full",
+        "terminal_partition_none", "terminal_partition_label",
+        "terminal_hint_title", "terminal_hint_left", "terminal_hint_right", "terminal_hint_shift",
     ))
     if (platform / "Diagnostics" / "ItemCommands.cs").exists():
         raise ContentValidationError("Removed custom command source must not be present.")
