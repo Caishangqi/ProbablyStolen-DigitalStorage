@@ -8,8 +8,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <DigitalStorageOutputDirectory Condition="'$(DIGITAL_STORAGE_OUTPUT_DIR)' != ''">$([System.IO.Path]::GetFullPath('$(DIGITAL_STORAGE_OUTPUT_DIR)', '$(MSBuildThisFileDirectory)'))</DigitalStorageOutputDirectory>
-    <DigitalStorageOutputDirectory Condition="'$(DigitalStorageOutputDirectory)' == ''">$(MSBuildThisFileDirectory)artifacts</DigitalStorageOutputDirectory>
-    <BaseOutputPath>$(DigitalStorageOutputDirectory)\build\$(MSBuildProjectName)\</BaseOutputPath>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
   </PropertyGroup>
 </Project>

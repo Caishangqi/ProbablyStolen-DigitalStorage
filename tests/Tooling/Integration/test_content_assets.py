@@ -1,0 +1,164 @@
+"""Resource checks exercise the actual preparation functions with temporary assets."""
+
+import hashlib
+import shutil
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+REPOSITORY = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPOSITORY / "scripts"))
+from digital_storage_tools.assets import (  # noqa: E402
+    ASSETS, ContentValidationError, check_assets, check_image, image_api,
+    check_content, format_parameters, main, prepare_assets, read_localization, validate_write_root,
+)
+
+
+class ContentContractTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="digital-storage-contract-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.platform = self.root / "src" / "ProbablyStolen.DigitalStorage.Platform"
+        original = REPOSITORY / "src" / self.platform.name
+        for name in ("Content", "NativeContent"):
+            shutil.copytree(original / name, self.platform / name)
+        self.output = self.root / "resources"
+        shutil.copytree(REPOSITORY / "packaging/resources/Localization", self.output / "Localization")
+
+    def test_actual_contract_and_resources_pass(self):
+        check_content(self.root, self.output)
+
+    def test_assembled_cell_sprite_refreshes_live_view_without_move(self):
+        appearance = (self.platform / "Content/ItemAppearance.cs").read_text(encoding="utf-8")
+        self.assertRegex(
+            appearance,
+            r"item\.useSpriteFromMod = true;\s*item\.SetSpriteQuick\(_modId, spriteKey\);",
+        )
+
+    def test_native_content_callbacks_use_the_tested_production_coordinators(self):
+        original = REPOSITORY / "src" / self.platform.name
+        cell = (original / "Client/CellContentWindow.cs").read_text(encoding="utf-8")
+        for callback in ("CanInsert", "CanRemove", "Removing", "Inserted", "Removed", "IsConsistent"):
+            self.assertIn("_callbacks." + callback + "(", cell)
+        self.assertIn("new CellAssemblyCallbacks(recipe, this)", cell)
+        self.assertIn("ICellAssemblyPort.Read() => ContentSnapshots.Cell(_host)", cell)
+        drive = (original / "Content/DriveItem.cs").read_text(encoding="utf-8")
+        self.assertIn("new DriveBayBinding(_inventory, ports)", drive)
+        self.assertIn("binding.CanInsert(", drive)
+        self.assertIn("ports[index] = new NativeCellBay(bay)", drive)
+        window = (original / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
+        self.assertIn("new MachineContentLifecycle(new NativeMachineContents(machine))", window)
+        self.assertIn("openCallback += () => lifecycle.RestoreIfReady(SaveManager.IsDecoding)", window)
+        self.assertIn("onOneSecondItemFunc += (_, _, _) => lifecycle.RestoreIfReady(SaveManager.IsDecoding)", window)
+
+    def test_network_power_config_and_native_controller_battery_wiring(self):
+        original = REPOSITORY / "src" / self.platform.name
+        config = (original / "Energy/NativePowerConfiguration.cs").read_text(encoding="utf-8")
+        self.assertIn("ModHelper.GetConfig(modId)", config)
+        for key, default in (("controller_power_usage", "3"), ("drive_power_usage", "2"), ("terminal_power_usage", "1")):
+            self.assertIn(f'"{key}", {default}', config)
+        for key in ("network_power_controller_name", "network_power_controller_desc",
+                    "network_power_drive_name", "network_power_drive_desc",
+                    "network_power_terminal_name", "network_power_terminal_desc"):
+            self.assertIn(f'text.Get("{key}")', config)
+        self.assertIn("min: 0, max: MaximumPowerUsage", config)
+        self.assertIn("private const int MaximumPowerUsage = 1000", config)
+        window = (original / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
+        self.assertIn("if (acceptsBattery)", window)
+        self.assertIn("MachineHelper.SetupBatterySlot(battery, machine)", window)
+        self.assertIn("battery.maxSlotAddItemFunc = (_, _, _) => 0", window)
+        self.assertIn("machine.onCycleEndLateSlotItemFunc += (_, _, _) => _networkPower.OnControllerCycleEnd(machine)", window)
+        self.assertNotIn("onTurnEndSlotItemFunc", window)
+        controller = (original / "Content/ControllerItem.cs").read_text(encoding="utf-8")
+        self.assertIn("acceptsBattery: true, consumesNetworkPower: true", controller)
+        drive = (original / "Content/DriveItem.cs").read_text(encoding="utf-8")
+        terminal = (original / "Content/TerminalItem.cs").read_text(encoding="utf-8")
+        self.assertIn("_windows.Attach(item, bays, configurePartitions:", drive)
+        self.assertIn("new CellPartitionSource(slots[index])", drive)
+        self.assertIn("_windows.Attach(item)", terminal)
+        scanner = (original / "Network/NativeNetworkScanner.cs").read_text(encoding="utf-8")
+        self.assertIn("FindAdjacentType<GameItem>()", scanner)
+        self.assertIn("ReferenceEquals(item.parentInventory, parentInventory)", scanner)
+        self.assertNotIn("GetUniqueID()", scanner)
+        self.assertIn("foreach (var item in parentInventory.childItems)", scanner)
+        self.assertNotIn("GameMaster", scanner)
+        self.assertNotIn("shipManager", scanner)
+        controller = (original / "Energy/NativeEnergySource.cs").read_text(encoding="utf-8")
+        self.assertIn("PowerHelper.CanDrawPowerSource(source, amount)", controller)
+        self.assertIn("PowerHelper.DrawPowerSource(source, amount)", controller)
+        coordinator = (original / "Network/GridNetworkPowerCoordinator.cs").read_text(encoding="utf-8")
+        cycle_method = coordinator[coordinator.index("internal GridPowerResult OnControllerCycleEnd"):
+                                  coordinator.index("    internal bool IsPowered", coordinator.index("internal GridPowerResult OnControllerCycleEnd"))]
+        self.assertLess(cycle_method.index("if (grid.GetPathingService().GetControllerState() != ControllerState.Online)"),
+                        cycle_method.index("snapshot.FindController(grid)"))
+        presenter = (original / "Client/GridNetworkTooltipPresenter.cs").read_text(encoding="utf-8")
+        for key in ("network_status_online", "network_status_unpowered",
+                    "network_status_no_controller", "network_status_controller_conflict",
+                    "network_tooltip_drive_slots", "network_module_stats_scope"):
+            self.assertIn(key, presenter)
+        self.assertNotIn("OnControllerCycleEnd", presenter)
+        self.assertNotIn("TryDraw(", presenter)
+        composition = (original / "Composition/PlatformComposition.cs").read_text(encoding="utf-8")
+        self.assertIn("OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate", composition)
+        self.assertIn("OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate", composition)
+
+    def test_unsupported_or_changed_constant_and_class_name_fail(self):
+        path = self.platform / "Content/TerminalItem.cs"
+        original = path.read_text(encoding="utf-8")
+        for old, new in [('Width = 3;', 'Width = 1 + 2;'), ('Width = 3;', 'Width = 2;'),
+                         ('class TerminalItem', 'class WrongClass'), ('terminal_name', 'drive_name')]:
+            with self.subTest(new=new):
+                path.write_text(original.replace(old, new), encoding="utf-8")
+                with self.assertRaises(ContentValidationError):
+                    check_content(self.root, self.output)
+
+    def test_removed_command_source_and_language_keys_are_rejected(self):
+        path = self.platform / "Diagnostics/ItemCommands.cs"
+        path.parent.mkdir()
+        path.write_text("// stale command source\n", encoding="utf-8")
+        with self.assertRaisesRegex(ContentValidationError, "Removed custom command"):
+            check_content(self.root, self.output)
+        path.unlink()
+        language = self.output / "Localization/en.csv"
+        language.write_text(language.read_text(encoding="utf-8") + "command_spawn_help,obsolete\n", encoding="utf-8")
+        with self.assertRaisesRegex(ContentValidationError, "required content keys"):
+            check_content(self.root, self.output)
+
+    def test_missing_empty_duplicate_bom_multiline_and_placeholder_drift_fail(self):
+        path = self.output / "Localization/zh.csv"
+        original = path.read_text(encoding="utf-8")
+        first = original.splitlines()[0]
+        key, value = first.split(",", 1)
+        variants = [
+            original.split("\n", 1)[1],
+            original + key + ",duplicate\n",
+            original.replace(first, key + ",", 1),
+            "\ufeff" + original,
+            original + "unexpected_key,extra\n",
+            original.replace(first, first + " {0}", 1),
+            original + 'bad,"real\nmultiline"\n',
+            original.replace(first, first + " {name}", 1),
+        ]
+        for content in variants:
+            with self.subTest(content=content[-50:]):
+                self.assertNotEqual(content, original, "A negative fixture must actually change the source.")
+                path.write_bytes(content.encode("utf-8"))
+                with self.assertRaises(ContentValidationError):
+                    check_content(self.root, self.output)
+
+    def test_native_first_comma_quotes_and_literal_newline_decode(self):
+        path = self.root / "quotes.csv"
+        path.write_text('first,"a,b and ""quoted"" text\\nnext"\nsecond,unquoted,comma\n', encoding="utf-8")
+        self.assertEqual(read_localization(path), {'first': 'a,b and "quoted" text\nnext', 'second': 'unquoted,comma'})
+        for invalid in ('key,"unclosed', 'key,unescaped"quote', 'key,"single"quote"'):
+            path.write_text(invalid, encoding="utf-8")
+            with self.assertRaises(ContentValidationError):
+                read_localization(path)
+        self.assertEqual(format_parameters('{{literal}} {0} {0}'), [0, 0])
+
+
+if __name__ == "__main__":
+    unittest.main()

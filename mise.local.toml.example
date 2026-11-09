@@ -1,0 +1,11 @@
+# Copy this file to mise.local.toml and set values for this machine.
+
+[env]
+DIGITAL_STORAGE_GAME_DIR = 'C:\path\to\Probably Stolen'
+DIGITAL_STORAGE_ILSPYCMD = 'C:\path\to\ilspycmd.exe'
+DIGITAL_STORAGE_ASSET_RIPPER_EXE = 'F:\github\UnityAssetRipper\Source\0Bins\AssetRipper.GUI.Free\Release\AssetRipper.GUI.Free.exe'
+# Manual locator for a dedicated disposable runtime-test save. Scripts must not read this path.
+DIGITAL_STORAGE_TEST_SAVE_DIR = 'C:\path\to\isolated\Probably Stolen\test-save'
+# DIGITAL_STORAGE_STEAM_LIBRARY_DIR = 'C:\path\to\Steam'
+# ArtifactsPath = 'C:\path\to\build artifacts'
+# DIGITAL_STORAGE_DEPLOY_DIR = 'C:\path\to\Probably Stolen\Mods\DigitalStorage'

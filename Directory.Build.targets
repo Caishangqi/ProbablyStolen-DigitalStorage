@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <DigitalStorageGameDirectory Condition="'$(DigitalStorageGameDirectory)' == '' and '$(DIGITAL_STORAGE_GAME_DIR)' != ''">$(DIGITAL_STORAGE_GAME_DIR)</DigitalStorageGameDirectory>
+    <DigitalStorageManagedDirectory Condition="'$(DigitalStorageManagedDirectory)' == '' and '$(DigitalStorageGameDirectory)' != ''">$(DigitalStorageGameDirectory)\Probably Stolen_Data\Managed</DigitalStorageManagedDirectory>
+  </PropertyGroup>
+
+  <Target Name="ValidateProbablyStolenReferences" BeforeTargets="ResolveReferences" Condition="'$(RequireProbablyStolenReferences)' == 'true'">
+    <Error Condition="'$(DigitalStorageGameDirectory)' == ''" Text="This project requires the game installation. Set DIGITAL_STORAGE_GAME_DIR or DigitalStorageGameDirectory to the Probably Stolen installation root." />
+    <Error Condition="!Exists('$(DigitalStorageManagedDirectory)\Assembly-CSharp.dll')" Text="Required game assembly not found: $(DigitalStorageManagedDirectory)\Assembly-CSharp.dll. Set DIGITAL_STORAGE_GAME_DIR to the installation containing Probably Stolen_Data\Managed." />
+    <Error Condition="!Exists('$(DigitalStorageManagedDirectory)\UnityEngine.dll')" Text="Required game assembly not found: $(DigitalStorageManagedDirectory)\UnityEngine.dll." />
+    <Error Condition="!Exists('$(DigitalStorageManagedDirectory)\UnityEngine.CoreModule.dll')" Text="Required game assembly not found: $(DigitalStorageManagedDirectory)\UnityEngine.CoreModule.dll." />
+  </Target>
+
+  <ItemGroup Condition="'$(RequireProbablyStolenReferences)' == 'true' and Exists('$(DigitalStorageManagedDirectory)\Assembly-CSharp.dll')">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(DigitalStorageManagedDirectory)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(DigitalStorageManagedDirectory)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(DigitalStorageManagedDirectory)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

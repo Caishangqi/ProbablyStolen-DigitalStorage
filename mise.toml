@@ -1,0 +1,123 @@
+min_version = '2026.9.10'
+
+[tools]
+python = '3.13.7'
+uv = '0.13.7'
+actionlint = '1.7.12'
+
+[settings]
+exec_auto_install = false
+task.run_auto_install = false
+
+[tasks.setup]
+dir = '{{config_root}}'
+run = 'uv sync --locked'
+
+[tasks.build-core]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py build-core'
+
+[tasks.build-game]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py build-game'
+
+[tasks.test-core]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-core'
+
+[tasks.test-platform]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-platform'
+
+[tasks.test-common]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-common'
+
+[tasks.test-client]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-client'
+
+[tasks.test-integration]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-integration'
+
+[tasks.test-architecture]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-architecture'
+
+[tasks.test-all]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-all'
+
+[tasks.package]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py package'
+
+[tasks.deploy]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py deploy'
+
+[tasks.remove]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py remove'
+
+[tasks.launch]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py launch'
+
+[tasks.launch-plan]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py launch-plan'
+
+[tasks.build-deploy-launch]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py build-deploy-launch'
+
+[tasks.check-source]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py check-source'
+
+[tasks.doctor]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py doctor'
+
+[tasks.check-assets]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py check-assets'
+
+[tasks.check-ci]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py check-ci'
+
+[tasks.check-format]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py check-format'
+
+[tasks.ci-core]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py ci-core'
+
+[tasks.test-tools-unit]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-tools-unit'
+
+[tasks.test-tools-integration]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-tools-integration'
+
+[tasks.verify-package]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py verify-package'
+
+[tasks.decompile]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py decompile'
+
+[tasks.extract-assets]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py extract-assets'
+
+[tasks.prepare-assets]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py prepare-assets'
+
