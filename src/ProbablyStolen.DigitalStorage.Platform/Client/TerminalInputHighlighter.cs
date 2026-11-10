@@ -13,6 +13,10 @@ internal sealed class TerminalInputHighlighter : IDisposable
     private readonly TerminalSearchService _search;
     private readonly Func<string, bool> _hasResults;
     private bool _disposed;
+    private bool _colorsDirty = true;
+    private string? _colorText;
+    private long _colorRevision = -1;
+    private uint[] _colors = Array.Empty<uint>();
 
     internal TerminalInputHighlighter(TMP_InputField input, TerminalSearchService search, Func<string, bool> hasResults)
     {
@@ -24,7 +28,11 @@ internal sealed class TerminalInputHighlighter : IDisposable
         _input.ForceLabelUpdate();
     }
 
-    internal void Refresh() => _input.ForceLabelUpdate();
+    internal void Refresh()
+    {
+        _colorsDirty = true;
+        _input.ForceLabelUpdate();
+    }
 
     public void Dispose()
     {
@@ -41,8 +49,28 @@ internal sealed class TerminalInputHighlighter : IDisposable
         var composition = inputSystem != null ? inputSystem.compositionString : Input.compositionString;
         var compositionLength = _input.readOnly ? 0 : composition?.Length ?? 0;
         var insertionIndex = Math.Max(0, Math.Min(raw.Length, _input.selectionStringAnchorPosition - compositionLength));
-        var matched = string.IsNullOrWhiteSpace(raw) || _hasResults(raw);
-        var spans = _search.Configuration.SyntaxHighlighting
+        if (_colorsDirty || _colorRevision != _search.ConfigurationRevision ||
+            !string.Equals(raw, _colorText, StringComparison.Ordinal)) UpdateColors(raw);
+        for (var i = 0; i < info.characterCount; i++)
+        {
+            var character = info.characterInfo[i];
+            if (!character.isVisible) continue;
+            var sourceIndex = TerminalSearchService.CommittedIndex(character.index, insertionIndex, compositionLength);
+            var argb = sourceIndex >= 0 && sourceIndex < _colors.Length && _colors[sourceIndex] != 0
+                ? _colors[sourceIndex] : TerminalSearchService.OrdinaryArgb;
+            var color = new Color32((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb, (byte)(argb >> 24));
+            var mesh = info.meshInfo[character.materialReferenceIndex];
+            for (var vertex = 0; vertex < 4; vertex++) mesh.colors32[character.vertexIndex + vertex] = color;
+        }
+        for (var i = 0; i < info.meshInfo.Length; i++)
+            info.meshInfo[i].mesh.colors32 = info.meshInfo[i].colors32;
+    }
+
+    private void UpdateColors(string raw)
+    {
+        var enabled = _search.Configuration.SyntaxHighlighting;
+        var matched = !enabled || string.IsNullOrWhiteSpace(raw) || _hasResults(raw);
+        var spans = enabled
             ? _search.GetColorSpans(raw, matched)
             : Array.Empty<SearchColorSpan>();
         var colors = new uint[raw.Length];
@@ -59,18 +87,9 @@ internal sealed class TerminalInputHighlighter : IDisposable
             for (var index = span.Start; index < span.Start + span.Length && index < colors.Length; index++)
                 if (index >= 0) colors[index] = argb;
         }
-        for (var i = 0; i < info.characterCount; i++)
-        {
-            var character = info.characterInfo[i];
-            if (!character.isVisible) continue;
-            var sourceIndex = TerminalSearchService.CommittedIndex(character.index, insertionIndex, compositionLength);
-            var argb = sourceIndex >= 0 && sourceIndex < colors.Length && colors[sourceIndex] != 0
-                ? colors[sourceIndex] : TerminalSearchService.OrdinaryArgb;
-            var color = new Color32((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb, (byte)(argb >> 24));
-            var mesh = info.meshInfo[character.materialReferenceIndex];
-            for (var vertex = 0; vertex < 4; vertex++) mesh.colors32[character.vertexIndex + vertex] = color;
-        }
-        for (var i = 0; i < info.meshInfo.Length; i++)
-            info.meshInfo[i].mesh.colors32 = info.meshInfo[i].colors32;
+        _colors = colors;
+        _colorText = raw;
+        _colorRevision = _search.ConfigurationRevision;
+        _colorsDirty = false;
     }
 }

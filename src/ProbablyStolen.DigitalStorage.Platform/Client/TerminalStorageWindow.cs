@@ -192,7 +192,7 @@ internal sealed class TerminalStorageWindow
             });
         _searchInput = builder.Last.input;
         _inputHighlighter = _searchInput == null ? null : new TerminalInputHighlighter(_searchInput, _search,
-            query => _menu.GetEntries().Any(entry => entry.Matches(_search, query)));
+            _screen.HasSearchResults);
         SetControlSize(builder.Last, bodyWidth - TerminalWindowMetrics.ToolbarButton - gap);
         builder.End();
 
@@ -678,7 +678,6 @@ internal sealed class TerminalStorageWindow
         {
             _searchRevision = _search.ConfigurationRevision;
             Refresh();
-            _inputHighlighter?.Refresh();
         }
         UpdateHoverTooltip();
         ApplyWheel();
@@ -741,7 +740,6 @@ internal sealed class TerminalStorageWindow
             _menu.BroadcastChanges(snapshot);
             _storageUnavailable = snapshot.StorageUnavailable;
             ApplyMenuView(preserveView);
-            _inputHighlighter?.Refresh();
         });
     }
 
@@ -1011,5 +1009,6 @@ internal sealed class TerminalStorageWindow
 
         _messageKey = null;
         _scrollbar?.SetRange(page.MaxScroll, _screen.PageSize, page.ScrollRow);
+        _inputHighlighter?.Refresh();
     }
 }

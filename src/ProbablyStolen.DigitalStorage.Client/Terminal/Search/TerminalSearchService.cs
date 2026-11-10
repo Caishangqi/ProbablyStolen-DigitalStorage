@@ -302,11 +302,34 @@ public sealed class TerminalSearchService
     public bool Matches(SearchDocument document, string? query)
     {
         if (document == null) throw new ArgumentNullException(nameof(document));
-        var parsed = ParseQuery(query ?? string.Empty);
+        return Matches(document, ParseQuery(query ?? string.Empty), MatchText);
+    }
+
+    // Keep memoization within one filter pass: external addons may change between accepted snapshots.
+    internal Func<SearchDocument, bool> CreatePredicate(string query)
+    {
+        var parsed = ParseQuery(query);
+        var cache = new Dictionary<(string Source, string Query), bool>();
+        var order = new Queue<(string Source, string Query)>();
+        bool MatchCached(string source, string term)
+        {
+            var key = (source, term);
+            if (cache.TryGetValue(key, out var found)) return found;
+            var result = MatchText(source, term);
+            if (cache.Count == 4096) cache.Remove(order.Dequeue());
+            cache.Add(key, result);
+            order.Enqueue(key);
+            return result;
+        }
+        return document => Matches(document, parsed, MatchCached);
+    }
+
+    private bool Matches(SearchDocument document, ParsedSearchQuery parsed, Func<string, string, bool> matchText)
+    {
         if (parsed.Groups.Count == 0) return true;
         return parsed.Groups.Any(group => group.All(term => term.Value.Length == 0
             ? false
-            : term.Negated ? !TermMatches(document, term) : TermMatches(document, term)));
+            : term.Negated ? !TermMatches(document, term, matchText) : TermMatches(document, term, matchText)));
     }
 
     /// <summary>Tokenizes the same query syntax into raw UTF16 color spans.</summary>
@@ -338,12 +361,11 @@ public sealed class TerminalSearchService
         return result;
     }
 
-    private bool TermMatches(SearchDocument document, SearchTerm term)
+    private bool TermMatches(SearchDocument document, SearchTerm term, Func<string, string, bool> matchText)
     {
-        var matcher = _registry.Matcher;
         if (term.FieldId == null)
         {
-            if (MatchText(document.Name, term.Value)) return true;
+            if (matchText(document.Name, term.Value)) return true;
             foreach (var provider in _registry.Fields.Values)
                 if (provider.Mode(_configuration) == SearchMode.Enabled && Any(provider.Values(document))) return true;
             return false;
@@ -352,11 +374,12 @@ public sealed class TerminalSearchService
             field.Mode(_configuration) == SearchMode.Disabled) return false;
         return Any(field.Values(document));
 
-        bool Any(IEnumerable<string> values) => values.Any(value => MatchText(value, term.Value));
-        bool MatchText(string value, string query) => string.IsNullOrEmpty(query) ? false :
-            value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
-            (matcher != null && matcher(value, query));
+        bool Any(IEnumerable<string> values) => values.Any(value => matchText(value, term.Value));
     }
+
+    private bool MatchText(string value, string query) => !string.IsNullOrEmpty(query) &&
+        (value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+            (_registry.Matcher != null && _registry.Matcher(value, query)));
 }
 
 /// <summary>Owns the pinyin dictionary matcher registered with a search registry.</summary>

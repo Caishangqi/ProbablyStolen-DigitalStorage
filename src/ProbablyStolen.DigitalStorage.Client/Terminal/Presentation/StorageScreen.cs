@@ -103,7 +103,7 @@ public sealed class StorageScreenPage
     /// <summary>Gets the state represented by this view.</summary>
     public TerminalDisplayState State { get; }
 
-    /// <summary>Gets the current normalized search query.</summary>
+    /// <summary>Gets the current raw search query.</summary>
     public string SearchText { get; }
 
     /// <summary>Gets the zero-based first visible row.</summary>
@@ -136,6 +136,11 @@ public sealed class StorageScreen
     private string _searchText = string.Empty;
     private int _scrollRow;
     private TerminalDisplayState _baseState = TerminalDisplayState.Loading;
+    private TerminalEntry[] _filteredEntries = Array.Empty<TerminalEntry>();
+    private bool _filterDirty = true;
+    private string? _filterText;
+    private long _filterConfigurationRevision = -1;
+    private StorageScreenPage? _page;
 
     /// <summary>Gets the fixed number of columns.</summary>
     public int Columns { get; }
@@ -156,7 +161,9 @@ public sealed class StorageScreen
     public void SetRows(int rows)
     {
         if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
+        if (Rows == rows) return;
         Rows = rows;
+        _page = null;
         ClampScroll();
     }
 
@@ -169,6 +176,7 @@ public sealed class StorageScreen
             StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key));
         _baseState = TerminalDisplayState.Ready;
         _scrollRow = 0;
+        InvalidateEntries();
     }
 
     /// <summary>Marks the view as loading and clears stale entries.</summary>
@@ -177,6 +185,7 @@ public sealed class StorageScreen
         _entries.Clear();
         _baseState = TerminalDisplayState.Loading;
         _scrollRow = 0;
+        InvalidateEntries();
     }
 
     /// <summary>Replaces the display snapshot in the caller's stable ordering.</summary>
@@ -187,6 +196,7 @@ public sealed class StorageScreen
         _entries.AddRange(entries.Where(entry => entry != null));
         _baseState = TerminalDisplayState.Ready;
         _scrollRow = 0;
+        InvalidateEntries();
     }
 
     /// <summary>Replaces network entries while retaining the current query and valid scroll row.</summary>
@@ -197,6 +207,7 @@ public sealed class StorageScreen
         _entries.AddRange(entries.Where(entry => entry != null).OrderBy(entry => entry.DisplayName,
             StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key));
         _baseState = TerminalDisplayState.Ready;
+        InvalidateEntries();
         ClampScroll();
     }
 
@@ -207,6 +218,7 @@ public sealed class StorageScreen
         _entries.Clear();
         _entries.AddRange(entries.Where(entry => entry != null));
         _baseState = TerminalDisplayState.Ready;
+        InvalidateEntries();
         ClampScroll();
     }
 
@@ -216,23 +228,33 @@ public sealed class StorageScreen
         _entries.Clear();
         _baseState = TerminalDisplayState.Offline;
         _scrollRow = 0;
+        InvalidateEntries();
     }
 
     /// <summary>Updates the search query and scrolls back to the first row.</summary>
     public void SetSearchText(string? searchText)
     {
-        _searchText = searchText ?? string.Empty;
+        var query = searchText ?? string.Empty;
+        if (string.Equals(_searchText, query, StringComparison.Ordinal)) return;
+        _searchText = query;
         _scrollRow = 0;
+        _page = null;
     }
 
     /// <summary>Moves to an explicitly clamped first visible row.</summary>
-    public void SetScroll(int row) => _scrollRow = Math.Max(0, Math.Min(row, GetMaxScroll()));
+    public void SetScroll(int row)
+    {
+        var clamped = Math.Max(0, Math.Min(row, GetMaxScroll()));
+        if (clamped == _scrollRow) return;
+        _scrollRow = clamped;
+        _page = null;
+    }
 
     /// <summary>Moves the first visible row by a clamped number of rows.</summary>
     public void ScrollBy(int rows) => SetScroll(_scrollRow + rows);
 
     /// <summary>Gets the number of rows the filtered results occupy.</summary>
-    public int GetTotalRows() => (_entries.Count(Matches) + Columns - 1) / Columns;
+    public int GetTotalRows() => (GetFilteredEntries(_searchText).Length + Columns - 1) / Columns;
 
     /// <summary>Gets AE2's <c>max(0, totalRows - visibleRows)</c>.</summary>
     public int GetMaxScroll() => Math.Max(0, GetTotalRows() - Rows);
@@ -240,7 +262,8 @@ public sealed class StorageScreen
     /// <summary>Gets the current view with fixed slot count and stable ordering.</summary>
     public StorageScreenPage GetPage()
     {
-        var filtered = _entries.Where(Matches).ToArray();
+        var filtered = GetFilteredEntries(_searchText);
+        if (_page != null) return _page;
         var maxScroll = Math.Max(0, (filtered.Length + Columns - 1) / Columns - Rows);
         _scrollRow = Math.Min(_scrollRow, maxScroll);
         var slotCount = Columns * Rows;
@@ -254,10 +277,32 @@ public sealed class StorageScreen
         var state = _baseState == TerminalDisplayState.Ready && filtered.Length == 0
             ? TerminalDisplayState.Empty
             : _baseState;
-        return new StorageScreenPage(state, _searchText, _scrollRow, maxScroll, slots);
+        return _page = new StorageScreenPage(state, _searchText, _scrollRow, maxScroll, slots);
     }
 
-    private bool Matches(TerminalEntry entry) => entry.Matches(_search, _searchText);
+    /// <summary>Shares the cached query result with input coloring, including render-before-input-callback order.</summary>
+    public bool HasSearchResults(string? query) => GetFilteredEntries(query ?? string.Empty).Length > 0;
+
+    private TerminalEntry[] GetFilteredEntries(string query)
+    {
+        if (!_filterDirty && _filterConfigurationRevision == _search.ConfigurationRevision &&
+            string.Equals(_filterText, query, StringComparison.Ordinal)) return _filteredEntries;
+        var predicate = _search.CreatePredicate(query);
+        var filtered = _entries.Where(entry => predicate(entry.Document)).ToArray();
+        _filteredEntries = filtered;
+        _filterText = query;
+        _filterConfigurationRevision = _search.ConfigurationRevision;
+        _filterDirty = false;
+        _page = null;
+        return filtered;
+    }
+
+    private void InvalidateEntries()
+    {
+        _filterDirty = true;
+        _filteredEntries = Array.Empty<TerminalEntry>();
+        _page = null;
+    }
 
     private static TerminalSearchService CreateDefaultSearch()
     {
@@ -271,5 +316,10 @@ public sealed class StorageScreen
         return new TerminalSearchService(registry, new SearchConfiguration());
     }
 
-    private void ClampScroll() => _scrollRow = Math.Min(_scrollRow, GetMaxScroll());
+    private void ClampScroll()
+    {
+        var row = Math.Min(_scrollRow, GetMaxScroll());
+        if (row != _scrollRow) _page = null;
+        _scrollRow = row;
+    }
 }
