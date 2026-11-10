@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from digital_storage_tools import workshop
+from digital_storage_tools import commands, workshop
 
 
 POWERSHELL = shutil.which("powershell.exe")
@@ -48,7 +48,21 @@ class WorkshopWrapperWorkflowTests(unittest.TestCase):
             Path(__file__).resolve().parents[3] / ".venv", self.repository / ".venv"
         )
         (self.repository / "scripts/tool.py").write_text(
-            """import json, os, sys\n\nif sys.argv[1:3] == ['environment', '--target']:\n    print(json.dumps({'package_directory': os.environ['WORKSHOP_TEST_PACKAGE'], 'game_directory': 'fake-game', 'output_directory': 'fake-output', 'steam_library_directory': None}))\nelif 'internal-workshop-upload' in sys.argv:\n    package = sys.argv[sys.argv.index('--package-dir') + 1]\n    with open(os.environ['WORKSHOP_TEST_LOG'], 'a', encoding='utf-8') as stream:\n        stream.write('upload|' + package + '\\n')\n    if os.environ['WORKSHOP_TEST_FAILURE'] == 'upload':\n        raise SystemExit(7)\nelse:\n    raise SystemExit('unexpected fake Python command')\n""",
+            """import json, os, sys
+
+if sys.argv[1:3] == ['environment', '--target']:
+    print(json.dumps({'package_directory': os.environ['WORKSHOP_TEST_PACKAGE'], 'game_directory': 'fake-game', 'output_directory': 'fake-output', 'steam_library_directory': None}))
+elif 'internal-workshop-upload' in sys.argv:
+    package = sys.argv[sys.argv.index('--package-dir') + 1]
+    with open(os.environ['WORKSHOP_TEST_LOG'], 'a', encoding='utf-8') as stream:
+        stream.write('upload|' + package + '\\n')
+    with open(os.environ['WORKSHOP_TEST_LOG'] + '.json', 'w', encoding='utf-8') as stream:
+        json.dump({'arguments': sys.argv[1:], 'change_note': os.environ.get('DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE')}, stream)
+    if os.environ['WORKSHOP_TEST_FAILURE'] == 'upload':
+        raise SystemExit(7)
+else:
+    raise SystemExit('unexpected fake Python command')
+""",
             encoding="utf-8",
         )
         package = self.root / "shared package" / "DigitalStorage"
@@ -85,6 +99,30 @@ class WorkshopWrapperWorkflowTests(unittest.TestCase):
         )
         line = next(line for line in result.stdout.splitlines() if line.startswith("WORKSHOP_RESULT="))
         return json.loads(line.removeprefix("WORKSHOP_RESULT="))
+
+    def test_change_note_keeps_formatting_from_toml_and_argument_override(self) -> None:
+        self.run_wrapper()
+        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[/list]'
+        (self.repository / "mise.local.toml").write_text(
+            "[env]\nDIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = '''\n" + toml_note + "\n'''\n", encoding="utf-8"
+        )
+        note = '[h2]CLI 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[*]Path C:\\Mods\\DigitalStorage\n[/list]'
+        environment = os.environ.copy()
+        environment.pop("DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE", None)
+        environment.update(
+            WORKSHOP_TEST_PACKAGE=str(self.package),
+            WORKSHOP_TEST_LOG=str(self.log),
+            WORKSHOP_TEST_FAILURE="",
+        )
+        for override, expected in ((None, toml_note + "\n"), (note, note)):
+            with self.subTest(override=override):
+                args = ["-PackageDirectory", str(self.package)]
+                if override is not None:
+                    args += ["-ChangeNote", override]
+                with patch.object(commands, "ROOT", self.repository), patch.dict(os.environ, environment, clear=True):
+                    self.assertEqual(0, commands.run("publish-workshop", args))
+                received = json.loads(Path(str(self.log) + ".json").read_text(encoding="utf-8"))
+                self.assertEqual(expected, received["change_note"])
 
     def test_wrapper_uses_unique_package_and_cleans_it_after_child_outcomes(self) -> None:
         shared_before = (self.package / "shared.txt").read_text(encoding="utf-8")
@@ -152,6 +190,7 @@ Second line.</Description>
         self.assertEqual(values["title"], 'Digital Storage "Workshop"')
         self.assertEqual(values["description"], workshop.WORKSHOP_LOCALE_PATHS["en-US"].read_text(encoding="utf-8").strip())
         self.assertEqual(values["changenote"], "Release 0.3.0")
+        self.assertEqual(values["visibility"], "0")
 
     def test_chinese_locale_uses_checked_in_workshop_description(self) -> None:
         arguments = SimpleNamespace(
@@ -501,7 +540,7 @@ Second line.</Description>
         with patch.object(Path, "lstat", lstat), self.assertRaisesRegex(workshop.WorkshopValidationError, "reparse"):
             workshop.prepare_workshop_item(self.settings)
 
-    def test_settings_use_environment_and_hidden_visibility_by_default(self) -> None:
+    def test_settings_use_environment_and_public_visibility_by_default(self) -> None:
         arguments = SimpleNamespace(
             package_dir=str(self.package_directory),
             steamcmd_dir=None,
@@ -520,8 +559,40 @@ Second line.</Description>
             },
             repository_root=self.root,
         )
-        self.assertEqual(settings.visibility, "2")
+        self.assertEqual(settings.visibility, "0")
         self.assertEqual(settings.vdf_path, self.root / ".secrets" / "workshop.vdf")
+
+    def test_change_note_argument_overrides_toml_and_preserves_vdf_formatting(self) -> None:
+        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[*]C:\\Mods\\DigitalStorage\n[/list]'
+        cli_note = '[b]CLI 更新[/b]\n[url=https://example.com]Details[/url]'
+        (self.root / "mise.local.toml").write_text(
+            "[env]\nDIGITAL_STORAGE_WORKSHOP_VISIBILITY = '0'\n"
+            "DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = '''\n" + toml_note + "\n'''\n", encoding="utf-8"
+        )
+        with patch.object(commands, "ROOT", self.root), patch.dict(os.environ, {}, clear=True):
+            environment = commands.local_environment()
+        for override, expected in ((None, toml_note), (cli_note, cli_note)):
+            with self.subTest(override=override):
+                argv = [
+                    "--package-dir", str(self.package_directory), "--steamcmd-dir", str(self.steamcmd_directory),
+                    "--vdf-path", str(self.vdf_path), "--preview", str(self.preview_path), "--steam-username", "test user",
+                ]
+                if override is not None:
+                    argv += ["--change-note", override]
+                settings = workshop.settings_from_arguments(workshop._arguments(argv), environment, self.root)
+                with patch.object(workshop, "validate_package_directory"):
+                    workshop.prepare_workshop_item(settings)
+                values = workshop._read_vdf(self.vdf_path)
+                self.assertEqual(expected, values["changenote"])
+                self.assertEqual("0", values["visibility"])
+
+    def test_visibility_argument_overrides_toml(self) -> None:
+        arguments = workshop._arguments([
+            "--package-dir", str(self.package_directory), "--steamcmd-dir", str(self.steamcmd_directory),
+            "--preview", str(self.preview_path), "--steam-username", "test user", "--visibility", "2",
+        ])
+        settings = workshop.settings_from_arguments(arguments, {"DIGITAL_STORAGE_WORKSHOP_VISIBILITY": "0"}, self.root)
+        self.assertEqual("2", settings.visibility)
 
     def test_invalid_visibility_is_rejected(self) -> None:
         arguments = SimpleNamespace(

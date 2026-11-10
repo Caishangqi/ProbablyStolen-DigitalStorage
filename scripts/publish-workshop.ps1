@@ -22,6 +22,7 @@ $packageScript = Join-Path $repositoryRoot 'scripts/package.ps1'
 $workflowLock = $null
 $workshopPackageRoot = $null
 $workshopPackageDirectory = $null
+$previousChangeNote = [Environment]::GetEnvironmentVariable('DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE', 'Process')
 
 Push-Location $repositoryRoot
 try {
@@ -69,7 +70,10 @@ try {
     if ($WorkshopPreview) { $uploadArguments += @('--preview', $WorkshopPreview) }
     if ($SteamUsername) { $uploadArguments += @('--steam-username', $SteamUsername) }
     if ($Visibility) { $uploadArguments += @('--visibility', $Visibility) }
-    if ($ChangeNote) { $uploadArguments += @('--change-note', $ChangeNote) }
+    if (-not [string]::IsNullOrWhiteSpace($ChangeNote)) {
+        # Windows PowerShell strips embedded quotes when forwarding native arguments.
+        $env:DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = $ChangeNote
+    }
     if ($Locale) { $uploadArguments += @('--locale', $Locale) }
 
     Write-Host ('> python -B ' + ($uploadArguments -join ' '))
@@ -85,6 +89,7 @@ catch {
     exit 1
 }
 finally {
+    [Environment]::SetEnvironmentVariable('DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE', $previousChangeNote, 'Process')
     if ($workflowLock) { $workflowLock.Dispose() }
     if ($workshopPackageRoot -and (Test-Path -LiteralPath $workshopPackageRoot)) {
         $rootItem = Get-Item -LiteralPath $workshopPackageRoot -Force

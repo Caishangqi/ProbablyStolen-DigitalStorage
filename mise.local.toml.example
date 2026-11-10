@@ -14,5 +14,14 @@ DIGITAL_STORAGE_TEST_SAVE_DIR = 'C:\path\to\isolated\Probably Stolen\test-save'
 # DIGITAL_STORAGE_STEAM_USERNAME = 'your-steam-username'
 # DIGITAL_STORAGE_WORKSHOP_VDF = '.secrets/workshop.vdf'
 # DIGITAL_STORAGE_WORKSHOP_PREVIEW = 'C:\path\to\workshop-preview.png'
-# DIGITAL_STORAGE_WORKSHOP_VISIBILITY = '2'
+# DIGITAL_STORAGE_WORKSHOP_VISIBILITY = '0'
 # DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = 'Release 0.3.0'
+# Pass -ChangeNote to override this note for one publish.
+# BBCode and multiline literal strings are accepted:
+# DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = '''
+# [h2]0.3.0[/h2]
+# [list]
+# [*]Add drive priorities and configurable storage limits.
+# [*]Improve terminal controls and item transfers.
+# [/list]
+# '''

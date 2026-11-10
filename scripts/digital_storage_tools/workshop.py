@@ -48,7 +48,7 @@ class WorkshopSettings:
     vdf_path: Path
     preview_path: Path
     steam_username: str
-    visibility: str = "2"
+    visibility: str = "0"
     change_note: str | None = None
     locale: str = "en-US"
 
@@ -130,7 +130,7 @@ def settings_from_arguments(
         arguments.visibility,
         environment,
         _ENV_WORKSHOP_VISIBILITY,
-        "2",
+        "0",
     )
     if visibility not in _VALID_VISIBILITY:
         raise WorkshopValidationError("Workshop visibility must be 0, 1, or 2.")
