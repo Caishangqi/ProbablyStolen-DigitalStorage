@@ -206,6 +206,27 @@ Second line.</Description>
                          workshop.WORKSHOP_LOCALE_PATHS["zh-CN"].read_text(encoding="utf-8").strip())
         self.assertEqual(workshop._read_vdf(self.vdf_path)["description"], prepared.metadata.description)
 
+    def test_multiline_vdf_fields_keep_real_line_breaks(self) -> None:
+        note = '[h2]0.3.8[/h2]\n[list]\n[*]拼音搜索\n[/list]'
+        for separator in ("\n", "\r\n", "\r"):
+            with self.subTest(separator=repr(separator)):
+                settings = workshop.WorkshopSettings(
+                    package_directory=self.package_directory,
+                    steamcmd_directory=self.steamcmd_directory,
+                    vdf_path=self.vdf_path,
+                    preview_path=self.preview_path,
+                    steam_username="test user",
+                    change_note=note.replace("\n", separator),
+                )
+                with patch.object(workshop, "validate_package_directory"):
+                    workshop.prepare_workshop_item(settings)
+                raw = self.vdf_path.read_text(encoding="utf-8")
+                self.assertIn('"changenote"    "' + note + '"', raw)
+                self.assertIn('"description"    "[h1]Digital Storage[/h1]\n\n', raw)
+                self.assertNotIn(r"\n", raw)
+                self.assertNotIn(r"\r", raw)
+                self.assertEqual(note, workshop._read_vdf(self.vdf_path)["changenote"])
+
     def test_old_release_manifest_is_rejected_before_steamcmd(self) -> None:
         manifest = self.package_directory / "manifest.xml"
         original = manifest.read_text(encoding="utf-8")

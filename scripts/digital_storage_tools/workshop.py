@@ -353,7 +353,8 @@ def _published_file_id(path: Path) -> str:
 
 def _vdf_quote(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    escaped = escaped.replace("\r", "\\r").replace("\n", "\\n")
+    # Keep real line breaks; SteamCMD may treat C style newline escapes as literal text.
+    escaped = escaped.replace("\r\n", "\n").replace("\r", "\n")
     return f'"{escaped}"'
 
 
