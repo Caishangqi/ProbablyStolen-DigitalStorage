@@ -58,18 +58,28 @@ class PackageValidationTests(unittest.TestCase):
         path = self.package_directory / "manifest.xml"
         path.write_text(path.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
 
+    def _set_mod_version(self, version: str) -> None:
+        path = self.package_directory / "manifest.xml"
+        tree = ET.parse(path)
+        element = tree.getroot().find("ModVersion")
+        self.assertIsNotNone(element)
+        element.text = version
+        tree.write(path, encoding="utf-8", xml_declaration=True)
+
     def test_valid_package_returns_hash_inventory(self) -> None:
         inventory = validate_package_directory(self.package_directory)
         self.assertEqual([item["name"] for item in inventory], list(CURRENT_FILES))
         self.assertTrue(all(len(str(item["sha256"])) == 64 for item in inventory))
 
     def test_current_package_allows_mod_version_changes(self) -> None:
-        self._replace_manifest_text("<ModVersion>0.3.0</ModVersion>", "<ModVersion>0.4.0</ModVersion>")
+        path = self.package_directory / "manifest.xml"
+        current = ET.parse(path).getroot().findtext("ModVersion")
+        self._set_mod_version("0.4.1" if current == "0.4.0" else "0.4.0")
         inventory = validate_package_directory(self.package_directory)
         self.assertEqual(len(inventory), len(CURRENT_FILES))
 
     def test_mod_version_must_not_be_empty(self) -> None:
-        self._replace_manifest_text("<ModVersion>0.3.0</ModVersion>", "<ModVersion></ModVersion>")
+        self._set_mod_version("")
         with self.assertRaisesRegex(PackageValidationError, "ModVersion must not be empty"):
             validate_package_directory(self.package_directory)
 

@@ -24,11 +24,14 @@ internal sealed class TerminalItem
     private readonly Func<bool> _diagnosticsEnabled;
     private readonly ModLog _log;
     private readonly NativeNetworkEvents _events;
+    private readonly ItemContentSynchronization _contentSynchronization;
 
     internal TerminalItem(ModText text, ItemAppearance appearance, MachineContentWindow windows,
-        GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, ModLog log, NativeNetworkEvents events)
+        GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, ModLog log, NativeNetworkEvents events,
+        ItemContentSynchronization contentSynchronization)
     {
         _events = events ?? throw new System.ArgumentNullException(nameof(events));
+        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
         _text = text;
         _appearance = appearance;
         _windows = windows;
@@ -43,10 +46,8 @@ internal sealed class TerminalItem
         var item = ItemDirectory.CreateEmptyItem(ItemId);
         try
         {
-            item.name = _text.Get(NameKey);
-            item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
-            item.unitValue = ItemPrices.Terminal;
+            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             _windows.Attach(item);
             var storageWindow = new TerminalStorageWindow(_text,
                 () => _networkPower.ReadTerminalInventory(item),

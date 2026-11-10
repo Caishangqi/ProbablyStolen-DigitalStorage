@@ -1,5 +1,4 @@
 using ProbablyStolen.DigitalStorage.Platform.Client;
-using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -11,13 +10,14 @@ internal sealed class ControllerItem
     internal const int Height = 3;
     internal const string NameKey = "controller_name";
     internal const string DescriptionKey = "controller_desc";
-    private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
+    private readonly ItemContentSynchronization _contentSynchronization;
 
-    internal ControllerItem(ModText text, ItemAppearance appearance, MachineContentWindow windows)
+    internal ControllerItem(ItemAppearance appearance, MachineContentWindow windows,
+        ItemContentSynchronization contentSynchronization)
     {
-        _text = text;
+        _contentSynchronization = contentSynchronization;
         _appearance = appearance;
         _windows = windows;
     }
@@ -28,10 +28,8 @@ internal sealed class ControllerItem
         var item = ItemDirectory.CreateEmptyItem(ItemId);
         try
         {
-            item.name = _text.Get(NameKey);
-            item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
-            item.unitValue = ItemPrices.Controller;
+            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             _windows.Attach(item, acceptsBattery: true, consumesNetworkPower: true);
             return item;
         }

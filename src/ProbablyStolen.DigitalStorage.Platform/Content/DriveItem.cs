@@ -20,17 +20,18 @@ internal sealed class DriveItem
     internal const int Height = 3;
     internal const string NameKey = "drive_name";
     internal const string DescriptionKey = "drive_desc";
-    private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
     private readonly DriveCellInventory _inventory;
     private readonly NativeNetworkEvents _events;
+    private readonly ItemContentSynchronization _contentSynchronization;
 
-    internal DriveItem(ModText text, ItemAppearance appearance,
-        MachineContentWindow windows, DriveCellInventory inventory, NativeNetworkEvents events)
+    internal DriveItem(ItemAppearance appearance,
+        MachineContentWindow windows, DriveCellInventory inventory, NativeNetworkEvents events,
+        ItemContentSynchronization contentSynchronization)
     {
         _events = events;
-        _text = text;
+        _contentSynchronization = contentSynchronization;
         _appearance = appearance;
         _windows = windows;
         _inventory = inventory;
@@ -44,10 +45,8 @@ internal sealed class DriveItem
         var item = ItemDirectory.CreateEmptyItem(ItemId);
         try
         {
-            item.name = _text.Get(NameKey);
-            item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
-            item.unitValue = ItemPrices.Drive;
+            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             var bays = new GridPixelElement(7, 2);
             var slots = new GameSlotInventory[GetCellCount()];
             var ports = new ICellBayPort[GetCellCount()];

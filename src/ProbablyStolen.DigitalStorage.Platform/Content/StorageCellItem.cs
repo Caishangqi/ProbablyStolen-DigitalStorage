@@ -16,25 +16,27 @@ internal sealed class StorageCellItem
     internal const string DescriptionKey = "item_storage_cell_1k_desc";
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
-    private readonly StorageComponentFactory _component;
     private readonly StorageCellDisassemblyRecipe _recipe;
     private readonly ModLog _log;
     private readonly Func<bool> _showPages;
+    private readonly ItemContentSynchronization _contentSynchronization;
 
-    internal StorageCellItem(ModText text, ItemAppearance appearance, StorageComponentFactory component,
-        StorageCellDisassemblyRecipe recipe, ModLog log, Func<bool> showPages)
+    internal StorageCellItem(ModText text, ItemAppearance appearance,
+        StorageCellDisassemblyRecipe recipe, ModLog log, Func<bool> showPages,
+        ItemContentSynchronization contentSynchronization)
     {
         _showPages = showPages ?? throw new ArgumentNullException(nameof(showPages));
+        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
         _text = text;
         _appearance = appearance;
-        _component = component;
         _recipe = recipe;
         _log = log;
     }
 
-    internal GameItem Create() => CreateHost(true);
+    internal GameItem Create(Func<GameItem> createComponent) =>
+        CreateHost(true, createComponent ?? throw new ArgumentNullException(nameof(createComponent)));
 
-    internal GameItem CreateHost(bool assembled)
+    internal GameItem CreateHost(bool assembled, Func<GameItem>? createComponent = null)
     {
         _appearance.EnsureReady(SpriteKey);
         _appearance.EnsureReady("item_cell_housing");
@@ -42,10 +44,8 @@ internal sealed class StorageCellItem
         try
         {
             _appearance.Apply(item, assembled ? SpriteKey : "item_cell_housing", Width, Height);
-            // The housing carries the cell price; the native value adds the component inside it, so assembling and
-            // disassembling never change the total.
-            item.unitValue = ItemPrices.CellHousing;
-            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages);
+            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
+            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages, _contentSynchronization);
             var initializeSample = assembled && !SaveManager.IsDecoding;
             item.onSlotAddItemFunc += (_, _, _) =>
             {
@@ -64,7 +64,7 @@ internal sealed class StorageCellItem
                 GameItem? component = null;
                 try
                 {
-                    component = _component.Create();
+                    component = createComponent!();
                     GeneralHelper.SetItemOwned(component, GeneralHelper.IsItemOwned(item));
                     if (!content.Slot.UncheckedAccept(component))
                     {

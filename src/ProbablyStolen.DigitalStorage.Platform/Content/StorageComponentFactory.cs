@@ -2,7 +2,6 @@ using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Platform.Client;
-using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -14,18 +13,18 @@ internal sealed class StorageComponentFactory
     internal const int Height = 2;
     internal const string NameKey = "cell_component_1k_name";
     internal const string DescriptionKey = "cell_component_1k_desc";
-    private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly StorageComponent _component;
     private readonly StorageCellDisassemblyRecipe _recipe;
+    private readonly ItemContentSynchronization _contentSynchronization;
 
-    internal StorageComponentFactory(ModText text, ItemAppearance appearance,
-        StorageComponent component, StorageCellDisassemblyRecipe recipe)
+    internal StorageComponentFactory(ItemAppearance appearance,
+        StorageComponent component, StorageCellDisassemblyRecipe recipe, ItemContentSynchronization contentSynchronization)
     {
-        _text = text;
         _appearance = appearance;
         _component = component;
         _recipe = recipe;
+        _contentSynchronization = contentSynchronization;
     }
 
     internal GameItem Create()
@@ -39,10 +38,8 @@ internal sealed class StorageComponentFactory
         var item = ItemDirectory.CreateEmptyItem(ItemId);
         try
         {
-            item.name = _text.Get(NameKey);
-            item.shortDescription = _text.Get(DescriptionKey);
             _appearance.Apply(item, SpriteKey, Width, Height);
-            item.unitValue = ItemPrices.Component1K;
+            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             // MATERIAL lets engineers and Dr. Jackson buy it. ModuleHelper.InitModuleItem below also makes it a MODULE
             // (ModuleHelper.cs:76-77), as before this change.
             item.SetGameItemType(ItemPrices.MaterialType);

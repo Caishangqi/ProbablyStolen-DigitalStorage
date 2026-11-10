@@ -17,26 +17,21 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private readonly GameItem _host;
     private readonly ItemAppearance _appearance;
     private readonly ModLog _log;
+    private readonly ItemContentSynchronization _contentSynchronization;
     private readonly CellAssemblyCallbacks _callbacks;
-    private readonly string _housingName;
-    private readonly string _housingDescription;
-    private readonly string _cellName;
-    private readonly string _cellDescription;
     private bool _reportedInvalid;
 
     internal GameSlotInventory Slot { get; }
 
     internal CellContentWindow(GameItem host, StorageCellDisassemblyRecipe recipe,
-        ItemAppearance appearance, ModText text, ModLog log, Func<bool> showPages)
+        ItemAppearance appearance, ModText text, ModLog log, Func<bool> showPages,
+        ItemContentSynchronization contentSynchronization)
     {
         _host = host;
         _appearance = appearance;
         _log = log;
+        _contentSynchronization = contentSynchronization;
         _callbacks = new CellAssemblyCallbacks(recipe, this);
-        _housingName = text.Get("item_cell_housing_name");
-        _housingDescription = text.Get("item_cell_housing_desc");
-        _cellName = text.Get("item_storage_cell_1k_name");
-        _cellDescription = text.Get("item_storage_cell_1k_desc");
         Slot = new GameSlotInventory(1, 2) { identifier = SlotId };
         Slot.mayInventoryAddItemFunc = (item, _) =>
             _callbacks.CanInsert(ContentSnapshots.Item(item), ReferenceEquals(Slot.childItem, item),
@@ -137,8 +132,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private void Present(bool assembled)
     {
         _host.identifier = assembled ? StorageCellDisassemblyRecipe.CellId : StorageCellDisassemblyRecipe.HousingId;
-        _host.name = assembled ? _cellName : _housingName;
-        _host.shortDescription = assembled ? _cellDescription : _housingDescription;
+        _contentSynchronization.Synchronize(new NativeItemContentState(_host));
         // A housing is a material customers buy. An assembled cell is not: its value includes the stored items, so
         // selling it to a customer would sell its contents. Item types and their tags are both saved.
         if (assembled) _host.RemoveGameItemType(ItemPrices.MaterialType);

@@ -1,10 +1,8 @@
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
-/// Base prices (<c>unitValue</c>) of the mod's items, set where each item is created. Vanilla reference points in
-/// Steam build 26496118: most machines 100-400, modules 30-250, storage coordinator 400, DNA manipulator 1000,
-/// storage bay expansion kit 1063. The native save keeps <c>unitValue</c>, so items saved before a price change keep
-/// their old value; only newly created items use these.
+/// Base prices (<c>unitValue</c>) for the mod's items. Native save loading restores the saved value, while
+/// <see cref="ItemContentDefinitions"/> reapplies the current value to the six exact item identifiers on load.
 /// </summary>
 internal static class ItemPrices
 {

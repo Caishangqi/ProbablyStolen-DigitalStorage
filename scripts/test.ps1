@@ -112,7 +112,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Platform reviewed inputs changed; independent review is required.' }
         }
         $platformDirectory = Split-Path -Parent (Join-Path $repositoryRoot $platform)
-        $reviewedSources = @('CanonicalFilterKeyCodecTests.cs', 'NativeItemIdentityReaderTests.cs')
+        $reviewedSources = @('CanonicalFilterKeyCodecTests.cs', 'ItemContentSynchronizationTests.cs', 'NativeItemIdentityReaderTests.cs')
         $platformSources = @(Get-ChildItem -LiteralPath $platformDirectory -File -Filter '*.cs' -Recurse |
             Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
             ForEach-Object { $_.FullName.Substring($platformDirectory.Length).TrimStart([char[]]'\/').Replace('\', '/') })

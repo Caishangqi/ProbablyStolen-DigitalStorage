@@ -90,14 +90,18 @@ public sealed class PlatformComposition : IDisposable
         var cellTooltipPresenter = new CellTooltipPresenter(text);
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellTooltipPresenter);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
-        var component = new StorageComponentFactory(text, appearance, componentDefinition, recipe);
-        var cell = new StorageCellItem(text, appearance, component, recipe, log, networkPowerSettings.GetShowCellPages);
+        var contentSynchronization = new ItemContentSynchronization(key => text.Get(key),
+            message => log.Error(message));
+        var component = new StorageComponentFactory(appearance, componentDefinition, recipe, contentSynchronization);
+        var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
+            contentSynchronization);
         var housing = new MaterialItem(cell);
+        var drive = new DriveItem(appearance, windows, inventory, networkEvents, contentSynchronization);
+        var controller = new ControllerItem(appearance, windows, contentSynchronization);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents);
-        var drive = new DriveItem(text, appearance, windows, inventory, networkEvents);
-        var controller = new ControllerItem(text, appearance, windows);
-        var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, log);
+            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization);
+        var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing,
+            contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellTooltipPresenter, appearance, content, new CellPageAudit(text, log), eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log));

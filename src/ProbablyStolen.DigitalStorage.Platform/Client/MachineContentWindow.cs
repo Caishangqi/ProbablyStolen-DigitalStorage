@@ -83,22 +83,13 @@ internal sealed class MachineContentWindow
         machine.contentWindow.openCallback += () => lifecycle.RestoreIfReady(SaveManager.IsDecoding);
         machine.onOneSecondItemFunc += (_, _, _) => lifecycle.RestoreIfReady(SaveManager.IsDecoding);
 
-        // Loading replaces the name with the saved string (SaveManager.decompiled.cs:165), so a save from an older
-        // name keeps showing it. A player's label lives in CUSTOM_NAME_TAG and still wins in GetDisplayName.
-        // Writing the localized name back with the next save is a user-approved update of the saved name field.
-        var localizedName = machine.name;
-        void RestoreName()
-        {
-            if (!SaveManager.IsDecoding && machine.name != localizedName) machine.name = localizedName;
-        }
-
+        // Loading restores the saved name. The content callback updates it on load, while this callback keeps the
+        // currently displayed title aligned with the localized name and preserves CUSTOM_NAME_TAG precedence.
         machine.contentWindow.openCallback += () =>
         {
-            RestoreName();
             machine.contentWindow.SetTitle(machine.GetDisplayName(preferCustomName: true));
             MachineryTitleFit.Fit(machine.contentWindow, Array.Empty<int>());
         };
-        machine.onOneSecondItemFunc += (_, _, _) => RestoreName();
     }
 
     private sealed class NativeMachineContents : IMachineContentsPort
