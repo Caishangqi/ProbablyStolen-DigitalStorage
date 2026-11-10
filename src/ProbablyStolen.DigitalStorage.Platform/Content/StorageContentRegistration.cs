@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -22,16 +23,20 @@ internal sealed class StorageContentRegistration : IDisposable
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
         _loadCallback = new ItemContentLoadCallback(_contentSynchronization, message => _log.Error(message));
-        Func<GameItem> createComponent = () => Create(component.Create);
-        _factories = new[]
+        var factories = new List<KeyValuePair<string, Func<GameItem>>>
         {
-            new KeyValuePair<string, Func<GameItem>>(TerminalItem.ItemId, () => Create(terminal.Create)),
-            new KeyValuePair<string, Func<GameItem>>(DriveItem.ItemId, () => Create(drive.Create)),
-            new KeyValuePair<string, Func<GameItem>>(StorageCellItem.ItemId, () => Create(() => cell.Create(createComponent))),
-            new KeyValuePair<string, Func<GameItem>>(ControllerItem.ItemId, () => Create(controller.Create)),
-            new KeyValuePair<string, Func<GameItem>>(StorageComponentFactory.ItemId, createComponent),
-            new KeyValuePair<string, Func<GameItem>>(MaterialItem.ItemId, () => Create(housing.Create))
+            new(TerminalItem.ItemId, () => Create(terminal.Create)),
+            new(DriveItem.ItemId, () => Create(drive.Create)),
+            new(ControllerItem.ItemId, () => Create(controller.Create)),
+            new(MaterialItem.ItemId, () => Create(housing.Create))
         };
+        foreach (var tier in StorageCellTier.All)
+        {
+            Func<GameItem> createComponent = () => Create(() => component.Create(tier));
+            factories.Add(new(tier.ComponentId, createComponent));
+            factories.Add(new(tier.CellId, () => Create(() => cell.Create(tier, createComponent))));
+        }
+        _factories = factories.ToArray();
     }
 
     private GameItem Create(Func<GameItem> factory)
@@ -115,7 +120,7 @@ internal sealed class StorageContentRegistration : IDisposable
             }
 
             _directory = directory;
-            _log.Log("Digital Storage: six content factories registered.");
+            _log.Log("Digital Storage: fourteen content factories registered.");
         }
         catch (Exception error)
         {

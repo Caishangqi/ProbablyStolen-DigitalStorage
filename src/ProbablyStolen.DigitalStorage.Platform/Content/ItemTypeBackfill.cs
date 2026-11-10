@@ -1,5 +1,5 @@
 using System;
-using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -34,18 +34,18 @@ internal sealed class ItemTypeBackfill
 
     private static bool Apply(GameItem item)
     {
+        if (StorageCellTier.FromComponentId(item.identifier) != null)
+            return Ensure(item, ItemPrices.MaterialType, present: true);
+        if (StorageCellTier.FromCellId(item.identifier) != null)
+            return Ensure(item, ItemPrices.MaterialType, present: false);
         switch (item.identifier)
         {
             case ControllerItem.ItemId:
             case DriveItem.ItemId:
             case TerminalItem.ItemId:
                 return Ensure(item, "MACHINE", present: true);
-            case StorageComponent.ItemId:
             case StorageCellDisassemblyRecipe.HousingId:
                 return Ensure(item, ItemPrices.MaterialType, present: true);
-            case StorageCellDisassemblyRecipe.CellId:
-                // An assembled cell carries its stored items' value; customers must not buy it as a material.
-                return Ensure(item, ItemPrices.MaterialType, present: false);
             default:
                 return false;
         }

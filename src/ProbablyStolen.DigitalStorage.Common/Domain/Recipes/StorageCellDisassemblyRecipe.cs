@@ -1,5 +1,6 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 
@@ -27,8 +28,8 @@ public sealed class StorageCellDisassemblyRecipe
 
     /// <summary>Requires exactly one original component inside one assembled cell.</summary>
     public bool IsComplete(string? cellId, int cellCount, string? componentId, int componentCount) =>
-        string.Equals(cellId, CellId, StringComparison.Ordinal) && cellCount == 1 &&
-        _component.IsStorageComponent(componentId) && componentCount == 1;
+        cellCount == 1 && componentCount == 1 && _component.IsStorageComponent(componentId) &&
+        StorageCellTier.FromCellId(cellId) is { } tier && tier == StorageCellTier.FromComponentId(componentId);
 
     /// <summary>Recognizes an empty housing without changing inconsistent objects.</summary>
     public bool IsHousing(string? identifier, int count, bool occupied) =>

@@ -2,6 +2,7 @@ using System;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 
@@ -172,6 +173,36 @@ public sealed class CellCallbackIntegrationTests
         Assert.That(cell.Extract(destination), Is.False);
         Assert.That(cell.Component.Item, Is.SameAs(original));
         Assert.That(original.Parent, Is.SameAs(cell.Component));
+        Assert.That(destination.Item, Is.Null);
+    }
+
+    [Test]
+    public void AssemblyAndRemoval_AllTiers_PreserveComponentAndPresentMatchingHost()
+    {
+        foreach (var tier in StorageCellTier.All)
+        {
+            var cell = new NativeCellBoundary();
+            var component = new PhysicalTestItem { Id = tier.ComponentId };
+            Assert.That(cell.Insert(component), Is.True, tier.Name);
+            Assert.That(cell.Host.Id, Is.EqualTo(tier.CellId));
+            component.Fixed = false;
+            var destination = new PhysicalTestSlot();
+            Assert.That(cell.Extract(destination), Is.True);
+            Assert.That(destination.Item, Is.SameAs(component));
+            Assert.That(cell.Host.Id, Is.EqualTo(StorageCellDisassemblyRecipe.HousingId));
+        }
+    }
+
+    [Test]
+    public void Extraction_UnavailableStorage_DoesNotMoveComponent()
+    {
+        var cell = NativeCellBoundary.Assembled();
+        var original = cell.Component.Item!;
+        original.Fixed = false;
+        cell.StorageState = StorageContentsState.Unavailable;
+        var destination = new PhysicalTestSlot();
+        Assert.That(cell.Extract(destination), Is.False);
+        Assert.That(cell.Component.Item, Is.SameAs(original));
         Assert.That(destination.Item, Is.Null);
     }
 

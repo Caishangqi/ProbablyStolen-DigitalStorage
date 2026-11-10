@@ -77,6 +77,30 @@ public sealed class NativeCellResolverTests
         Assert.That(NativeCellResolver.Get(drive), Is.Empty);
     }
 
+    [Test]
+    public void Resolver_AllTiers_RequiresMatchingComponentAndSingleCounts()
+    {
+        foreach (var tier in StorageCellTier.All)
+        {
+            var cell = CompleteCell();
+            cell.identifier = tier.CellId;
+            var component = cell.Slots.Single().childItem!;
+            component.identifier = tier.ComponentId;
+            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.True, tier.Name);
+            foreach (var other in StorageCellTier.All.Where(other => other != tier))
+            {
+                component.identifier = other.ComponentId;
+                Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False, tier.Name + "/" + other.Name);
+            }
+            component.identifier = tier.ComponentId;
+            component.unitCount = 2;
+            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False);
+            component.unitCount = 1;
+            cell.unitCount = 2;
+            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False);
+        }
+    }
+
     internal static GameSlotInventory Bay() => new() { identifier = CellContentWindow.BayPrefix + "0" };
 
     internal static GameItem CompleteCell()

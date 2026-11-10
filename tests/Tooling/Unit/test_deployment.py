@@ -212,7 +212,7 @@ class DeploymentTests(unittest.TestCase):
         removed = {entry["name"] for entry in changes if entry["action"] == "Remove"}
         added = {entry["name"] for entry in changes if entry["action"] == "Add"}
         self.assertEqual(removed, {LEGACY_PLATFORM_ASSEMBLY})
-        self.assertEqual(added, {"ProbablyStolen.DigitalStorage.Platform.dll"})
+        self.assertEqual(added, set(CURRENT_FILES) - set(RENAMED_PLATFORM_FILES))
         self.assertEqual(self.installed_files(), EXPECTED_FILES)
         self.assertFalse((self.target / LEGACY_PLATFORM_ASSEMBLY).exists())
         self.assertTrue((self.target / "ProbablyStolen.DigitalStorage.Platform.dll").is_file())

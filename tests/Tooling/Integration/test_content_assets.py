@@ -25,8 +25,33 @@ class ContentContractTests(unittest.TestCase):
         original = REPOSITORY / "src" / self.platform.name
         for name in ("Content", "NativeContent"):
             shutil.copytree(original / name, self.platform / name)
+        catalog = Path("src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs")
+        (self.root / catalog).parent.mkdir(parents=True)
+        shutil.copy2(REPOSITORY / catalog, self.root / catalog)
         self.output = self.root / "resources"
         shutil.copytree(REPOSITORY / "packaging/resources/Localization", self.output / "Localization")
+
+    def test_tier_vendor_value_and_resource_wiring(self):
+        vendor = (self.platform / "Content/StorageVendors.cs").read_text(encoding="utf-8")
+        self.assertIn("RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId)", vendor)
+        self.assertIn("StorageCellTier.All.Select(tier => tier.ComponentId)", vendor)
+        self.assertIn("roll <= 40 ? DrawTier().ComponentId", vendor)
+        self.assertIn("roll <= 70 ? DrawTier().CellId", vendor)
+        self.assertIn("RNG.GetRandomInt(1, 100)", vendor)
+        definitions = (self.platform / "Content/ItemContentSynchronization.cs").read_text(encoding="utf-8")
+        self.assertIn("tier.ComponentValue", definitions)
+        self.assertIn('cellKey + "_desc", ItemPrices.CellHousing', definitions)
+        prices = (self.platform / "Content/ItemPrices.cs").read_text(encoding="utf-8")
+        self.assertRegex(prices, r"CellHousing\s*=\s*80")
+        composition = (REPOSITORY / "src" / self.platform.name / "Composition/PlatformComposition.cs").read_text(encoding="utf-8")
+        self.assertIn('_appearance.EnsureReady("item_storage_cell_" + tier.Name)', composition)
+        self.assertIn('_appearance.EnsureReady("cell_component_" + tier.Name)', composition)
+
+    def test_tier_catalog_drift_fails(self):
+        path = self.root / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs"
+        path.write_text(path.read_text(encoding="utf-8").replace('"256k", 256, 20250, 2', '"256k", 256, 20251, 2'), encoding="utf-8")
+        with self.assertRaisesRegex(ContentValidationError, "tier catalog"):
+            check_content(self.root, self.output)
 
     def test_actual_contract_and_resources_pass(self):
         check_content(self.root, self.output)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -133,18 +134,26 @@ internal sealed class ItemContentSynchronization
 
 internal static class ItemContentDefinitions
 {
-    internal static readonly IReadOnlyDictionary<string, ItemContentDefinition> All =
-        new Dictionary<string, ItemContentDefinition>(StringComparer.Ordinal)
+    internal static readonly IReadOnlyDictionary<string, ItemContentDefinition> All = Create();
+
+    private static IReadOnlyDictionary<string, ItemContentDefinition> Create()
+    {
+        var definitions = new Dictionary<string, ItemContentDefinition>(StringComparer.Ordinal)
         {
             [TerminalItem.ItemId] = new(TerminalItem.ItemId, TerminalItem.NameKey, TerminalItem.DescriptionKey, ItemPrices.Terminal),
             [DriveItem.ItemId] = new(DriveItem.ItemId, DriveItem.NameKey, DriveItem.DescriptionKey, ItemPrices.Drive),
             [ControllerItem.ItemId] = new(ControllerItem.ItemId, ControllerItem.NameKey, ControllerItem.DescriptionKey, ItemPrices.Controller),
-            [MaterialItem.ItemId] = new(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing),
-            [StorageComponentFactory.ItemId] = new(StorageComponentFactory.ItemId, StorageComponentFactory.NameKey,
-                StorageComponentFactory.DescriptionKey, ItemPrices.Component1K),
-            [StorageCellItem.ItemId] = new(StorageCellItem.ItemId, StorageCellItem.NameKey,
-                StorageCellItem.DescriptionKey, ItemPrices.CellHousing)
+            [MaterialItem.ItemId] = new(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing)
         };
+        foreach (var tier in StorageCellTier.All)
+        {
+            var componentKey = "cell_component_" + tier.Name;
+            var cellKey = "item_storage_cell_" + tier.Name;
+            definitions.Add(tier.ComponentId, new(tier.ComponentId, componentKey + "_name", componentKey + "_desc", tier.ComponentValue));
+            definitions.Add(tier.CellId, new(tier.CellId, cellKey + "_name", cellKey + "_desc", ItemPrices.CellHousing));
+        }
+        return definitions;
+    }
 }
 
 internal sealed class NativeItemContentState : IItemContentState

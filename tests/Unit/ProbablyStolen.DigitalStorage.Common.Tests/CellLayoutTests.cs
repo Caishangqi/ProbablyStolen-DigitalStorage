@@ -20,14 +20,27 @@ public sealed class CellLayoutTests
         Assert.That(Layout.TotalCells, Is.EqualTo(2304));
     }
 
-    [TestCase(32, 100, 32, 100)]
-    [TestCase(0, 0, 1, 1)]
-    [TestCase(-5, 63, 1, 63)]
-    [TestCase(500, 5000, CellLayout.AbsoluteMaxPages, CellLayout.AbsoluteMaxTypes)]
-    public void WithLimits_ClampsLimitsAndKeepsThePageSize(int pages, int types, int expectedPages, int expectedTypes)
+    [TestCase(int.MinValue, false)]
+    [TestCase(0, false)]
+    [TestCase(1, true)]
+    [TestCase(129, true)]
+    [TestCase(4096, true)]
+    [TestCase(32768, true)]
+    [TestCase(32769, false)]
+    [TestCase(int.MaxValue, false)]
+    public void IsValidRecordedPageCount_UsesRestoreCeilingWithoutConfiguredLimit(int count, bool expected)
     {
-        var configured = Layout.WithLimits(pages, types);
-        Assert.That((configured.MaxPages, configured.MaxTypes), Is.EqualTo((expectedPages, expectedTypes)));
+        Assert.That(CellLayout.IsValidRecordedPageCount(count), Is.EqualTo(expected));
+    }
+
+    [TestCase(32, 32)]
+    [TestCase(0, 1)]
+    [TestCase(-5, 1)]
+    [TestCase(500, CellLayout.MaxBasePages)]
+    public void WithLimits_ClampsLimitsAndKeepsThePageSize(int pages, int expectedPages)
+    {
+        var configured = Layout.WithLimits(pages);
+        Assert.That((configured.MaxPages, configured.MaxTypes), Is.EqualTo((expectedPages, 63)));
         Assert.That((configured.PageWidth, configured.PageHeight), Is.EqualTo((12, 12)));
         Assert.That((Layout.MaxPages, Layout.MaxTypes), Is.EqualTo((16, 63)));
     }

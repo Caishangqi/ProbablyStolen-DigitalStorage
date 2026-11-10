@@ -1,4 +1,4 @@
-using System;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 
@@ -10,5 +10,5 @@ public sealed class StorageComponent
 
     /// <summary>Tests the stable identity rather than localized display text.</summary>
     public bool IsStorageComponent(string? identifier) =>
-        string.Equals(identifier, ItemId, StringComparison.Ordinal);
+        StorageCellTier.FromComponentId(identifier) != null;
 }

@@ -41,10 +41,14 @@ PREVIOUS_FILES = (*LEGACY_FILES,
     "Textures/Items/storage_terminal.png", "Textures/Items/storage_drive.png",
     "Textures/Items/storage_cell.png", "Textures/Items/storage_network_controller.png",
     "Localization/en.csv", "Localization/zh.csv")
-RESOURCE_FILES = (
+LEGACY_RESOURCE_FILES = (
     "Textures/Items/terminal.png", "Textures/Items/drive.png", "Textures/Items/controller.png",
     "Textures/Items/item_storage_cell_1k.png", "Textures/Items/item_cell_housing.png",
     "Textures/Items/cell_component_1k.png", "Localization/en.csv", "Localization/zh.csv",
+)
+RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
+    *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
+      for prefix in ("item_storage_cell", "cell_component")),
 )
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
 # An installation made before the Platform assembly rename has the current 13-file layout with the old
@@ -53,10 +57,12 @@ RENAMED_PLATFORM_ASSEMBLIES = tuple(
     LEGACY_PLATFORM_ASSEMBLY if name == CURRENT_PLATFORM_ASSEMBLY else name
     for name in EXPECTED_ASSEMBLIES
 )
-RENAMED_PLATFORM_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *RESOURCE_FILES)
+RENAMED_PLATFORM_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
+PREVIOUS_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
 # Each known on-disk layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
-    ("current13", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("current21", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("current13", PREVIOUS_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("old13", RENAMED_PLATFORM_FILES, LEGACY_PLATFORM_ASSEMBLY),
     ("previous11", PREVIOUS_FILES, LEGACY_PLATFORM_ASSEMBLY),
     ("legacy5", LEGACY_FILES, LEGACY_PLATFORM_ASSEMBLY),
@@ -257,7 +263,7 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break

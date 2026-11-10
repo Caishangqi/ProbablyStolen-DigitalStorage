@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
-using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -42,13 +40,14 @@ internal static class NativeCellResolver
     /// <summary>Gets whether a bay holds an assembled storage cell with its storage component.</summary>
     internal static bool IsMountedCell(GameItem? cell)
     {
-        if (cell == null || cell.identifier != StorageCellDisassemblyRecipe.CellId)
+        if (cell == null || StorageCellTier.FromCellId(cell.identifier) is not { } tier)
         {
             return false;
         }
 
         var component = CellContentWindow.Component(cell);
-        return component != null && component.identifier == StorageComponent.ItemId;
+        return component != null && StorageCellTier.FromComponentId(component.identifier) == tier &&
+            cell.unitCount == 1 && component.unitCount == 1;
     }
 
     private sealed class MountedCell : IStorageCell

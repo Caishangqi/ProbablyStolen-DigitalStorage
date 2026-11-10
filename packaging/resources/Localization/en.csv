@@ -49,10 +49,26 @@ controller_name,Controller
 controller_desc,Powers the storage network.
 item_storage_cell_1k_name,1k Item Storage Cell
 item_storage_cell_1k_desc,A digital cell that stores items.
+item_storage_cell_4k_name,4k Item Storage Cell
+item_storage_cell_4k_desc,A digital cell that stores items.
+item_storage_cell_16k_name,16k Item Storage Cell
+item_storage_cell_16k_desc,A digital cell that stores items.
+item_storage_cell_64k_name,64k Item Storage Cell
+item_storage_cell_64k_desc,A digital cell that stores items.
+item_storage_cell_256k_name,256k Item Storage Cell
+item_storage_cell_256k_desc,A digital cell that stores items.
 item_cell_housing_name,Item Cell Housing
 item_cell_housing_desc,The casing of a storage cell.
 cell_component_1k_name,1k Storage Component
 cell_component_1k_desc,The core of a 1k storage cell.
+cell_component_4k_name,4k Storage Component
+cell_component_4k_desc,The core of a 4k storage cell.
+cell_component_16k_name,16k Storage Component
+cell_component_16k_desc,The core of a 16k storage cell.
+cell_component_64k_name,64k Storage Component
+cell_component_64k_desc,The core of a 64k storage cell.
+cell_component_256k_name,256k Storage Component
+cell_component_256k_desc,The core of a 256k storage cell.
 component_panel,Storage Component
 storage_pages_panel,Storage Space
 modules_panel,Modules
@@ -63,8 +79,6 @@ network_power_drive_name,Drive power draw
 network_power_drive_desc,Game power units drawn per native nightly cycle for each connected drive. Default: 2.
 network_power_terminal_name,Terminal power draw
 network_power_terminal_desc,Game power units drawn per native nightly cycle for each connected terminal. Default: 1.
-storage_cell_max_types_name,Item types per cell
-storage_cell_max_types_desc,How many different item types one storage cell can hold. Range 1-1024. Default: 63. Lowering it keeps stored types; only new types are refused.
 network_tooltip_state,Network state: {0}
 network_tooltip_drive_slots,Occupied drive slots: {0}/{1}
 network_module_stats_scope,Native module statistics do not currently change DigitalStorage network consumption or add throughput or quality bonuses.
@@ -116,8 +130,8 @@ terminal_hint_shift,Shift + left click: take all
 config_section_power,Network power
 config_section_storage,Storage cells
 config_section_debug,Debug
-storage_cell_max_pages_name,Storage pages per cell
-storage_cell_max_pages_desc,How many 12x12 storage pages one storage cell can grow to. Range 1-128. Default: 16. Lowering it keeps existing pages and their items; only new pages are refused.
+storage_cell_max_pages_name,1k base storage pages
+storage_cell_max_pages_desc,Maximum 12x12 pages for a 1k cell. Higher tiers multiply this limit. Range 1-128. Default: 16. Lowering it keeps existing pages and their items; only new pages are refused.
 debug_show_cell_pages_name,Show storage pages when opening a cell
 debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
 config_section_vendors,Vendors

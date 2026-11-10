@@ -26,7 +26,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
     private readonly ConfigEntry<int> _cellMaxPages;
-    private readonly ConfigEntry<int> _cellMaxTypes;
     private readonly ConfigEntry<int> _engineerDailyChance;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _showCellPages;
@@ -59,8 +58,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             () => text.Get("network_power_terminal_name"), tooltip: () => text.Get("network_power_terminal_desc"));
         _cellMaxPages = config.Define("storage_cell_max_pages", CellLayout.Cell1K.MaxPages, storage,
             () => text.Get("storage_cell_max_pages_name"), tooltip: () => text.Get("storage_cell_max_pages_desc"));
-        _cellMaxTypes = config.Define("storage_cell_max_types", CellLayout.Cell1K.MaxTypes, storage,
-            () => text.Get("storage_cell_max_types_name"), tooltip: () => text.Get("storage_cell_max_types_desc"));
         _engineerDailyChance = config.Define("upper_engineer_daily_chance", 25, vendors,
             () => text.Get("upper_engineer_daily_chance_name"), tooltip: () => text.Get("upper_engineer_daily_chance_desc"));
         _showCellPages = config.Define("debug_show_cell_pages", false, debug,
@@ -70,7 +67,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
-            (_cellMaxPages, storage), (_cellMaxTypes, storage), (_engineerDailyChance, vendors),
+            (_cellMaxPages, storage), (_engineerDailyChance, vendors),
             (_showCellPages, debug), (_terminalDiagnostics, debug)
         })
         {
@@ -101,10 +98,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     /// <summary>Gets the daily chance, in percent, that the upper-level engineer visits.</summary>
     internal int GetEngineerDailyChance() => Clamp(_engineerDailyChance.Value, 0, 100);
 
-    /// <summary>Applies the configured cell page and type limits to the storage layout.</summary>
-    internal void ApplyStorageLimits() => CellPages.Configure(
-        Clamp(_cellMaxPages.Value, 1, CellLayout.AbsoluteMaxPages),
-        Clamp(_cellMaxTypes.Value, 1, CellLayout.AbsoluteMaxTypes));
+    /// <summary>Applies the configured 1k base page limit.</summary>
+    internal void ApplyStorageLimits() => CellPages.Configure(Clamp(_cellMaxPages.Value, 1, CellLayout.MaxBasePages));
 
     public int GetPowerUsage(GridNodeKind kind) => Clamp(kind switch
     {

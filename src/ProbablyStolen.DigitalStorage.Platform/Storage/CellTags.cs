@@ -16,14 +16,22 @@ internal static class CellTags
     internal const string PartitionTag = "digital_storage.partition";
 
     /// <summary>
-    /// Gets the recorded page count, clamped to [1, <see cref="CellLayout.AbsoluteMaxPages"/>]; a cell without the
-    /// tag has one page. It is deliberately not clamped to the configured limit: saves restore child items by page
-    /// position, so a page that is not rebuilt loses its items.
+    /// Gets the recorded page count without truncation; a cell without the tag has one page. Invalid counts are
+    /// unavailable rather than shortened, because native decoding restores child items by page position.
     /// </summary>
     internal static int ReadPageCount(GameItem cell)
     {
         var count = cell.IsTag(PageCountTag) ? cell.GetTagReadonly(PageCountTag).GetInt() : 1;
-        return Math.Max(1, Math.Min(count, CellLayout.AbsoluteMaxPages));
+        if (!CellLayout.IsValidRecordedPageCount(count))
+            throw new InvalidOperationException("The recorded cell page count is outside the supported range.");
+        return count;
+    }
+
+    internal static bool HasValidPageCount(GameItem cell)
+    {
+        if (!cell.IsTag(PageCountTag)) return true;
+        var count = cell.GetTagReadonly(PageCountTag).GetInt();
+        return CellLayout.IsValidRecordedPageCount(count);
     }
 
     internal static void WritePageCount(GameItem cell, int count) =>

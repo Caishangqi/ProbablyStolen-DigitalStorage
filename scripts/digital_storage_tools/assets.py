@@ -22,6 +22,10 @@ ASSETS = {
     "item_cell_housing": ((16, 32), (16, 32)),
     "cell_component_1k": ((16, 32), (16, 32)),
 }
+TIERS = ("1k", "4k", "16k", "64k", "256k")
+for tier in TIERS[1:]:
+    for prefix in ("item_storage_cell_", "cell_component_"):
+        ASSETS[prefix + tier] = ((16, 32), (16, 32))
 
 
 class ContentValidationError(ValueError):
@@ -238,6 +242,16 @@ def check_content(project: Path, output: Path) -> None:
             raise ContentValidationError(f"Content declaration contract mismatch: {class_name}")
         ids.add(values["ItemId"])
         keys.update((values["NameKey"], values["DescriptionKey"]))
+    catalog = plain_path(project / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs").read_text(encoding="utf-8")
+    declarations = re.findall(r'new StorageCellTier\("([a-z0-9]+)", (\d+), (\d+), (\d+)\)', catalog)
+    expected_tiers = [("1k", "1", "250", "50"), ("4k", "4", "750", "25"),
+                      ("16k", "16", "2250", "15"), ("64k", "64", "6750", "8"),
+                      ("256k", "256", "20250", "2")]
+    if declarations != expected_tiers:
+        raise ContentValidationError("Storage tier catalog contract mismatch")
+    for tier in TIERS[1:]:
+        for prefix in ("item_storage_cell_", "cell_component_"):
+            keys.update((prefix + tier + "_name", prefix + tier + "_desc"))
     keys.update(("component_panel", "storage_pages_panel", "modules_panel", "cells_panel"))
     keys.update((
         "network_tooltip_state", "network_tooltip_drive_slots", "network_module_stats_scope",
@@ -246,7 +260,6 @@ def check_content(project: Path, output: Path) -> None:
         "network_power_controller_name", "network_power_controller_desc",
         "network_power_drive_name", "network_power_drive_desc",
         "network_power_terminal_name", "network_power_terminal_desc",
-        "storage_cell_max_types_name", "storage_cell_max_types_desc",
         "terminal_storage_title", "terminal_storage_search_placeholder", "terminal_storage_loading",
         "terminal_storage_drag_hint", "terminal_storage_drag_rejected", "terminal_storage_whole_stack_only", "terminal_diagnostics_name", "terminal_diagnostics_desc",
         "terminal_storage_offline", "terminal_storage_empty",

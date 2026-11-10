@@ -10,32 +10,38 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 public sealed class CellLayout
 {
     /// <summary>The 1k tier: 12×12 pages, at most 16 pages and 63 item types.</summary>
-    public static readonly CellLayout Cell1K = new(12, 12, 16, 63);
+    public static readonly CellLayout Cell1K = new(12, 12, 16);
 
-    /// <summary>
-    /// The largest page count any cell restores or a setting may allow. Saved pages up to this count are always
-    /// rebuilt, whatever the current limit, so lowering the limit never drops a page that holds items.
-    /// </summary>
-    public const int AbsoluteMaxPages = 128;
+    /// <summary>The largest recorded page count supported during restoration.</summary>
+    public const int AbsoluteMaxPages = 32768;
 
-    /// <summary>The largest item type limit a setting may allow.</summary>
-    public const int AbsoluteMaxTypes = 1024;
+    /// <summary>Gets whether a recorded page count can be restored without truncation.</summary>
+    public static bool IsValidRecordedPageCount(int count) => count >= 1 && count <= AbsoluteMaxPages;
+
+    /// <summary>The largest configurable 1k base page count.</summary>
+    public const int MaxBasePages = 128;
+
+    /// <summary>The fixed limit for distinct item types.</summary>
+    public const int TypeLimit = 63;
 
     /// <summary>Creates a tier layout.</summary>
-    public CellLayout(int pageWidth, int pageHeight, int maxPages, int maxTypes)
+    public CellLayout(int pageWidth, int pageHeight, int maxPages)
     {
         PageWidth = pageWidth > 0 ? pageWidth : throw new ArgumentOutOfRangeException(nameof(pageWidth));
         PageHeight = pageHeight > 0 ? pageHeight : throw new ArgumentOutOfRangeException(nameof(pageHeight));
         MaxPages = maxPages > 0 ? maxPages : throw new ArgumentOutOfRangeException(nameof(maxPages));
-        MaxTypes = maxTypes > 0 ? maxTypes : throw new ArgumentOutOfRangeException(nameof(maxTypes));
     }
 
-    /// <summary>
-    /// Gets this tier with configured limits, clamped to [1, <see cref="AbsoluteMaxPages"/>] and
-    /// [1, <see cref="AbsoluteMaxTypes"/>]. The page size never changes: it decides where stored items sit.
-    /// </summary>
-    public CellLayout WithLimits(int maxPages, int maxTypes) => new(PageWidth, PageHeight,
-        Math.Max(1, Math.Min(maxPages, AbsoluteMaxPages)), Math.Max(1, Math.Min(maxTypes, AbsoluteMaxTypes)));
+    /// <summary>Gets a tier layout from the configured 1k base, clamped before applying its multiplier.</summary>
+    public static CellLayout ForTier(StorageCellTier tier, int basePages)
+    {
+        if (tier == null) throw new ArgumentNullException(nameof(tier));
+        return new CellLayout(12, 12, Math.Max(1, Math.Min(basePages, MaxBasePages)) * tier.Multiplier);
+    }
+
+    /// <summary>Gets the 1k layout with a configured base page limit.</summary>
+    public CellLayout WithLimits(int maxPages) => new(PageWidth, PageHeight,
+        Math.Max(1, Math.Min(maxPages, MaxBasePages)));
 
     /// <summary>Gets the page width in grid cells.</summary>
     public int PageWidth { get; }
@@ -47,7 +53,7 @@ public sealed class CellLayout
     public int MaxPages { get; }
 
     /// <summary>Gets the maximum number of distinct item types one cell may hold.</summary>
-    public int MaxTypes { get; }
+    public int MaxTypes => TypeLimit;
 
     /// <summary>Gets the grid cells of one page.</summary>
     public int CellsPerPage => PageWidth * PageHeight;

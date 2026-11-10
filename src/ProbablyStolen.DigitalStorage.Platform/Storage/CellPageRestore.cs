@@ -29,6 +29,8 @@ public static class CellPageRestore
         {
             if (item != null && CellPages.Tabs(item) != null)
             {
+                if (!CellTags.HasValidPageCount(item))
+                    throw new InvalidOperationException("The recorded cell page count is invalid.");
                 CellPages.EnsurePageCount(item, CellTags.ReadPageCount(item));
             }
         }

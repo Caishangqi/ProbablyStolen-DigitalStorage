@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -21,12 +22,14 @@ internal static class CellPages
     /// </summary>
     internal const string PanelRole = "digital_storage.pages";
 
-    /// <summary>Gets the 1k layout with the configured page and type limits.</summary>
-    internal static CellLayout Layout { get; private set; } = CellLayout.Cell1K;
+    private static int _basePages = CellLayout.Cell1K.MaxPages;
+
+    private static CellLayout LayoutFor(GameItem cell) =>
+        (StorageCellTier.FromCellId(cell.identifier) ??
+         throw new InvalidOperationException("Unknown storage cell tier.")).Layout(_basePages);
 
     /// <summary>Applies configured limits; existing pages beyond a lowered page limit are kept (see CellTags).</summary>
-    internal static void Configure(int maxPages, int maxTypes) =>
-        Layout = CellLayout.Cell1K.WithLimits(maxPages, maxTypes);
+    internal static void Configure(int maxPages) => _basePages = Math.Max(1, Math.Min(maxPages, CellLayout.MaxBasePages));
 
     /// <summary>Creates the pages panel with its first page.</summary>
     internal static MachineryPanel CreatePanel(string label)
@@ -59,6 +62,36 @@ internal static class CellPages
         }
 
         return pages;
+    }
+
+    internal static bool IsComplete(GameItem cell)
+    {
+        var tabs = Tabs(cell);
+        return tabs != null && CellTags.HasValidPageCount(cell) &&
+            IsLinked(cell, tabs, CellTags.ReadPageCount(cell), requireEmpty: false);
+    }
+
+    private static bool IsLinked(GameItem cell, MachineryTabs tabs, int count, bool requireEmpty)
+    {
+        var row = cell.contentWindow?.childElement as MachineryPanelRow;
+        var panel = row?.GetPanel(PanelRole);
+        if (SaveManager.IsDecoding || CellPageAudit.IsUnavailable(cell) || panel?.owner == null ||
+            !ReferenceEquals(panel.content, tabs) || !((PixelElement)tabs).IsRenderingChildOf(panel) ||
+            !ReferenceEquals(tabs.owner, panel.owner) || count < 1 || count > CellLayout.AbsoluteMaxPages ||
+            tabs.count != count) return false;
+        // The native children getter collects every panel once; GetBodyStorage would recollect for every page.
+        var storage = row!.children;
+        if (storage.Count != count + 1 || storage[0] is not GameSlotInventory slot ||
+            slot.identifier != Client.CellContentWindow.SlotId || !slot.parents.Contains(panel.owner)) return false;
+        for (var index = 0; index < count; index++)
+        {
+            if (tabs.GetTabInventory(index) is not GameGridInventory page ||
+                !ReferenceEquals(storage[index + 1], page) ||
+                page.inventoryShape.width != CellLayout.Cell1K.PageWidth ||
+                page.inventoryShape.height != CellLayout.Cell1K.PageHeight ||
+                !page.parents.Contains(panel.owner) || (requireEmpty && page.childItems.Count != 0)) return false;
+        }
+        return true;
     }
 
     /// <summary>Gets whether no page holds an item.</summary>
@@ -104,6 +137,7 @@ internal static class CellPages
     /// <summary>Builds a fresh read-only projection of the cell.</summary>
     internal static CellView Read(GameItem cell, Func<GameItem, ItemKey?> identify)
     {
+        var layout = LayoutFor(cell);
         var pages = new List<PageView>();
         var types = new HashSet<ItemKey>();
         foreach (var page in Pages(cell))
@@ -114,7 +148,7 @@ internal static class CellPages
             {
                 var size = SizeOf(root);
                 label ??= size;
-                var slot = Layout.SlotIndexAt(root.modifiedShape.minX, root.modifiedShape.minY,
+                var slot = layout.SlotIndexAt(root.modifiedShape.minX, root.modifiedShape.minY,
                     size.Width, size.Height);
                 if (size.Equals(label.Value) && slot >= 0)
                 {
@@ -131,7 +165,7 @@ internal static class CellPages
             pages.Add(new PageView(label, occupied));
         }
 
-        return new CellView(Layout, pages, types, CellTags.ReadPartition(cell), DrivePriorityTag.ReadForCell(cell));
+        return new CellView(layout, pages, types, CellTags.ReadPartition(cell), DrivePriorityTag.ReadForCell(cell));
     }
 
     /// <summary>
@@ -144,9 +178,10 @@ internal static class CellPages
             return false;
         }
 
+        var layout = LayoutFor(cell);
         var page = placement.AppendsPage ? AppendPage(cell) : Pages(cell)[placement.Page];
         var size = SizeOf(item);
-        var (x, y) = Layout.SlotOrigin(placement.Slot, size.Width, size.Height);
+        var (x, y) = layout.SlotOrigin(placement.Slot, size.Width, size.Height);
         var target = new GridShapeBuilder(item.modifiedShape).SetPosition(x, y).Build();
         if (!page.CheckShapePlacement(item, target, new List<GameItem>()))
         {
@@ -192,9 +227,70 @@ internal static class CellPages
         return moved;
     }
 
+    internal static bool CanAssemble(GameItem cell, EmptyPageReset<MachineryTabs> reset) =>
+        Tabs(cell) != null && reset.CanAssemble(new NativeResetPort(cell));
+
+    internal static void ResetEmpty(GameItem cell, EmptyPageReset<MachineryTabs> reset) =>
+        reset.Run(new NativeResetPort(cell));
+
+    private sealed class NativeResetPort : IEmptyPageResetPort<MachineryTabs>
+    {
+        private readonly GameItem _cell;
+        private readonly MachineryPanel _panel;
+
+        internal NativeResetPort(GameItem cell)
+        {
+            _cell = cell;
+            _panel = (cell.contentWindow?.childElement as MachineryPanelRow)?.GetPanel(PanelRole)
+                ?? throw new InvalidOperationException("The cell pages panel is unavailable.");
+        }
+
+        public bool CanOperate => !SaveManager.IsDecoding && !CellPageAudit.IsUnavailable(_cell) &&
+            _cell.identifier == StorageCellDisassemblyRecipe.HousingId &&
+            _cell.unitCount == 1 && !Client.CellContentWindow.IsMounted(_cell) &&
+            Client.CellContentWindow.Component(_cell) == null;
+
+        public bool CanStart => CanOperate && IsComplete(_cell) && IsEmpty(_cell);
+        public MachineryTabs Current => _panel.content as MachineryTabs
+            ?? throw new InvalidOperationException("The current pages are unavailable.");
+        public int Count(MachineryTabs pages) => pages.count;
+
+        public void Prepare(Action<MachineryTabs> retain)
+        {
+            var pages = new MachineryTabs();
+            retain(pages);
+            AddPage(pages);
+        }
+
+        public void Attach(MachineryTabs pages) => _panel.SetContent(pages);
+        public bool IsLinkedEmpty(MachineryTabs pages, int count) => IsLinked(_cell, pages, count, requireEmpty: true);
+        public bool HasRecordedCount(int count) => CellTags.HasValidPageCount(_cell) && CellTags.ReadPageCount(_cell) == count;
+        public void WriteCount(int count) => CellTags.WritePageCount(_cell, count);
+        public void SelectFirst(MachineryTabs pages) => pages.Select(0);
+
+        public void Release(MachineryTabs pages)
+        {
+            if (pages.handler == null) return;
+            if (ReferenceEquals(_panel.content, pages))
+                throw new InvalidOperationException("Current pages cannot be released.");
+            for (var index = 0; index < pages.count; index++)
+            {
+                if (pages.GetTabInventory(index) is not GameGridInventory page ||
+                    page.childItems.Count != 0 || page.parents.Count != 0)
+                    throw new InvalidOperationException("Only detached empty pages can be released.");
+            }
+            // A failed native Detach can leave an empty rendering child after clearing panel.content.
+            if (((PixelElement)pages).IsRenderingChildOf(_panel))
+                ((PixelElement)pages).RemoveRenderingParent(_panel);
+            if (((PixelElement)pages).IsRenderingChildOf(_panel))
+                throw new InvalidOperationException("Attached page rendering cannot be released.");
+            UnityEngine.Object.Destroy(pages.handler.gameObject);
+        }
+    }
+
     private static GameGridInventory AddPage(MachineryTabs tabs)
     {
-        var page = new GameGridInventory(Layout.PageWidth, Layout.PageHeight).SetMachineryStyle();
+        var page = new GameGridInventory(CellLayout.Cell1K.PageWidth, CellLayout.Cell1K.PageHeight).SetMachineryStyle();
         // Players reach page items only through the terminal: no drag in or out, and no "use" from the cell window.
         // Insertion uses the native lock because it is checked before HopperHelper.MayBypassGridRules; removal uses
         // callbacks instead of the native lock, because a page locked both ways makes every item tooltip show

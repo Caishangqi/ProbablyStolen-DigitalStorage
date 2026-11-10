@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -61,7 +61,7 @@ internal sealed class StorageVendors : IDisposable
             }
 
             if (RNG.Roll(40)) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
-            if (RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(StorageComponent.ItemId);
+            if (RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId);
         }
         catch (Exception error)
         {
@@ -97,7 +97,7 @@ internal sealed class StorageVendors : IDisposable
         };
         StoreClientFactionSetup.InitUpperLevelCitizen(client);
         client.SetClientBudget(800 + StoreStation.GetDayCounter() * 5, 400);
-        foreach (var id in new[] { MaterialItem.ItemId, StorageComponent.ItemId }.Concat(Machines))
+        foreach (var id in new[] { MaterialItem.ItemId }.Concat(StorageCellTier.All.Select(tier => tier.ComponentId)).Concat(Machines))
         {
             client.clientBuyingIdList.Add(id);
         }
@@ -121,9 +121,11 @@ internal sealed class StorageVendors : IDisposable
         for (var index = 0; index < count; index++)
         {
             var roll = RNG.GetRandomInt(1, 100);
-            PlayerStore.Instance.AddDirectSellingItemToTable(roll <= 40 ? StorageComponent.ItemId
-                : roll <= 70 ? StorageCellItem.ItemId
+            PlayerStore.Instance.AddDirectSellingItemToTable(roll <= 40 ? DrawTier().ComponentId
+                : roll <= 70 ? DrawTier().CellId
                 : MaterialItem.ItemId);
         }
     }
+
+    private static StorageCellTier DrawTier() => StorageCellTier.FromMerchantRoll(RNG.GetRandomInt(1, 100));
 }

@@ -17,6 +17,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\EmptyPageReset.cs" Link="Storage\EmptyPageReset.cs" />
   </ItemGroup>
 
   <ItemGroup>

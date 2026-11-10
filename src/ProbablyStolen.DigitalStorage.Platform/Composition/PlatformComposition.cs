@@ -4,6 +4,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Initialization;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Network;
@@ -201,10 +202,13 @@ public sealed class PlatformComposition : IDisposable
         {
             _appearance.EnsureReady(TerminalItem.SpriteKey);
             _appearance.EnsureReady(DriveItem.SpriteKey);
-            _appearance.EnsureReady(StorageCellItem.SpriteKey);
             _appearance.EnsureReady(ControllerItem.SpriteKey);
-            _appearance.EnsureReady(StorageComponentFactory.SpriteKey);
             _appearance.EnsureReady(MaterialItem.SpriteKey);
+            foreach (var tier in StorageCellTier.All)
+            {
+                _appearance.EnsureReady("item_storage_cell_" + tier.Name);
+                _appearance.EnsureReady("cell_component_" + tier.Name);
+            }
         }
         catch (Exception error)
         {

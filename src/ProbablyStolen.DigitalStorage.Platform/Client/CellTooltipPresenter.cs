@@ -34,8 +34,8 @@ public sealed class CellTooltipPresenter
             return;
         }
 
-        var layout = CellPages.Layout;
         var view = CellPages.Read(cell, NetworkStorage.Identify);
+        var layout = view.Layout;
         var usedCells = CellPages.Roots(cell).Sum(root =>
         {
             var size = CellPages.SizeOf(root);

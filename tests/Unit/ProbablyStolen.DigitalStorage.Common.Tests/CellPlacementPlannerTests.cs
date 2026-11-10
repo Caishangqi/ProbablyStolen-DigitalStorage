@@ -120,6 +120,17 @@ public sealed class CellPlacementPlannerTests
     }
 
     [Test]
+    public void TypeLimit_LegacyAboveLimit_AllowsExistingAndRejectsNew()
+    {
+        var types = Enumerable.Range(0, 64).Select(i => new ItemKey($"item.t{i}")).ToArray();
+        var cell = Cell(types: types, pages: PageView.Free);
+
+        Assert.That(Plan(cell, Item(TwoByTwo, types[63])).IsAccepted, Is.True);
+        Assert.That(Plan(cell, Item(TwoByTwo, new ItemKey("item.new"))).Rejection,
+            Is.EqualTo(PlacementRejection.TypeLimit));
+    }
+
+    [Test]
     public void OversizedItem_IsRejected()
     {
         var placement = Plan(Cell(pages: PageView.Free), Item(new BoundingSize(13, 1)));
@@ -145,10 +156,25 @@ public sealed class CellPlacementPlannerTests
     }
 
     [Test]
+    public void LargestTier_AppendStopsAtRestoreBoundary()
+    {
+        var layout = StorageCellTier.All[4].Layout(128);
+        var full = new PageView(new BoundingSize(12, 12), new[] { 0 });
+        var below = new CellView(layout, Enumerable.Repeat(full, CellLayout.AbsoluteMaxPages - 1),
+            Array.Empty<ItemKey>(), CellPartition.Unfiltered);
+        var atLimit = new CellView(layout, Enumerable.Repeat(full, CellLayout.AbsoluteMaxPages),
+            Array.Empty<ItemKey>(), CellPartition.Unfiltered);
+        var item = Item(new BoundingSize(12, 12));
+
+        Assert.That(Plan(below, item).AppendsPage, Is.True);
+        Assert.That(Plan(atLimit, item).Rejection, Is.EqualTo(PlacementRejection.NoSpace));
+    }
+
+    [Test]
     public void LoweredPageLimit_KeepsExistingPagesUsableButAddsNoMore()
     {
         // Six saved pages under a limit lowered to four: the pages stay, a free one is still used, none is added.
-        var layout = CellLayout.Cell1K.WithLimits(4, 63);
+        var layout = CellLayout.Cell1K.WithLimits(4);
         var full = new PageView(TwoByTwo, Enumerable.Range(0, 36));
         var pages = Enumerable.Repeat(full, 5).Append(PageView.Free).ToArray();
         var cell = new CellView(layout, pages, Array.Empty<ItemKey>(), CellPartition.Unfiltered);

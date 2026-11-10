@@ -3,6 +3,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
@@ -85,7 +86,7 @@ internal sealed class NativeCellBoundary : ICellAssemblyPort
             throw new InvalidOperationException("Injected native view failure.");
         }
 
-        Host.Id = assembled ? StorageCellDisassemblyRecipe.CellId : StorageCellDisassemblyRecipe.HousingId;
+        Host.Id = assembled ? StorageCellTier.FromComponentId(Component.Item?.Id)!.CellId : StorageCellDisassemblyRecipe.HousingId;
     }
 
     internal bool Insert(PhysicalTestItem candidate, bool cancel = false, bool ownershipAllowed = true)

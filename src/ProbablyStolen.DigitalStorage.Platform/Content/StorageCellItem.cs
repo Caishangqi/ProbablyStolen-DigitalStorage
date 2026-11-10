@@ -1,5 +1,6 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
@@ -33,17 +34,18 @@ internal sealed class StorageCellItem
         _log = log;
     }
 
-    internal GameItem Create(Func<GameItem> createComponent) =>
-        CreateHost(true, createComponent ?? throw new ArgumentNullException(nameof(createComponent)));
+    internal GameItem Create(StorageCellTier tier, Func<GameItem> createComponent) =>
+        CreateHost(true, createComponent ?? throw new ArgumentNullException(nameof(createComponent)), tier);
 
-    internal GameItem CreateHost(bool assembled, Func<GameItem>? createComponent = null)
+    internal GameItem CreateHost(bool assembled, Func<GameItem>? createComponent = null, StorageCellTier? tier = null)
     {
-        _appearance.EnsureReady(SpriteKey);
-        _appearance.EnsureReady("item_cell_housing");
-        var item = ItemDirectory.CreateEmptyItem(assembled ? ItemId : StorageCellDisassemblyRecipe.HousingId);
+        if (assembled && tier == null) throw new ArgumentNullException(nameof(tier));
+        var spriteKey = assembled ? "item_storage_cell_" + tier!.Name : "item_cell_housing";
+        _appearance.EnsureReady(spriteKey);
+        var item = ItemDirectory.CreateEmptyItem(assembled ? tier!.CellId : StorageCellDisassemblyRecipe.HousingId);
         try
         {
-            _appearance.Apply(item, assembled ? SpriteKey : "item_cell_housing", Width, Height);
+            _appearance.Apply(item, spriteKey, Width, Height);
             NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages, _contentSynchronization);
             var initializeSample = assembled && !SaveManager.IsDecoding;

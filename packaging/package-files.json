@@ -13,7 +13,15 @@
     "Textures/Items/item_cell_housing.png",
     "Textures/Items/cell_component_1k.png",
     "Localization/en.csv",
-    "Localization/zh.csv"
+    "Localization/zh.csv",
+    "Textures/Items/item_storage_cell_4k.png",
+    "Textures/Items/cell_component_4k.png",
+    "Textures/Items/item_storage_cell_16k.png",
+    "Textures/Items/cell_component_16k.png",
+    "Textures/Items/item_storage_cell_64k.png",
+    "Textures/Items/cell_component_64k.png",
+    "Textures/Items/item_storage_cell_256k.png",
+    "Textures/Items/cell_component_256k.png"
   ],
   "legacy": [
     "manifest.xml",

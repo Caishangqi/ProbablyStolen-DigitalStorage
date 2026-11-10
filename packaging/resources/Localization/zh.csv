@@ -49,10 +49,26 @@ controller_name,控制器
 controller_desc,为存储网络供电.
 item_storage_cell_1k_name,1k 物品存储元件
 item_storage_cell_1k_desc,用于存储物品的数字元件.
+item_storage_cell_4k_name,4k 物品存储元件
+item_storage_cell_4k_desc,用于存储物品的数字元件.
+item_storage_cell_16k_name,16k 物品存储元件
+item_storage_cell_16k_desc,用于存储物品的数字元件.
+item_storage_cell_64k_name,64k 物品存储元件
+item_storage_cell_64k_desc,用于存储物品的数字元件.
+item_storage_cell_256k_name,256k 物品存储元件
+item_storage_cell_256k_desc,用于存储物品的数字元件.
 item_cell_housing_name,物品元件外壳
 item_cell_housing_desc,存储元件的外壳.
 cell_component_1k_name,1k 存储组件
 cell_component_1k_desc,1k 存储元件的核心部件.
+cell_component_4k_name,4k 存储组件
+cell_component_4k_desc,4k 存储元件的核心部件.
+cell_component_16k_name,16k 存储组件
+cell_component_16k_desc,16k 存储元件的核心部件.
+cell_component_64k_name,64k 存储组件
+cell_component_64k_desc,64k 存储元件的核心部件.
+cell_component_256k_name,256k 存储组件
+cell_component_256k_desc,256k 存储元件的核心部件.
 component_panel,存储组件
 storage_pages_panel,存储空间
 modules_panel,模块
@@ -63,8 +79,6 @@ network_power_drive_name,驱动器耗电
 network_power_drive_desc,每次原生夜间结算为每台接入的驱动器扣除的游戏功率单位. 默认: 2.
 network_power_terminal_name,终端耗电
 network_power_terminal_desc,每次原生夜间结算为每台接入的终端扣除的游戏功率单位. 默认: 1.
-storage_cell_max_types_name,每个元件的物品种类上限
-storage_cell_max_types_desc,每个存储元件可保存的不同物品种类数量. 范围 1-1024. 默认: 63. 调低后已存的种类保留, 只是不能再放入新种类.
 network_tooltip_state,网络状态: {0}
 network_tooltip_drive_slots,驱动器已占用槽位: {0}/{1}
 network_module_stats_scope,原生模块属性当前不改变本网络耗电, 也不提供数字吞吐或质量加成.
@@ -116,8 +130,8 @@ terminal_hint_shift,Shift+左键: 取出全部
 config_section_power,网络耗电
 config_section_storage,存储元件
 config_section_debug,调试
-storage_cell_max_pages_name,每个元件的存储页上限
-storage_cell_max_pages_desc,每个存储元件最多可扩展的 12×12 存储页数量. 范围 1-128. 默认: 16. 调低后已有的页和其中物品都会保留, 只是不再新增页.
+storage_cell_max_pages_name,1k 基础存储页上限
+storage_cell_max_pages_desc,1k 元件最多可扩展的 12×12 存储页数量, 更高等级按倍率增加. 范围 1-128. 默认: 16. 调低后已有的页和其中物品都会保留, 只是不再新增页.
 debug_show_cell_pages_name,双击存储元件时显示存储页
 debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其中的存储页; 关闭时只显示存储组件. 存储页始终锁定, 物品只能通过终端存取.
 config_section_vendors,商人

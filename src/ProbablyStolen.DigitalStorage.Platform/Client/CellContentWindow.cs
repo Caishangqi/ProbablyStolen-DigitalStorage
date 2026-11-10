@@ -3,6 +3,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
@@ -20,6 +21,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private readonly ItemContentSynchronization _contentSynchronization;
     private readonly CellAssemblyCallbacks _callbacks;
     private bool _reportedInvalid;
+    private readonly EmptyPageReset<MachineryTabs> _pageReset = new();
 
     internal GameSlotInventory Slot { get; }
 
@@ -34,7 +36,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         _callbacks = new CellAssemblyCallbacks(recipe, this);
         Slot = new GameSlotInventory(1, 2) { identifier = SlotId };
         Slot.mayInventoryAddItemFunc = (item, _) =>
-            _callbacks.CanInsert(ContentSnapshots.Item(item), ReferenceEquals(Slot.childItem, item),
+            !_pageReset.Pending && ShellReady() && _callbacks.CanInsert(ContentSnapshots.Item(item), ReferenceEquals(Slot.childItem, item),
                 GeneralHelper.CanAddItemToInv(item, _host));
         Slot.maxSlotAmountItemFunc = (_, _, _) => 1;
         Slot.mayInventoryRemoveItemFunc = (item, _) => CanRemoveFromSlot(item);
@@ -76,12 +78,15 @@ internal sealed class CellContentWindow : ICellAssemblyPort
             if (part != null && GeneralHelper.IsItemOwned(host) && !GeneralHelper.IsItemOwned(part))
                 GeneralHelper.SetItemOwned(part);
         };
-        window.openCallback += () => MachineryTitleFit.Fit(window);
+        window.openCallback += RetryReset;
+        window.openCallback += SyncTitle;
         SyncPages();
         host.onOneSecondItemFunc += (_, _, _) => CheckIntegrity();
         host.mayStackItemFunc = (_, _) => false;
         host.maxSlotAmountItemFunc = (_, _, _) => 1;
-        Present(host.identifier == StorageCellDisassemblyRecipe.CellId);
+        var initialTier = StorageCellTier.FromCellId(host.identifier);
+        if (initialTier != null || host.identifier == StorageCellDisassemblyRecipe.HousingId)
+            PresentInitial(initialTier);
     }
 
     CellAssemblySnapshot ICellAssemblyPort.Read() => ContentSnapshots.Cell(_host);
@@ -100,7 +105,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     }
 
     internal static StorageContentsState StorageState(GameItem host) =>
-        CellPages.Tabs(host) == null ? StorageContentsState.Unavailable
+        !CellPages.IsComplete(host) || CellPageAudit.IsUnavailable(host) ? StorageContentsState.Unavailable
         : CellPages.IsEmpty(host) ? StorageContentsState.Empty : StorageContentsState.NonEmpty;
 
     internal static bool IsMounted(GameItem host) =>
@@ -131,13 +136,52 @@ internal sealed class CellContentWindow : ICellAssemblyPort
 
     private void Present(bool assembled)
     {
-        _host.identifier = assembled ? StorageCellDisassemblyRecipe.CellId : StorageCellDisassemblyRecipe.HousingId;
+        var tier = assembled ? StorageCellTier.FromComponentId(Slot.childItem?.identifier) : null;
+        if (assembled && tier == null) throw new InvalidOperationException("Unknown storage component tier.");
+        _host.identifier = assembled ? tier!.CellId : StorageCellDisassemblyRecipe.HousingId;
+        PresentInitial(tier);
+        if (!assembled)
+        {
+            _pageReset.Request();
+            RetryReset();
+        }
+    }
+
+    private void PresentInitial(StorageCellTier? tier)
+    {
+        var assembled = tier != null;
         _contentSynchronization.Synchronize(new NativeItemContentState(_host));
         // A housing is a material customers buy. An assembled cell is not: its value includes the stored items, so
         // selling it to a customer would sell its contents. Item types and their tags are both saved.
         if (assembled) _host.RemoveGameItemType(ItemPrices.MaterialType);
         else _host.SetGameItemType(ItemPrices.MaterialType);
-        _appearance.SetPreparedSprite(_host, assembled ? "item_storage_cell_1k" : "item_cell_housing");
+        _appearance.SetPreparedSprite(_host, assembled ? "item_storage_cell_" + tier!.Name : "item_cell_housing");
+        SyncTitle();
+    }
+
+    private bool ShellReady() => _host.identifier != StorageCellDisassemblyRecipe.HousingId ||
+        CellPages.CanAssemble(_host, _pageReset);
+
+    private void RetryReset()
+    {
+        if (SaveManager.IsDecoding || _host.identifier != StorageCellDisassemblyRecipe.HousingId || Slot.childItem != null)
+            return;
+        if (!_pageReset.Pending && ShellReady()) return;
+        try
+        {
+            CellPages.ResetEmpty(_host, _pageReset);
+        }
+        catch (Exception error)
+        {
+            _log.Error($"Digital Storage: empty cell reset failed ({error.GetType().Name}); reassembly is blocked.");
+        }
+    }
+
+    private void SyncTitle()
+    {
+        var window = _host.contentWindow;
+        window.SetTitle(_host.GetDisplayName(preferCustomName: true));
+        MachineryTitleFit.Fit(window);
     }
 
     private void CheckIntegrity()

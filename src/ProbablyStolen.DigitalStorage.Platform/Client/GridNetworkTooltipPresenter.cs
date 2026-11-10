@@ -32,13 +32,13 @@ internal sealed class GridNetworkTooltipPresenter
             return;
         }
 
-        if (item.identifier == StorageCellDisassemblyRecipe.CellId)
+        if (StorageCellTier.FromCellId(item.identifier) != null)
         {
             _cellTooltipPresenter.AddCellLore(builder, item);
             return;
         }
 
-        if (item.identifier == StorageComponent.ItemId)
+        if (StorageCellTier.FromComponentId(item.identifier) != null)
         {
             return;
         }
