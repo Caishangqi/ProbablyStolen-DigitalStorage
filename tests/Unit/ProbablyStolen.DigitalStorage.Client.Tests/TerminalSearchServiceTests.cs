@@ -78,6 +78,25 @@ public sealed class TerminalSearchServiceTests
     }
 
     [Test]
+    public void Search_PinyinAddon_RebuildsOnlyForChangedEnabledOptions()
+    {
+        var loads = 0;
+        using var addon = new PinyinSearchAddon(new SearchConfiguration(), () => loads++);
+        addon.LoadDictionary("测: ce4\n试: shi4\n");
+        Assert.That(loads, Is.EqualTo(1));
+        addon.Configure(new SearchConfiguration(enabled: false, zh2z: true));
+        addon.Configure(new SearchConfiguration(enabled: false, sh2s: true));
+        Assert.That(loads, Is.EqualTo(1));
+        addon.Configure(new SearchConfiguration(sh2s: true));
+        Assert.That(loads, Is.EqualTo(2));
+        Assert.That(addon.Matches("试", "si"), Is.True);
+        addon.Configure(new SearchConfiguration(sh2s: true, tags: SearchMode.Disabled, syntaxHighlighting: false));
+        addon.Configure(new SearchConfiguration(enabled: false, sh2s: true));
+        addon.Configure(new SearchConfiguration(sh2s: true));
+        Assert.That(loads, Is.EqualTo(2));
+    }
+
+    [Test]
     public void Search_PinyinAddon_MatchesToneAndMixedQueries()
     {
         const string dictionary = "测: ce4\n试: shi4\n材: cai2\n料: liao4\n重: zhong4, chong2\n庆: qing4\n";

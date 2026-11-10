@@ -38,11 +38,11 @@ internal readonly struct PinyinKeyboardOptions
 internal sealed class PinyinMatcher
 {
     private readonly PinIn _pinIn;
-    internal PinyinMatcher(string dictionary)
+    internal PinyinMatcher(string dictionary, SearchConfiguration configuration, Action? onDictionaryLoad = null)
     {
         if (string.IsNullOrWhiteSpace(dictionary)) throw new InvalidDataException("The pinyin dictionary is empty.");
-        _pinIn = new PinIn(new TextDictionaryLoader(dictionary));
-        _pinIn.Load();
+        _pinIn = new PinIn(new TextDictionaryLoader(dictionary, onDictionaryLoad));
+        Configure(configuration);
     }
     internal void Configure(SearchConfiguration configuration)
     {
@@ -54,9 +54,11 @@ internal sealed class PinyinMatcher
     private sealed class TextDictionaryLoader : IDictLoader
     {
         private readonly string _text;
-        internal TextDictionaryLoader(string text) => _text = text;
+        private readonly Action? _onLoad;
+        internal TextDictionaryLoader(string text, Action? onLoad) { _text = text; _onLoad = onLoad; }
         public void Load(Action<char, string[]> feed)
         {
+            _onLoad?.Invoke();
             foreach (var line in _text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;

@@ -27,8 +27,11 @@ terminal_storage_search_placeholder,Search items
 config_section_terminal_search,Terminal search
 terminal_search_keyboard_name,Pinyin keyboard
 terminal_search_keyboard_desc,Keyboard layout used for pinyin search.
-terminal_search_pinyin_enabled_name,Enable pinyin search
-terminal_search_pinyin_enabled_desc,Match Chinese text by pinyin and keyboard layout.
+terminal_search_pinyin_mode_name,Pinyin search
+terminal_search_pinyin_mode_desc,Auto enables pinyin for Chinese; On and Off override the language setting.
+terminal_search_pinyin_mode_option_auto,Auto
+terminal_search_pinyin_mode_option_on,On
+terminal_search_pinyin_mode_option_off,Off
 terminal_search_zh2z_name,zh to z fuzzy matching
 terminal_search_zh2z_desc,Allow zh and z to match.
 terminal_search_sh2s_name,sh to s fuzzy matching

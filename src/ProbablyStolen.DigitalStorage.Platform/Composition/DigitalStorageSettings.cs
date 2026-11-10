@@ -31,7 +31,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _showCellPages;
     private readonly ConfigEntry<PinyinKeyboard> _pinyinKeyboard;
-    private readonly ConfigEntry<bool> _pinyinEnabled;
+    private readonly ConfigEntry<PinyinSearchMode> _pinyinMode;
     private readonly ConfigEntry<bool> _zh2z;
     private readonly ConfigEntry<bool> _sh2s;
     private readonly ConfigEntry<bool> _ch2c;
@@ -44,6 +44,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     private readonly ConfigEntry<SearchMode> _descriptionSearchMode;
     private readonly ConfigEntry<SearchMode> _identifierSearchMode;
     private readonly ConfigEntry<bool> _searchHighlighting;
+    private bool _invalidPinyinModeLogged;
 
     internal DigitalStorageSettings(string modId, ModText text)
     {
@@ -82,7 +83,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             () => text.Get("terminal_diagnostics_name"), tooltip: () => text.Get("terminal_diagnostics_desc"));
         _pinyinKeyboard = config.DefineEnum("terminal_search_keyboard", PinyinKeyboard.Quanpin, search,
             () => text.Get("terminal_search_keyboard_name"), () => text.Get("terminal_search_keyboard_desc"));
-        _pinyinEnabled = DefineSearchBool(config, "terminal_search_pinyin_enabled", true, search, text, "pinyin_enabled");
+        _pinyinMode = config.DefineEnum(PinyinSearchModePolicy.Key, PinyinSearchMode.Auto, search,
+            () => text.Get("terminal_search_pinyin_mode_name"), () => text.Get("terminal_search_pinyin_mode_desc"));
         _zh2z = DefineSearchBool(config, "terminal_search_zh2z", false, search, text, "zh2z");
         _sh2s = DefineSearchBool(config, "terminal_search_sh2s", false, search, text, "sh2s");
         _ch2c = DefineSearchBool(config, "terminal_search_ch2c", false, search, text, "ch2c");
@@ -100,7 +102,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
             (_cellMaxPages, storage), (_engineerDailyChance, vendors),
             (_showCellPages, debug), (_terminalDiagnostics, debug),
-            (_pinyinKeyboard, search), (_pinyinEnabled, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
+            (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
             (_identifierSearchMode, search), (_searchHighlighting, search)
@@ -109,7 +111,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
         }
 
-        RefreshSectionNames();
     }
 
     /// <summary>
@@ -125,10 +126,21 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         }
     }
 
-    internal SearchConfiguration GetSearchConfiguration() => new(
-        _pinyinKeyboard.Value, _pinyinEnabled.Value, _zh2z.Value, _sh2s.Value, _ch2c.Value,
-        _ang2an.Value, _ing2in.Value, _eng2en.Value, _u2v.Value, _tagSearchMode.Value,
-        _typeSearchMode.Value, _descriptionSearchMode.Value, _identifierSearchMode.Value, _searchHighlighting.Value);
+    internal SearchConfiguration GetSearchConfiguration(string? confirmedLocale, Action<string>? warning = null)
+    {
+        var rawMode = _pinyinMode.Value;
+        var mode = PinyinSearchModePolicy.Normalize(rawMode);
+        if (mode != rawMode && !_invalidPinyinModeLogged)
+        {
+            _invalidPinyinModeLogged = true;
+            warning?.Invoke("Digital Storage: unknown pinyin search mode; using Auto.");
+        }
+        return new SearchConfiguration(
+            _pinyinKeyboard.Value, PinyinSearchModePolicy.IsEnabled(mode, confirmedLocale),
+            _zh2z.Value, _sh2s.Value, _ch2c.Value,
+            _ang2an.Value, _ing2in.Value, _eng2en.Value, _u2v.Value, _tagSearchMode.Value,
+            _typeSearchMode.Value, _descriptionSearchMode.Value, _identifierSearchMode.Value, _searchHighlighting.Value);
+    }
 
     private static ConfigEntry<bool> DefineSearchBool(ModConfig config, string key, bool initial, string section,
         ModText text, string suffix) => config.Define(key, initial, section,

@@ -27,8 +27,11 @@ terminal_storage_search_placeholder,搜索物品
 config_section_terminal_search,终端搜索
 terminal_search_keyboard_name,拼音键盘
 terminal_search_keyboard_desc,用于拼音搜索的键盘布局.
-terminal_search_pinyin_enabled_name,启用拼音搜索
-terminal_search_pinyin_enabled_desc,使用拼音和键盘布局匹配中文文本.
+terminal_search_pinyin_mode_name,拼音搜索
+terminal_search_pinyin_mode_desc,自动模式仅在中文语言下启用拼音; 开启和关闭会覆盖语言设置.
+terminal_search_pinyin_mode_option_auto,自动
+terminal_search_pinyin_mode_option_on,开启
+terminal_search_pinyin_mode_option_off,关闭
 terminal_search_zh2z_name,zh 到 z 模糊匹配
 terminal_search_zh2z_desc,允许 zh 和 z 相互匹配.
 terminal_search_sh2s_name,sh 到 s 模糊匹配

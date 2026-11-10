@@ -32,6 +32,9 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageVendors _vendors;
     private readonly TerminalSearchComposition _search;
     private readonly ItemTypeBackfill _typeBackfill;
+    private IDisposable? _localeRegistration;
+    private readonly PinyinLifecycleCoordinator _pinyinLifecycle;
+    private bool _assetsReady;
     private bool _isEnabled;
     private bool _isDisposed;
 
@@ -54,6 +57,9 @@ public sealed class PlatformComposition : IDisposable
         _appearance = appearance;
         _content = content;
         _pageAudit = pageAudit;
+        _pinyinLifecycle = new PinyinLifecycleCoordinator(
+            locale => _settings.GetSearchConfiguration(locale, message => _log.Error(message)),
+            _search.Update, _search.Service.Configuration.PinyinEnabled);
     }
 
     /// <summary>Creates the startup composition from the loader manifest.</summary>
@@ -90,7 +96,8 @@ public sealed class PlatformComposition : IDisposable
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
         var inventory = new DriveCellInventory(recipe);
         var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text);
-        var search = new TerminalSearchComposition(identity.Id, text, networkPowerSettings.GetSearchConfiguration(),
+        var search = new TerminalSearchComposition(identity.Id, text,
+            networkPowerSettings.GetSearchConfiguration(null, message => log.Error(message)),
             message => log.Error(message), registerSearchAddons);
         networkPowerSettings.ApplyStorageLimits();
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
@@ -136,6 +143,7 @@ public sealed class PlatformComposition : IDisposable
         {
             _content.Enable();
             _vendors.Enable();
+            _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
             ModHook.OnGameLoadedNormal += OnGameLoaded;
@@ -167,6 +175,8 @@ public sealed class PlatformComposition : IDisposable
         _isEnabled = false;
         _isDisposed = true;
         ModHook.OnModAssetsLoaded -= OnAssetsLoaded;
+        _localeRegistration?.Dispose();
+        _localeRegistration = null;
         ModHook.OnModConfigApplied -= OnConfigApplied;
         ModHook.OnGameLoadedNormal -= OnGameLoaded;
         ModHook.OnGameLoadedLate -= _pageAudit.Run;
@@ -186,13 +196,22 @@ public sealed class PlatformComposition : IDisposable
         PartitionConfigurationWindow.CloseCurrent();
     }
 
+    private void OnLocaleConfirmed(string? locale, bool settled)
+    {
+        if (!_isEnabled || _isDisposed) return;
+        _pinyinLifecycle.OnLocaleChanged(locale, settled);
+        if (!settled) return;
+        if (_assetsReady) _settings.RefreshSectionNames();
+        _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
+    }
+
     private void OnConfigApplied(string modId)
     {
         if (_isEnabled && string.Equals(modId, _modId, StringComparison.Ordinal))
         {
             _settings.ApplyStorageLimits();
-            _settings.RefreshSectionNames();
-            _search.Update(_settings.GetSearchConfiguration());
+            if (_assetsReady) _settings.RefreshSectionNames();
+            _pinyinLifecycle.OnConfigApplied();
             _log.Log("Digital Storage: configuration applied; open network views refresh now.");
             _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
         }
@@ -205,7 +224,8 @@ public sealed class PlatformComposition : IDisposable
             return;
         }
 
-        _search.LoadDictionary();
+        _assetsReady = true;
+        _search.MarkAssetsReady();
         _settings.RefreshSectionNames();
         ValidateResources();
     }

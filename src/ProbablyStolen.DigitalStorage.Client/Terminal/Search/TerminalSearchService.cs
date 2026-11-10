@@ -387,11 +387,16 @@ public sealed class PinyinSearchAddon : IDisposable
 {
     private PininSharp.PinyinMatcher? _matcher;
     private SearchConfiguration _configuration;
+    private SearchConfiguration? _appliedConfiguration;
+    private readonly Action? _onDictionaryLoad;
     private bool _disposed;
 
     /// <summary>Registers an initially unavailable matcher without reading resources during mod initialization.</summary>
     public PinyinSearchAddon(SearchConfiguration configuration) =>
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+
+    internal PinyinSearchAddon(SearchConfiguration configuration, Action onDictionaryLoad) : this(configuration) =>
+        _onDictionaryLoad = onDictionaryLoad ?? throw new ArgumentNullException(nameof(onDictionaryLoad));
 
     /// <summary>Loads a dictionary and prepares the selected keyboard and fuzzy rules.</summary>
     public PinyinSearchAddon(string dictionary, SearchConfiguration configuration) : this(configuration) =>
@@ -401,9 +406,10 @@ public sealed class PinyinSearchAddon : IDisposable
     public void LoadDictionary(string dictionary)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(PinyinSearchAddon));
-        var matcher = new PininSharp.PinyinMatcher(dictionary ?? throw new ArgumentNullException(nameof(dictionary)));
-        matcher.Configure(_configuration);
+        var matcher = new PininSharp.PinyinMatcher(dictionary ?? throw new ArgumentNullException(nameof(dictionary)),
+            _configuration, _onDictionaryLoad);
         _matcher = matcher;
+        _appliedConfiguration = _configuration;
     }
 
     /// <summary>Applies options immediately, or retains them until the dictionary is available.</summary>
@@ -411,9 +417,19 @@ public sealed class PinyinSearchAddon : IDisposable
     {
         if (_disposed) throw new ObjectDisposedException(nameof(PinyinSearchAddon));
         if (configuration == null) throw new ArgumentNullException(nameof(configuration));
-        _matcher?.Configure(configuration);
+        if (configuration.PinyinEnabled && _matcher != null &&
+            (_appliedConfiguration == null || !SamePinyinOptions(_appliedConfiguration, configuration)))
+        {
+            _matcher.Configure(configuration);
+            _appliedConfiguration = configuration;
+        }
         _configuration = configuration;
     }
+
+    private static bool SamePinyinOptions(SearchConfiguration left, SearchConfiguration right) =>
+        left.Keyboard == right.Keyboard && left.Zh2Z == right.Zh2Z && left.Sh2S == right.Sh2S &&
+        left.Ch2C == right.Ch2C && left.Ang2An == right.Ang2An && left.Ing2In == right.Ing2In &&
+        left.Eng2En == right.Eng2En && left.U2V == right.U2V;
 
     /// <summary>Checks pinyin only while enabled and after a dictionary has loaded.</summary>
     public bool Matches(string source, string query) => !_disposed && _configuration.PinyinEnabled &&
@@ -424,6 +440,7 @@ public sealed class PinyinSearchAddon : IDisposable
     {
         _disposed = true;
         _matcher = null;
+        _appliedConfiguration = null;
     }
 }
 

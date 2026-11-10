@@ -9,8 +9,9 @@ internal sealed class TerminalSearchComposition : IDisposable
     private readonly PinyinSearchAddon _pinyin;
     private readonly string _modId;
     private readonly Action<string> _log;
-    private bool _dictionaryAttempted;
     private readonly TerminalSearchService _service;
+    private readonly DictionaryLoadGate _dictionaryGate;
+    private SearchConfiguration _configuration;
     private bool _disposed;
 
     internal TerminalSearchComposition(string modId, ModText text, SearchConfiguration configuration, Action<string> log,
@@ -20,19 +21,20 @@ internal sealed class TerminalSearchComposition : IDisposable
         if (text == null) throw new ArgumentNullException(nameof(text));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _modId = modId;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         var registry = new SearchMatcherRegistry();
-        registry.RegisterField(new SearchFieldProvider("tags", document => document.TagNames, configuration => configuration.Tags));
-        registry.RegisterField(new SearchFieldProvider("types", document => document.ItemTypes, configuration => configuration.ItemTypes));
-        registry.RegisterField(new SearchFieldProvider("descriptions", document => document.Descriptions, configuration => configuration.Descriptions));
-        registry.RegisterField(new SearchFieldProvider("identifier", document => new[] { document.Identifier }, configuration => configuration.Identifiers));
+        registry.RegisterField(new SearchFieldProvider("tags", document => document.TagNames, config => config.Tags));
+        registry.RegisterField(new SearchFieldProvider("types", document => document.ItemTypes, config => config.ItemTypes));
+        registry.RegisterField(new SearchFieldProvider("descriptions", document => document.Descriptions, config => config.Descriptions));
+        registry.RegisterField(new SearchFieldProvider("identifier", document => new[] { document.Identifier }, config => config.Identifiers));
         registry.RegisterPrefix('#', "tags");
         registry.RegisterPrefix('@', "types");
         registry.RegisterPrefix('$', "descriptions");
         registry.RegisterPrefix('&', "identifier");
-        // The loader adds this mod's folder only after Init and OnEnable return. Register the stable
-        // delegate now, but defer all file reads until OnModAssetsLoaded (Steam build 26525552).
         _pinyin = new PinyinSearchAddon(configuration);
         registry.RegisterMatcher("pinyin", _pinyin.Matches);
+        _dictionaryGate = new DictionaryLoadGate(ReadDictionary);
+        _dictionaryGate.Update(configuration.PinyinEnabled);
 
         try
         {
@@ -41,27 +43,41 @@ internal sealed class TerminalSearchComposition : IDisposable
         }
         catch
         {
-            _pinyin?.Dispose();
+            _dictionaryGate.Dispose();
+            _pinyin.Dispose();
             throw;
         }
     }
 
     internal TerminalSearchService Service => _service;
 
-    internal void LoadDictionary()
+    internal void MarkAssetsReady()
     {
-        if (_disposed || _dictionaryAttempted) return;
-        _dictionaryAttempted = true;
+        if (_disposed) return;
+        if (_dictionaryGate.MarkAssetsReady() && !_disposed) _service.UpdateConfiguration(_configuration);
+    }
+
+    internal void Update(SearchConfiguration configuration)
+    {
+        if (_disposed) return;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _pinyin.Configure(configuration);
+        _dictionaryGate.Update(configuration.PinyinEnabled);
+        if (!_disposed) _service.UpdateConfiguration(configuration);
+    }
+
+    private void ReadDictionary()
+    {
         try
         {
             var dictionary = ModHelper.ReadModFileText(_modId, "Search/pinyin-dictionary.txt");
+            if (_disposed) return;
             if (string.IsNullOrWhiteSpace(dictionary))
             {
                 _log("Digital Storage: pinyin search disabled (dictionary missing or empty after mod assets loaded).");
                 return;
             }
             _pinyin.LoadDictionary(dictionary);
-            _service.UpdateConfiguration(_service.Configuration);
         }
         catch (Exception error)
         {
@@ -69,17 +85,11 @@ internal sealed class TerminalSearchComposition : IDisposable
         }
     }
 
-    internal void Update(SearchConfiguration configuration)
-    {
-        if (_disposed) return;
-        _pinyin.Configure(configuration);
-        _service.UpdateConfiguration(configuration);
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _pinyin?.Dispose();
+        _dictionaryGate.Dispose();
+        _pinyin.Dispose();
     }
 }

@@ -77,16 +77,42 @@ class ContentContractTests(unittest.TestCase):
                              source.index("internal TerminalSearchService Service")]
         self.assertNotIn("ReadModFileText", constructor)
         self.assertIn('registry.RegisterMatcher("pinyin", _pinyin.Matches)', constructor)
-        load = source[source.index("internal void LoadDictionary()"):
-                      source.index("internal void Update(")]
-        self.assertIn('ModHelper.ReadModFileText(_modId, "Search/pinyin-dictionary.txt")', load)
-        self.assertIn("_pinyin.LoadDictionary(dictionary)", load)
-        self.assertIn("_service.UpdateConfiguration(_service.Configuration)", load)
+        load = source[source.index("internal void MarkAssetsReady()"):
+                      source.index("    internal void Update(")]
+        self.assertIn("_dictionaryGate.MarkAssetsReady()", load)
+        self.assertIn("ReadModFileText(_modId, \"Search/pinyin-dictionary.txt\")", source)
+        self.assertNotIn("ReadModFileText", constructor)
         platform = (original / "PlatformComposition.cs").read_text(encoding="utf-8")
         callback = platform[platform.index("private void OnAssetsLoaded("):
                             platform.index("private void ValidateResources()")]
         self.assertIn("mod.Manifest.ID != _modId", callback)
-        self.assertIn("_search.LoadDictionary()", callback)
+        self.assertIn("_search.MarkAssetsReady()", callback)
+
+    def test_pinyin_mode_settings_and_localized_dropdown_preserve_native_indices(self):
+        original = REPOSITORY / "src" / self.platform.name
+        settings = (original / "Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")
+        self.assertIn('DefineEnum(PinyinSearchModePolicy.Key, PinyinSearchMode.Auto', settings)
+        self.assertIn("GetSearchConfiguration(string? confirmedLocale", settings)
+        self.assertNotIn("terminal_search_pinyin_enabled", settings)
+        dropdown = (original / "Composition/PinyinModeDropdown.cs").read_text(encoding="utf-8")
+        for gate in ("mod.Manifest.ID", "window.IsAlive", "entry.ValueType != typeof(PinyinSearchMode)",
+                     "HasCanonicalChoices(entry.Choices)", "element.dropdown == null"):
+            self.assertIn(gate, dropdown)
+        self.assertIn("var index = element.GetIndex()", dropdown)
+        self.assertIn("PinyinDropdownDisplay.Apply", dropdown)
+        self.assertIn("element.SetOptions(options)", dropdown)
+        self.assertIn("element.SetIndex(selectedIndex, notify: false)", dropdown)
+        self.assertIn("dropdown!.RefreshShownValue()", dropdown)
+        self.assertNotIn("entry.Choices =", dropdown)
+        english = read_localization(self.output / "Localization/en.csv")
+        chinese = read_localization(self.output / "Localization/zh.csv")
+        for suffix in ("auto", "on", "off"):
+            key = "terminal_search_pinyin_mode_option_" + suffix
+            self.assertTrue(english[key])
+            self.assertTrue(chinese[key])
+        patch = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Mod/Patches/ModConfigWindowPatch.cs").read_text(encoding="utf-8")
+        self.assertIn("HarmonyPatch(typeof(ModConfigWindow), nameof(ModConfigWindow.Open))", patch)
+        self.assertIn("PinyinModeDropdown.Localize(mod, __result)", patch)
 
     def test_assembled_cell_sprite_refreshes_live_view_without_move(self):
         appearance = (self.platform / "Content/ItemAppearance.cs").read_text(encoding="utf-8")

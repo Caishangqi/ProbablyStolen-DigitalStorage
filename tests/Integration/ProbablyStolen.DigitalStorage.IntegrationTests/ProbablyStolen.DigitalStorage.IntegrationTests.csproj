@@ -13,6 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinSearchMode.cs" Link="Composition\PinyinSearchMode.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\DictionaryLoadGate.cs" Link="Composition\DictionaryLoadGate.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\LocaleSelectionRouter.cs" Link="Composition\LocaleSelectionRouter.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinLifecycleCoordinator.cs" Link="Composition\PinyinLifecycleCoordinator.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinDropdownDisplay.cs" Link="Composition\PinyinDropdownDisplay.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeNetworkScanner.cs" Link="NativeNetwork\NativeNetworkScanner.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
