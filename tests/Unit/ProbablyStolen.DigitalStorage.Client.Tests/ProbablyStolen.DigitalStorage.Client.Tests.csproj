@@ -15,4 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\ProbablyStolen.DigitalStorage.Client\ProbablyStolen.DigitalStorage.Client.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\packaging\resources\Search\pinyin-dictionary.txt" Link="Resources\pinyin-dictionary.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

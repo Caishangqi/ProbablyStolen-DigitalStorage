@@ -61,6 +61,23 @@ public sealed class TerminalInventoryMonitor
     /// <summary>Checks a snapshot against the last accepted inventory and link state.</summary>
     public bool HasChanged(TerminalInventorySnapshot snapshot) => _current == null || !Equivalent(_current, snapshot);
 
+    /// <summary>Accepts a snapshot only after its display update succeeds, retaining retryability on failure.</summary>
+    public void ApplySnapshot(TerminalInventorySnapshot snapshot, Action updateDisplay)
+    {
+        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+        if (updateDisplay == null) throw new ArgumentNullException(nameof(updateDisplay));
+        try
+        {
+            updateDisplay();
+            Accept(snapshot);
+        }
+        catch
+        {
+            MarkDirty();
+            throw;
+        }
+    }
+
     /// <summary>Stores a fresh snapshot as the comparison baseline; it satisfies any pending dirty mark.</summary>
     public void Accept(TerminalInventorySnapshot snapshot)
     {
@@ -87,7 +104,8 @@ public sealed class TerminalInventoryMonitor
             if (!rightByKey.TryGetValue(entry.Key, out var other) || entry.Amount != other.Amount ||
                 !string.Equals(entry.DisplayName, other.DisplayName, StringComparison.Ordinal) ||
                 !string.Equals(entry.SpriteKey, other.SpriteKey, StringComparison.Ordinal) ||
-                entry.SpriteWidth != other.SpriteWidth || entry.SpriteHeight != other.SpriteHeight) return false;
+                entry.SpriteWidth != other.SpriteWidth || entry.SpriteHeight != other.SpriteHeight ||
+                !entry.Document.HasSameContent(other.Document)) return false;
         }
         return true;
     }

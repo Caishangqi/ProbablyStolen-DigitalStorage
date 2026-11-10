@@ -37,7 +37,7 @@ public sealed class ItemRepository : IItemRepository
 
         _entries[update.Serial] = update.What == null
             ? new InventoryEntryUpdate(current.Serial, current.What, update.StoredAmount, update.RequestableAmount,
-                update.Craftable, current.DisplayName, current.SpriteKey, current.SpriteWidth, current.SpriteHeight)
+                update.Craftable, current.DisplayName, current.SpriteKey, current.SpriteWidth, current.SpriteHeight, current.SearchDocument)
             : update;
     }
 
@@ -52,7 +52,7 @@ public sealed class ItemRepository : IItemRepository
                 var shown = _view[index];
                 if (_entries.TryGetValue(shown.Serial, out var current)) _view[index] = current;
                 else _view[index] = new InventoryEntryUpdate(shown.Serial, shown.What, 0, 0, false,
-                    shown.DisplayName, shown.SpriteKey, shown.SpriteWidth, shown.SpriteHeight);
+                    shown.DisplayName, shown.SpriteKey, shown.SpriteWidth, shown.SpriteHeight, shown.SearchDocument);
                 serials.Add(shown.Serial);
             }
             foreach (var entry in Sort(_entries.Values.Where(entry => !serials.Contains(entry.Serial))))

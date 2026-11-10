@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
@@ -119,16 +120,18 @@ public sealed class StorageScreenPage
 public sealed class StorageScreen
 {
     /// <summary>Creates a fixed-column screen model.</summary>
-    public StorageScreen(int columns = 7, int rows = 4, int cellPixels = 32)
+    public StorageScreen(int columns = 7, int rows = 4, int cellPixels = 32, TerminalSearchService? search = null)
     {
         if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));
         if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
         if (cellPixels <= 0) throw new ArgumentOutOfRangeException(nameof(cellPixels));
+        _search = search ?? CreateDefaultSearch();
         Columns = columns;
         Rows = rows;
         CellPixels = cellPixels;
     }
 
+    private readonly TerminalSearchService _search;
     private readonly List<TerminalEntry> _entries = new();
     private string _searchText = string.Empty;
     private int _scrollRow;
@@ -218,7 +221,7 @@ public sealed class StorageScreen
     /// <summary>Updates the search query and scrolls back to the first row.</summary>
     public void SetSearchText(string? searchText)
     {
-        _searchText = searchText?.Trim() ?? string.Empty;
+        _searchText = searchText ?? string.Empty;
         _scrollRow = 0;
     }
 
@@ -229,7 +232,7 @@ public sealed class StorageScreen
     public void ScrollBy(int rows) => SetScroll(_scrollRow + rows);
 
     /// <summary>Gets the number of rows the filtered results occupy.</summary>
-    public int GetTotalRows() => (_entries.Count(entry => entry.Matches(_searchText)) + Columns - 1) / Columns;
+    public int GetTotalRows() => (_entries.Count(Matches) + Columns - 1) / Columns;
 
     /// <summary>Gets AE2's <c>max(0, totalRows - visibleRows)</c>.</summary>
     public int GetMaxScroll() => Math.Max(0, GetTotalRows() - Rows);
@@ -237,7 +240,7 @@ public sealed class StorageScreen
     /// <summary>Gets the current view with fixed slot count and stable ordering.</summary>
     public StorageScreenPage GetPage()
     {
-        var filtered = _entries.Where(entry => entry.Matches(_searchText)).ToArray();
+        var filtered = _entries.Where(Matches).ToArray();
         var maxScroll = Math.Max(0, (filtered.Length + Columns - 1) / Columns - Rows);
         _scrollRow = Math.Min(_scrollRow, maxScroll);
         var slotCount = Columns * Rows;
@@ -252,6 +255,20 @@ public sealed class StorageScreen
             ? TerminalDisplayState.Empty
             : _baseState;
         return new StorageScreenPage(state, _searchText, _scrollRow, maxScroll, slots);
+    }
+
+    private bool Matches(TerminalEntry entry) => entry.Matches(_search, _searchText);
+
+    private static TerminalSearchService CreateDefaultSearch()
+    {
+        var registry = new SearchMatcherRegistry();
+        registry.RegisterField(new SearchFieldProvider("tags", document => document.TagNames, configuration => configuration.Tags));
+        registry.RegisterField(new SearchFieldProvider("types", document => document.ItemTypes, configuration => configuration.ItemTypes));
+        registry.RegisterField(new SearchFieldProvider("descriptions", document => document.Descriptions, configuration => configuration.Descriptions));
+        registry.RegisterField(new SearchFieldProvider("identifier", document => new[] { document.Identifier }, configuration => configuration.Identifiers));
+        registry.RegisterPrefix('#', "tags"); registry.RegisterPrefix('@', "types");
+        registry.RegisterPrefix('$', "descriptions"); registry.RegisterPrefix('&', "identifier");
+        return new TerminalSearchService(registry, new SearchConfiguration());
     }
 
     private void ClampScroll() => _scrollRow = Math.Min(_scrollRow, GetMaxScroll());

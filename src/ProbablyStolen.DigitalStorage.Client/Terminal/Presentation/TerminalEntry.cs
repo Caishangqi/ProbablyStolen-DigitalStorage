@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -9,7 +10,7 @@ public sealed class TerminalEntry
 {
     /// <summary>Creates a display entry or a zero-quantity placeholder retained during paused reordering.</summary>
     public TerminalEntry(ItemKey key, long amount, string displayName, string spriteKey,
-        int spriteWidth = 1, int spriteHeight = 1, long serial = -1)
+        int spriteWidth = 1, int spriteHeight = 1, long serial = -1, SearchDocument? document = null)
     {
         Key = key ?? throw new ArgumentNullException(nameof(key));
         if (amount < 0)
@@ -43,9 +44,10 @@ public sealed class TerminalEntry
         SpriteKey = spriteKey;
         SpriteWidth = spriteWidth;
         SpriteHeight = spriteHeight;
+        Document = document ?? new SearchDocument(displayName, key.Identifier);
     }
 
-    /// <summary>Gets the menu serial captured for this view entry, or -1 before menu synchronization.</summary>
+    /// <summary>Gets the menu serial captured by this view entry, or -1 before menu synchronization.</summary>
     public long Serial { get; }
 
     /// <summary>Gets the authoritative storage identity.</summary>
@@ -65,6 +67,9 @@ public sealed class TerminalEntry
 
     /// <summary>Gets the source sprite height in pixels.</summary>
     public int SpriteHeight { get; }
+
+    /// <summary>Gets detached searchable metadata captured with the terminal snapshot.</summary>
+    public SearchDocument Document { get; }
 
     /// <summary>Gets a sort key that follows identity order when compared using ordinal string comparison.</summary>
     public string GetIdentitySortKey() => BuildIdentitySortKey(Key);
@@ -106,15 +111,10 @@ public sealed class TerminalEntry
         builder.Append('\0');
     }
 
-    /// <summary>Checks the user query against display and identity text.</summary>
-    public bool Matches(string query)
+    /// <summary>Checks the detached document against the configured terminal search service.</summary>
+    public bool Matches(TerminalSearchService service, string query)
     {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return true;
-        }
-
-        return DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            Key.Identifier.Contains(query, StringComparison.OrdinalIgnoreCase);
+        if (service == null) throw new ArgumentNullException(nameof(service));
+        return service.Matches(Document, query);
     }
 }

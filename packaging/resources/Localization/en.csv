@@ -24,6 +24,35 @@ terminal_storage_whole_stack_only,Drag storage currently requires a whole stack.
 terminal_diagnostics_name,Terminal diagnostics
 terminal_diagnostics_desc,Write bounded UI layer and drag event diagnostics to Player.log. Item names and saved state are excluded.
 terminal_storage_search_placeholder,Search items
+config_section_terminal_search,Terminal search
+terminal_search_keyboard_name,Pinyin keyboard
+terminal_search_keyboard_desc,Keyboard layout used for pinyin search.
+terminal_search_pinyin_enabled_name,Enable pinyin search
+terminal_search_pinyin_enabled_desc,Match Chinese text by pinyin and keyboard layout.
+terminal_search_zh2z_name,zh to z fuzzy matching
+terminal_search_zh2z_desc,Allow zh and z to match.
+terminal_search_sh2s_name,sh to s fuzzy matching
+terminal_search_sh2s_desc,Allow sh and s to match.
+terminal_search_ch2c_name,ch to c fuzzy matching
+terminal_search_ch2c_desc,Allow ch and c to match.
+terminal_search_ang2an_name,ang to an fuzzy matching
+terminal_search_ang2an_desc,Allow ang and an to match.
+terminal_search_ing2in_name,ing to in fuzzy matching
+terminal_search_ing2in_desc,Allow ing and in to match.
+terminal_search_eng2en_name,eng to en fuzzy matching
+terminal_search_eng2en_desc,Allow eng and en to match.
+terminal_search_u2v_name,u to v fuzzy matching
+terminal_search_u2v_desc,Allow u and v to match.
+terminal_search_tags_name,Tag search mode
+terminal_search_tags_desc,Search enabled tag names and keys.
+terminal_search_types_name,Item type search mode
+terminal_search_types_desc,Search item type names.
+terminal_search_descriptions_name,Description search mode
+terminal_search_descriptions_desc,Search short descriptions; long descriptions and flavor text.
+terminal_search_identifiers_name,Identifier search mode
+terminal_search_identifiers_desc,Search item identifiers.
+terminal_search_highlighting_name,Search syntax highlighting
+terminal_search_highlighting_desc,Color query syntax without changing the raw input.
 terminal_storage_loading,Loading inventory...
 terminal_storage_offline,Network offline
 terminal_storage_empty,No matching items

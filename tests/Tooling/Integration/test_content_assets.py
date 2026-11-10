@@ -29,7 +29,8 @@ class ContentContractTests(unittest.TestCase):
         (self.root / catalog).parent.mkdir(parents=True)
         shutil.copy2(REPOSITORY / catalog, self.root / catalog)
         self.output = self.root / "resources"
-        shutil.copytree(REPOSITORY / "packaging/resources/Localization", self.output / "Localization")
+        for name in ("Localization", "Search", "Licenses"):
+            shutil.copytree(REPOSITORY / "packaging/resources" / name, self.output / name)
 
     def test_tier_vendor_value_and_resource_wiring(self):
         vendor = (self.platform / "Content/StorageVendors.cs").read_text(encoding="utf-8")
@@ -55,6 +56,37 @@ class ContentContractTests(unittest.TestCase):
 
     def test_actual_contract_and_resources_pass(self):
         check_content(self.root, self.output)
+
+    def test_missing_search_resources_are_rejected(self):
+        for name in ("Search/pinyin-dictionary.txt", "Licenses/PininSharp-LICENSE.txt",
+                     "Licenses/pinyin-data-LICENSE.txt", "Licenses/Rime-Terra-Pinyin-LICENSE.txt"):
+            with self.subTest(resource=name):
+                path = self.output / name
+                content = path.read_bytes()
+                path.unlink()
+                try:
+                    with self.assertRaisesRegex(ContentValidationError, "Required search resource"):
+                        check_content(self.root, self.output)
+                finally:
+                    path.write_bytes(content)
+
+    def test_pinyin_dictionary_read_is_deferred_until_own_mod_assets_are_loaded(self):
+        original = REPOSITORY / "src" / self.platform.name / "Composition"
+        source = (original / "TerminalSearchComposition.cs").read_text(encoding="utf-8")
+        constructor = source[source.index("internal TerminalSearchComposition("):
+                             source.index("internal TerminalSearchService Service")]
+        self.assertNotIn("ReadModFileText", constructor)
+        self.assertIn('registry.RegisterMatcher("pinyin", _pinyin.Matches)', constructor)
+        load = source[source.index("internal void LoadDictionary()"):
+                      source.index("internal void Update(")]
+        self.assertIn('ModHelper.ReadModFileText(_modId, "Search/pinyin-dictionary.txt")', load)
+        self.assertIn("_pinyin.LoadDictionary(dictionary)", load)
+        self.assertIn("_service.UpdateConfiguration(_service.Configuration)", load)
+        platform = (original / "PlatformComposition.cs").read_text(encoding="utf-8")
+        callback = platform[platform.index("private void OnAssetsLoaded("):
+                            platform.index("private void ValidateResources()")]
+        self.assertIn("mod.Manifest.ID != _modId", callback)
+        self.assertIn("_search.LoadDictionary()", callback)
 
     def test_assembled_cell_sprite_refreshes_live_view_without_move(self):
         appearance = (self.platform / "Content/ItemAppearance.cs").read_text(encoding="utf-8")

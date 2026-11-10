@@ -1,4 +1,5 @@
 using System;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -9,7 +10,7 @@ public sealed class InventoryEntryUpdate
     /// <summary>Creates a complete entry or an incremental update for a previous serial.</summary>
     public InventoryEntryUpdate(long serial, ItemKey? what, long storedAmount, long requestableAmount = 0,
         bool craftable = false, string? displayName = null, string? spriteKey = null, int spriteWidth = 1,
-        int spriteHeight = 1)
+        int spriteHeight = 1, SearchDocument? searchDocument = null)
     {
         Serial = serial;
         What = what;
@@ -20,6 +21,7 @@ public sealed class InventoryEntryUpdate
         SpriteKey = spriteKey;
         SpriteWidth = spriteWidth;
         SpriteHeight = spriteHeight;
+        SearchDocument = searchDocument;
     }
 
     /// <summary>Gets the stable identifier for this key during the menu session.</summary>
@@ -49,6 +51,9 @@ public sealed class InventoryEntryUpdate
     /// <summary>Gets the source sprite height.</summary>
     public int SpriteHeight { get; }
 
+    /// <summary>Gets detached searchable metadata captured with the complete update.</summary>
+    public SearchDocument? SearchDocument { get; }
+
     /// <summary>Returns whether this entry represents stored, requestable or craftable content.</summary>
     public bool IsMeaningful() => StoredAmount > 0 || RequestableAmount > 0 || Craftable;
 
@@ -57,6 +62,6 @@ public sealed class InventoryEntryUpdate
         if (What is not ItemKey itemKey ||
             string.IsNullOrWhiteSpace(DisplayName) || string.IsNullOrWhiteSpace(SpriteKey))
             throw new InvalidOperationException("The terminal repository entry is incomplete for display.");
-        return new TerminalEntry(itemKey, StoredAmount, DisplayName, SpriteKey, SpriteWidth, SpriteHeight, Serial);
+        return new TerminalEntry(itemKey, StoredAmount, DisplayName, SpriteKey, SpriteWidth, SpriteHeight, Serial, SearchDocument);
     }
 }

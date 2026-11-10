@@ -24,6 +24,35 @@ terminal_storage_whole_stack_only,拖入目前需要整个堆叠. 所选部分�
 terminal_diagnostics_name,终端诊断日志
 terminal_diagnostics_desc,将限量的 UI 层级和拖拽事件写入 Player.log. 不记录物品名称或保存状态.
 terminal_storage_search_placeholder,搜索物品
+config_section_terminal_search,终端搜索
+terminal_search_keyboard_name,拼音键盘
+terminal_search_keyboard_desc,用于拼音搜索的键盘布局.
+terminal_search_pinyin_enabled_name,启用拼音搜索
+terminal_search_pinyin_enabled_desc,使用拼音和键盘布局匹配中文文本.
+terminal_search_zh2z_name,zh 到 z 模糊匹配
+terminal_search_zh2z_desc,允许 zh 和 z 相互匹配.
+terminal_search_sh2s_name,sh 到 s 模糊匹配
+terminal_search_sh2s_desc,允许 sh 和 s 相互匹配.
+terminal_search_ch2c_name,ch 到 c 模糊匹配
+terminal_search_ch2c_desc,允许 ch 和 c 相互匹配.
+terminal_search_ang2an_name,ang 到 an 模糊匹配
+terminal_search_ang2an_desc,允许 ang 和 an 相互匹配.
+terminal_search_ing2in_name,ing 到 in 模糊匹配
+terminal_search_ing2in_desc,允许 ing 和 in 相互匹配.
+terminal_search_eng2en_name,eng 到 en 模糊匹配
+terminal_search_eng2en_desc,允许 eng 和 en 相互匹配.
+terminal_search_u2v_name,u 到 v 模糊匹配
+terminal_search_u2v_desc,允许 u 和 v 相互匹配.
+terminal_search_tags_name,标签搜索模式
+terminal_search_tags_desc,搜索已启用的标签名称和键.
+terminal_search_types_name,物品类型搜索模式
+terminal_search_types_desc,搜索物品类型名称.
+terminal_search_descriptions_name,描述搜索模式
+terminal_search_descriptions_desc,搜索简短描述、完整描述和风味文本.
+terminal_search_identifiers_name,标识符搜索模式
+terminal_search_identifiers_desc,搜索物品标识符.
+terminal_search_highlighting_name,搜索语法高亮
+terminal_search_highlighting_desc,为查询语法着色,不改变原始输入.
 terminal_storage_loading,正在加载库存...
 terminal_storage_offline,网络离线
 terminal_storage_empty,没有匹配物品

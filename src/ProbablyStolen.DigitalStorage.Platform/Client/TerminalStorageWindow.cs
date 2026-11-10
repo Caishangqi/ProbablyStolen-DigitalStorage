@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -35,7 +37,12 @@ internal sealed class TerminalStorageWindow
     private readonly Func<bool> _diagnosticsEnabled;
     private readonly Action<string> _writeDiagnostic;
     private TerminalDiagnostics? _diagnostics;
-    private readonly StorageScreen _screen = new(Columns, TerminalWindowMetrics.Rows, CellPixels);
+    private readonly StorageScreen _screen;
+    private readonly TerminalSearchService _search;
+    private long _searchRevision;
+    private readonly TerminalSnapshotCache<SlotPicture> _pictures;
+    private readonly HashSet<ItemKey> _pictureFailuresLogged = new();
+    private TMP_InputField? _searchInput;
     private int _rows = TerminalWindowMetrics.Rows;
     private TerminalScrollbar? _scrollbar;
     private readonly StorageMenu _menu = new();
@@ -52,6 +59,7 @@ internal sealed class TerminalStorageWindow
     private static readonly TooltipSideBox HintBox = new();
     private RichText? _hintText;
     private CustomUIWindow? _window;
+    private TerminalInputHighlighter? _inputHighlighter;
     private CustomUIElement? _status;
     private CustomUIElement?[] _buttons = Array.Empty<CustomUIElement?>();
     private Image?[] _icons = Array.Empty<Image?>();
@@ -69,7 +77,7 @@ internal sealed class TerminalStorageWindow
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
         Func<GameItem, int, bool> canStore, Func<ItemKey, GameItem?> findSample,
         Func<bool> diagnosticsEnabled, Action<string> writeDiagnostic,
-        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork)
+        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search)
     {
         _subscribeNetwork = subscribeNetwork ?? throw new ArgumentNullException(nameof(subscribeNetwork));
         _findSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
@@ -84,6 +92,9 @@ internal sealed class TerminalStorageWindow
         _canStore = canStore ?? throw new ArgumentNullException(nameof(canStore));
         _diagnosticsEnabled = diagnosticsEnabled;
         _writeDiagnostic = writeDiagnostic;
+        _search = search ?? throw new ArgumentNullException(nameof(search));
+        _screen = new StorageScreen(Columns, TerminalWindowMetrics.Rows, CellPixels, _search);
+        _pictures = new TerminalSnapshotCache<SlotPicture>(CapturePicture, PictureCaptureFailed);
     }
 
     /// <summary>Makes this window the one that opens for the terminal, in place of its native machinery window.</summary>
@@ -179,6 +190,9 @@ internal sealed class TerminalStorageWindow
                 _screen.SetSearchText(query);
                 Refresh();
             });
+        _searchInput = builder.Last.input;
+        _inputHighlighter = _searchInput == null ? null : new TerminalInputHighlighter(_searchInput, _search,
+            query => _menu.GetEntries().Any(entry => entry.Matches(_search, query)));
         SetControlSize(builder.Last, bodyWidth - TerminalWindowMetrics.ToolbarButton - gap);
         builder.End();
 
@@ -496,8 +510,40 @@ internal sealed class TerminalStorageWindow
         return view;
     }
 
-    /// <summary>Shows the game's current picture of the entry's sample, or the plain item sprite when none is available.</summary>
-    private void SyncSlotPicture(int index, TerminalEntry? entry, bool redraw)
+    private sealed class SlotPicture
+    {
+        internal SlotPicture(NativeItemView.Picture? layers, Sprite? fallback) { Layers = layers; Fallback = fallback; }
+        internal NativeItemView.Picture? Layers { get; }
+        internal Sprite? Fallback { get; }
+    }
+
+    private SlotPicture CapturePicture(TerminalEntry entry)
+    {
+        var sample = _findSample(entry.Key) as GameItemElement;
+        NativeItemView.Picture? layers = null;
+        if (sample != null && !sample.IsDestroyed())
+        {
+            NativeItemView.Redraw(sample);
+            layers = NativeItemView.Capture(sample);
+        }
+        return new SlotPicture(layers, GetSprite(entry.SpriteKey));
+    }
+
+    private SlotPicture PictureCaptureFailed(TerminalEntry entry, Exception error)
+    {
+        if (_pictureFailuresLogged.Add(entry.Key))
+        {
+            try { _writeDiagnostic($"Digital Storage: terminal picture unavailable ({error.GetType().Name}); using sprite fallback."); }
+            catch { /* A diagnostic callback cannot block an inventory display update. */ }
+        }
+        Sprite? fallback = null;
+        try { fallback = GetSprite(entry.SpriteKey); }
+        catch { /* A missing atlas leaves only the quantity badge, without hiding inventory. */ }
+        return new SlotPicture(null, fallback);
+    }
+
+    /// <summary>Renders only snapshot-time cached pictures during filtering and scrolling.</summary>
+    private void SyncSlotPicture(int index, TerminalEntry? entry)
     {
         var view = index < _views.Length ? _views[index] : null;
         var layers = index < _viewLayers.Length ? _viewLayers[index] : null;
@@ -509,14 +555,13 @@ internal sealed class TerminalStorageWindow
             return;
         }
 
-        var sample = _findSample(entry.Key) as GameItemElement;
-        if (redraw && sample != null && !sample.IsDestroyed()) NativeItemView.Redraw(sample);
-        var mirrored = view != null && layers != null && sample != null && !sample.IsDestroyed() &&
-            NativeItemView.Sync(view, layers, sample);
+        var picture = _pictures.Get(entry.Key);
+        var mirrored = view != null && layers != null && picture?.Layers != null &&
+            NativeItemView.Sync(view, layers, picture.Layers);
         if (!mirrored && layers != null) NativeItemView.Clear(layers);
         if (icon != null)
         {
-            icon.sprite = mirrored ? null : GetSprite(entry.SpriteKey);
+            icon.sprite = mirrored ? null : picture?.Fallback;
             icon.enabled = !mirrored && icon.sprite != null;
         }
     }
@@ -629,6 +674,12 @@ internal sealed class TerminalStorageWindow
     private void PollSnapshot()
     {
         if (_window == null || !IsCurrentSession()) return;
+        if (_searchRevision != _search.ConfigurationRevision)
+        {
+            _searchRevision = _search.ConfigurationRevision;
+            Refresh();
+            _inputHighlighter?.Refresh();
+        }
         UpdateHoverTooltip();
         ApplyWheel();
         var viewChanged = _menu.SetPaused(IsShiftHeld());
@@ -680,10 +731,18 @@ internal sealed class TerminalStorageWindow
         // Stored items may have moved; the next hover reads a fresh sample.
         _hoverKey = null;
         _hoverSample = null;
-        _menu.BroadcastChanges(snapshot);
-        _inventoryMonitor.Accept(snapshot);
-        _storageUnavailable = snapshot.StorageUnavailable;
-        ApplyMenuView(preserveView);
+        var observedSnapshot = snapshot;
+        _inventoryMonitor.ApplySnapshot(observedSnapshot, () =>
+        {
+            var entries = snapshot.Entries.Select(entry => new TerminalEntry(entry.Key, entry.Amount, entry.DisplayName,
+                entry.SpriteKey, entry.SpriteWidth, entry.SpriteHeight, entry.Serial, _search.PrepareDocument(entry.Document))).ToArray();
+            snapshot = new TerminalInventorySnapshot(snapshot.Online, entries, snapshot.StorageUnavailable);
+            _pictures.Accept(snapshot.Entries);
+            _menu.BroadcastChanges(snapshot);
+            _storageUnavailable = snapshot.StorageUnavailable;
+            ApplyMenuView(preserveView);
+            _inputHighlighter?.Refresh();
+        });
     }
 
     private void ApplyMenuView(bool preserveView)
@@ -753,7 +812,7 @@ internal sealed class TerminalStorageWindow
         }
 
         // Keep the hovered picture live (animation frames, growing crops); other slots update on each refresh.
-        SyncSlotPicture(slotIndex, entry, redraw: false);
+        SyncSlotPicture(slotIndex, entry);
 
         if (!entry.Key.Equals(_hoverKey))
         {
@@ -770,6 +829,13 @@ internal sealed class TerminalStorageWindow
         {
             HideHoverTooltip();
             return;
+        }
+
+        if (slotIndex >= 0 && slotIndex < _views.Length && _views[slotIndex] != null)
+        {
+            var mirrored = NativeItemView.Sync(_views[slotIndex]!, _viewLayers[slotIndex], _hoverSample);
+            if (mirrored && _icons[slotIndex] != null) _icons[slotIndex]!.enabled = false;
+            if (!mirrored) SyncSlotPicture(slotIndex, entry);
         }
 
         // Rebuild every frame like ItemTooltipHandler: GetTooltip fires ModHook.OnCreateTooltip*, and mods that add
@@ -850,6 +916,11 @@ internal sealed class TerminalStorageWindow
     private void ClearControls()
     {
         HideHoverTooltip();
+        _inputHighlighter?.Dispose();
+        _inputHighlighter = null;
+        _searchInput = null;
+        _pictures.Clear();
+        _pictureFailuresLogged.Clear();
         _window = null;
         _dropHighlight = null;
         _slotRoot = null;
@@ -906,7 +977,7 @@ internal sealed class TerminalStorageWindow
                     button.button.interactable = false;
                 }
 
-                SyncSlotPicture(index, null, redraw: false);
+                SyncSlotPicture(index, null);
                 badge?.SetVisible(false);
                 continue;
             }
@@ -919,7 +990,7 @@ internal sealed class TerminalStorageWindow
                 button.button.interactable = slot.Entry.Amount > 0;
             }
 
-            SyncSlotPicture(index, slot.Entry.Amount > 0 ? slot.Entry : null, redraw: true);
+            SyncSlotPicture(index, slot.Entry.Amount > 0 ? slot.Entry : null);
             badge?.SetVisible(true).SetText(slot.QuantityBadge);
         }
 

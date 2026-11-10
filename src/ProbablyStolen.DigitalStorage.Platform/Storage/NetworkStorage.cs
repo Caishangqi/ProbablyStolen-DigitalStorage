@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
@@ -366,8 +367,14 @@ internal sealed class NetworkStorage
     {
         var name = string.IsNullOrWhiteSpace(sample.name) ? sample.identifier : sample.name;
         var sprite = $"{sample.spriteAtlasPath}|{sample.spritePath}";
+        var tags = sample.state?.dict == null ? Array.Empty<string>() : sample.state.dict
+            .Where(pair => pair.Value != null && pair.Value.valueEnabled)
+            .SelectMany(pair => new[] { pair.Key, pair.Value.identifier, pair.Value.identifierName })
+            .Where(value => !string.IsNullOrWhiteSpace(value));
+        var document = new SearchDocument(name, string.Join(" ", new[] { sample.identifier, sample.identifierName }), tags,
+            sample.itemTypes, new[] { sample.shortDescription, sample.longDescription, sample.flavorText });
         return new TerminalEntry(key, amount, string.IsNullOrWhiteSpace(name) ? "?" : name, sprite,
-            Math.Max(1, sample.shape.globalWidth), Math.Max(1, sample.shape.globalHeight));
+            Math.Max(1, sample.shape.globalWidth), Math.Max(1, sample.shape.globalHeight), document: document);
     }
 
     private enum StoreRejection

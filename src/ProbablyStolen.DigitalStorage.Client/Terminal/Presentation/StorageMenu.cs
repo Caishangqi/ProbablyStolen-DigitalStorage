@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -155,10 +156,11 @@ public sealed class StorageMenu
 
     private static InventoryEntryUpdate CreateEntry(long serial, TerminalEntry entry) =>
         new(serial, entry.Key, entry.Amount, displayName: entry.DisplayName, spriteKey: entry.SpriteKey,
-            spriteWidth: entry.SpriteWidth, spriteHeight: entry.SpriteHeight);
+            spriteWidth: entry.SpriteWidth, spriteHeight: entry.SpriteHeight, searchDocument: entry.Document);
 
     private static bool Equivalent(TerminalEntry left, TerminalEntry right) =>
         left.Amount == right.Amount && string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal) &&
         string.Equals(left.SpriteKey, right.SpriteKey, StringComparison.Ordinal) &&
-        left.SpriteWidth == right.SpriteWidth && left.SpriteHeight == right.SpriteHeight;
+        left.SpriteWidth == right.SpriteWidth && left.SpriteHeight == right.SpriteHeight &&
+        left.Document.HasSameContent(right.Document);
 }

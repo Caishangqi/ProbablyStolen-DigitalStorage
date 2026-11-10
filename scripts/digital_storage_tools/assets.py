@@ -289,6 +289,21 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_partition_none", "terminal_partition_label",
         "terminal_hint_title", "terminal_hint_left", "terminal_hint_right", "terminal_hint_shift",
         "config_section_power", "config_section_storage", "config_section_debug",
+        "config_section_terminal_search",
+        "terminal_search_keyboard_name", "terminal_search_keyboard_desc",
+        "terminal_search_pinyin_enabled_name", "terminal_search_pinyin_enabled_desc",
+        "terminal_search_zh2z_name", "terminal_search_zh2z_desc",
+        "terminal_search_sh2s_name", "terminal_search_sh2s_desc",
+        "terminal_search_ch2c_name", "terminal_search_ch2c_desc",
+        "terminal_search_ang2an_name", "terminal_search_ang2an_desc",
+        "terminal_search_ing2in_name", "terminal_search_ing2in_desc",
+        "terminal_search_eng2en_name", "terminal_search_eng2en_desc",
+        "terminal_search_u2v_name", "terminal_search_u2v_desc",
+        "terminal_search_tags_name", "terminal_search_tags_desc",
+        "terminal_search_types_name", "terminal_search_types_desc",
+        "terminal_search_descriptions_name", "terminal_search_descriptions_desc",
+        "terminal_search_identifiers_name", "terminal_search_identifiers_desc",
+        "terminal_search_highlighting_name", "terminal_search_highlighting_desc",
         "storage_cell_max_pages_name", "storage_cell_max_pages_desc",
         "debug_show_cell_pages_name", "debug_show_cell_pages_desc",
         "priority_configure", "priority_title", "priority_desc", "priority_invalid",
@@ -298,6 +313,14 @@ def check_content(project: Path, output: Path) -> None:
     ))
     if (platform / "Diagnostics" / "ItemCommands.cs").exists():
         raise ContentValidationError("Removed custom command source must not be present.")
+    for resource in ("Search/pinyin-dictionary.txt", "Licenses/PininSharp-LICENSE.txt",
+                     "Licenses/pinyin-data-LICENSE.txt", "Licenses/Rime-Terra-Pinyin-LICENSE.txt"):
+        path = plain_path(output / resource)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ContentValidationError(f"Required search resource is missing or empty: {resource}")
+    dictionary = (output / "Search/pinyin-dictionary.txt").read_text(encoding="utf-8")
+    if "材: cai2" not in dictionary or "重: zhong4, chong2" not in dictionary:
+        raise ContentValidationError("Pinyin dictionary content is invalid")
     languages = [read_localization(output / "Localization" / (language + ".csv")) for language in ("en", "zh")]
     for language in languages:
         if set(language) != keys:

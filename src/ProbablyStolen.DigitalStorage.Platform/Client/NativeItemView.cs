@@ -21,20 +21,28 @@ internal static class NativeItemView
     internal static void Redraw(GameItemElement item) => item.ValidateSelect(updateBackground: false);
 
     /// <summary>Copies the item's current layers into <paramref name="container"/>, fitted and centred. Returns false when nothing could be copied.</summary>
-    internal static bool Sync(RectTransform container, List<Image> pool, GameItemElement item)
+    internal static bool Sync(RectTransform container, List<Image> pool, GameItemElement item) =>
+        Sync(container, pool, Capture(item));
+
+    /// <summary>Captures finished layers without retaining the native item or its image components.</summary>
+    internal static Picture Capture(GameItemElement item)
     {
         var rotator = item.rotator?.rectTransform;
         if (rotator == null)
         {
-            Hide(pool, 0);
-            return false;
+            return new Picture(new List<Layer>());
         }
 
-        var layers = Collect(rotator, item.inner?.rectTransform);
+        return new Picture(Collect(rotator, item.inner?.rectTransform));
+    }
+
+    /// <summary>Renders a captured picture without accessing native items.</summary>
+    internal static bool Sync(RectTransform container, List<Image> pool, Picture picture)
+    {
+        var layers = picture.Layers;
         if (layers.Count == 0)
         {
             Hide(pool, 0);
-            LastSummary = $"children={rotator.childCount} mirrored=0";
             return false;
         }
 
@@ -66,11 +74,11 @@ internal static class NativeItemView
         {
             var layer = layers[index];
             var copy = Take(frame, pool, index);
-            copy.sprite = layer.Source.sprite;
+            copy.sprite = layer.Sprite;
             // Native item layers are Image.Type.Tiled at their native size; tiled drawing ignores the scaled-down
             // rect and showed only a corner of the sprite, so the copies stretch the sprite instead.
             copy.type = Image.Type.Simple;
-            copy.color = layer.Source.color;
+            copy.color = layer.Color;
             copy.preserveAspect = false;
             var rect = copy.rectTransform;
             var half = layer.Size * 0.5f;
@@ -128,7 +136,7 @@ internal static class NativeItemView
             var centre = (Vector2)(child.localPosition +
                 child.localRotation * Vector3.Scale(child.rect.center, localScale));
             var size = new Vector2(child.rect.width * Mathf.Abs(localScale.x), child.rect.height * Mathf.Abs(localScale.y));
-            layers.Add(new Layer(source, centre, size, child.localRotation));
+            layers.Add(new Layer(source.sprite, source.color, centre, size, child.localRotation));
         }
 
         return layers;
@@ -178,17 +186,26 @@ internal static class NativeItemView
         }
     }
 
-    private readonly struct Layer
+    internal sealed class Picture
     {
-        internal Layer(Image source, Vector2 centre, Vector2 size, Quaternion rotation)
+        internal Picture(List<Layer> layers) => Layers = layers.AsReadOnly();
+        internal IReadOnlyList<Layer> Layers { get; }
+    }
+
+    internal readonly struct Layer
+    {
+        internal Layer(Sprite sprite, Color color, Vector2 centre, Vector2 size, Quaternion rotation)
         {
-            Source = source;
+            Sprite = sprite;
+            Color = color;
             Centre = centre;
             Size = size;
             Rotation = rotation;
         }
 
-        internal Image Source { get; }
+        internal Sprite Sprite { get; }
+
+        internal Color Color { get; }
 
         internal Vector2 Centre { get; }
 

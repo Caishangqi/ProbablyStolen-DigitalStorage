@@ -49,6 +49,10 @@ LEGACY_RESOURCE_FILES = (
 RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
     *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
       for prefix in ("item_storage_cell", "cell_component")),
+    "Search/pinyin-dictionary.txt",
+    "Licenses/PininSharp-LICENSE.txt",
+    "Licenses/pinyin-data-LICENSE.txt",
+    "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
 )
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
 # An installation made before the Platform assembly rename has the current 13-file layout with the old
@@ -59,9 +63,18 @@ RENAMED_PLATFORM_ASSEMBLIES = tuple(
 )
 RENAMED_PLATFORM_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
 PREVIOUS_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
+TIER_RESOURCE_FILES = tuple(
+    f"Textures/Items/{prefix}_{tier}.png"
+    for tier in ("4k", "16k", "64k", "256k")
+    for prefix in ("item_storage_cell", "cell_component")
+)
+PREVIOUS_TIER_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
+RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
 # Each known on-disk layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
     ("current21", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("previous21", PREVIOUS_TIER_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("previous21-renamed", RENAMED_PLATFORM_TIER_FILES, LEGACY_PLATFORM_ASSEMBLY),
     ("current13", PREVIOUS_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("old13", RENAMED_PLATFORM_FILES, LEGACY_PLATFORM_ASSEMBLY),
     ("previous11", PREVIOUS_FILES, LEGACY_PLATFORM_ASSEMBLY),
@@ -263,7 +276,7 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break

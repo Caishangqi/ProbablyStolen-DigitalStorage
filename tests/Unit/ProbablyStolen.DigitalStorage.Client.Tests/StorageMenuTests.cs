@@ -39,6 +39,23 @@ public sealed class StorageMenuTests
     }
 
     [Test]
+    public void SearchDocument_SurvivesSnapshotQuantityDeltaAndPausedRemoval()
+    {
+        var document = new ProbablyStolen.DigitalStorage.Client.Terminal.Search.SearchDocument("apple", tagNames: new[] { "fruit" });
+        var original = Item("apple", 2);
+        var entry = new TerminalEntry(original.Key, 2, original.DisplayName, original.SpriteKey, document: document);
+        var menu = new StorageMenu();
+        menu.BroadcastChanges(new TerminalInventorySnapshot(true, new[] { entry }));
+        var serial = menu.GetEntries().Single().Serial;
+        menu.GetRepository().HandleUpdate(false, new[] { new InventoryEntryUpdate(serial, null, 3) });
+        Assert.That(menu.GetEntries().Single().Document, Is.SameAs(document));
+        menu.SetPaused(true);
+        menu.BroadcastChanges(new TerminalInventorySnapshot(true, System.Array.Empty<TerminalEntry>()));
+        Assert.That(menu.GetEntries().Single().Document, Is.SameAs(document));
+        Assert.That(menu.GetEntries().Single().Amount, Is.Zero);
+    }
+
+    [Test]
     public void Reset_ClearsSessionRepositorySerialsAndPauseWithoutChangingStorageSnapshot()
     {
         var menu = new StorageMenu();

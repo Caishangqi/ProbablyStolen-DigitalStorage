@@ -21,7 +21,11 @@
     "Textures/Items/item_storage_cell_64k.png",
     "Textures/Items/cell_component_64k.png",
     "Textures/Items/item_storage_cell_256k.png",
-    "Textures/Items/cell_component_256k.png"
+    "Textures/Items/cell_component_256k.png",
+    "Search/pinyin-dictionary.txt",
+    "Licenses/PininSharp-LICENSE.txt",
+    "Licenses/pinyin-data-LICENSE.txt",
+    "Licenses/Rime-Terra-Pinyin-LICENSE.txt"
   ],
   "legacy": [
     "manifest.xml",

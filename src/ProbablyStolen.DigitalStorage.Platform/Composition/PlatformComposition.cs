@@ -1,5 +1,6 @@
 using System;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Initialization;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
@@ -29,6 +30,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageEventBus _events;
     private readonly DigitalStorageSettings _settings;
     private readonly StorageVendors _vendors;
+    private readonly TerminalSearchComposition _search;
     private readonly ItemTypeBackfill _typeBackfill;
     private bool _isEnabled;
     private bool _isDisposed;
@@ -37,11 +39,12 @@ public sealed class PlatformComposition : IDisposable
         GridNetworkTooltipPresenter networkTooltipPresenter, CellTooltipPresenter cellTooltipPresenter,
         ItemAppearance appearance,
         StorageContentRegistration content, CellPageAudit pageAudit, StorageEventBus events,
-        DigitalStorageSettings settings, StorageVendors vendors)
+        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search)
     {
         _events = events;
         _settings = settings;
         _vendors = vendors;
+        _search = search ?? throw new ArgumentNullException(nameof(search));
         _typeBackfill = new ItemTypeBackfill(log);
         _log = log;
         _statusPresenter = statusPresenter;
@@ -58,7 +61,13 @@ public sealed class PlatformComposition : IDisposable
     /// <returns>An initialized platform composition.</returns>
     /// <exception cref="ArgumentNullException">The manifest is null.</exception>
     /// <exception cref="InvalidOperationException">The manifest identity is invalid.</exception>
-    public static PlatformComposition Create(ModManifest manifest)
+    public static PlatformComposition Create(ModManifest manifest) => Create(manifest, null);
+
+    /// <summary>Creates a composition with explicit search addon registrations, before any terminal is opened.</summary>
+    /// <param name="manifest">The loader manifest.</param>
+    /// <param name="registerSearchAddons">Registers matchers, detached document fields and prefixes for this lifecycle.</param>
+    /// <returns>An initialized platform composition.</returns>
+    public static PlatformComposition Create(ModManifest manifest, Action<SearchMatcherRegistry>? registerSearchAddons)
     {
         if (manifest is null)
         {
@@ -81,6 +90,8 @@ public sealed class PlatformComposition : IDisposable
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
         var inventory = new DriveCellInventory(recipe);
         var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text);
+        var search = new TerminalSearchComposition(identity.Id, text, networkPowerSettings.GetSearchConfiguration(),
+            message => log.Error(message), registerSearchAddons);
         networkPowerSettings.ApplyStorageLimits();
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
             message => log.Error(message),
@@ -100,12 +111,12 @@ public sealed class PlatformComposition : IDisposable
         var drive = new DriveItem(appearance, windows, inventory, networkEvents, contentSynchronization);
         var controller = new ControllerItem(appearance, windows, contentSynchronization);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization);
+            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization, search.Service);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing,
             contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellTooltipPresenter, appearance, content, new CellPageAudit(text, log), eventBus,
-            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log));
+            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log), search);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -166,6 +177,7 @@ public sealed class PlatformComposition : IDisposable
         _vendors.Dispose();
         _content.Dispose();
         _events.Dispose();
+        _search.Dispose();
     }
 
     private void OnGameLoaded()
@@ -180,6 +192,7 @@ public sealed class PlatformComposition : IDisposable
         {
             _settings.ApplyStorageLimits();
             _settings.RefreshSectionNames();
+            _search.Update(_settings.GetSearchConfiguration());
             _log.Log("Digital Storage: configuration applied; open network views refresh now.");
             _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
         }
@@ -192,6 +205,7 @@ public sealed class PlatformComposition : IDisposable
             return;
         }
 
+        _search.LoadDictionary();
         _settings.RefreshSectionNames();
         ValidateResources();
     }

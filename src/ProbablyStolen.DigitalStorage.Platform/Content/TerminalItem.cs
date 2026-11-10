@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -25,13 +26,15 @@ internal sealed class TerminalItem
     private readonly ModLog _log;
     private readonly NativeNetworkEvents _events;
     private readonly ItemContentSynchronization _contentSynchronization;
+    private readonly TerminalSearchService _search;
 
     internal TerminalItem(ModText text, ItemAppearance appearance, MachineContentWindow windows,
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, ModLog log, NativeNetworkEvents events,
-        ItemContentSynchronization contentSynchronization)
+        ItemContentSynchronization contentSynchronization, TerminalSearchService search)
     {
         _events = events ?? throw new System.ArgumentNullException(nameof(events));
         _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
+        _search = search ?? throw new ArgumentNullException(nameof(search));
         _text = text;
         _appearance = appearance;
         _windows = windows;
@@ -59,7 +62,7 @@ internal sealed class TerminalItem
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
                 (source, amount) => _networkPower.CanStore(item, source, amount),
                 key => _networkPower.FindStoredSample(item, key),
-                _diagnosticsEnabled, message => _log.Log(message), _events.Subscribe);
+                _diagnosticsEnabled, message => _log.Log(message), _events.Subscribe, _search);
             storageWindow.Attach(item);
             new TerminalItemDrop(item, (source, amount) => _networkPower.CanStore(item, source, amount),
                 (source, amount) => _networkPower.StoreSingle(item, source, amount), message => _log.Log(message)).Attach();
