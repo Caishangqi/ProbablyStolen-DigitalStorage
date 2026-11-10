@@ -367,12 +367,17 @@ internal sealed class NetworkStorage
     {
         var name = string.IsNullOrWhiteSpace(sample.name) ? sample.identifier : sample.name;
         var sprite = $"{sample.spriteAtlasPath}|{sample.spritePath}";
-        var tags = sample.state?.dict == null ? Array.Empty<string>() : sample.state.dict
-            .Where(pair => pair.Value != null && pair.Value.valueEnabled)
+        var enabledTags = sample.state?.dict == null
+            ? Array.Empty<KeyValuePair<string, TagState>>()
+            : sample.state.dict.Where(pair => pair.Value != null && pair.Value.valueEnabled).ToArray();
+        var tags = enabledTags
             .SelectMany(pair => new[] { pair.Key, pair.Value.identifier, pair.Value.identifierName })
             .Where(value => !string.IsNullOrWhiteSpace(value));
-        var document = new SearchDocument(name, string.Join(" ", new[] { sample.identifier, sample.identifierName }), tags,
-            sample.itemTypes, new[] { sample.shortDescription, sample.longDescription, sample.flavorText });
+        var document = TerminalSearchMetadata.WithTypeNames(new SearchDocument(name,
+            string.Join(" ", new[] { sample.identifier, sample.identifierName }), tags,
+            sample.itemTypes, new[] { sample.shortDescription, sample.longDescription, sample.flavorText }),
+            enabledTags.Select(pair => pair.Key),
+            type => LocHelper.GetLocalizedMechanicOrDefault("type_" + type.ToLowerInvariant(), type));
         return new TerminalEntry(key, amount, string.IsNullOrWhiteSpace(name) ? "?" : name, sprite,
             Math.Max(1, sample.shape.globalWidth), Math.Max(1, sample.shape.globalHeight), document: document);
     }

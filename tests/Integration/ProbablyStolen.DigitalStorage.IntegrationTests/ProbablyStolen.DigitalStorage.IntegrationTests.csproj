@@ -18,6 +18,11 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\EmptyPageReset.cs" Link="Storage\EmptyPageReset.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\TerminalSearchMetadata.cs" Link="Storage\TerminalSearchMetadata.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\packaging\resources\Search\pinyin-dictionary.txt" Link="Resources\pinyin-dictionary.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
