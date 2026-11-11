@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
 using ProbablyStolen.DigitalStorage.Platform.Network;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 
@@ -86,18 +87,18 @@ public sealed class NativeCellResolverTests
             cell.identifier = tier.CellId;
             var component = cell.Slots.Single().childItem!;
             component.identifier = tier.ComponentId;
-            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.True, tier.Name);
+            Assert.That(BasicCellHandler.IsCell(cell), Is.True, tier.Name);
             foreach (var other in StorageCellTier.All.Where(other => other != tier))
             {
                 component.identifier = other.ComponentId;
-                Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False, tier.Name + "/" + other.Name);
+                Assert.That(BasicCellHandler.IsCell(cell), Is.False, tier.Name + "/" + other.Name);
             }
             component.identifier = tier.ComponentId;
             component.unitCount = 2;
-            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False);
+            Assert.That(BasicCellHandler.IsCell(cell), Is.False);
             component.unitCount = 1;
             cell.unitCount = 2;
-            Assert.That(NativeCellResolver.IsMountedCell(cell), Is.False);
+            Assert.That(BasicCellHandler.IsCell(cell), Is.False);
         }
     }
 

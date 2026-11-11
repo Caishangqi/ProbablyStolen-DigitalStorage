@@ -70,20 +70,9 @@ public sealed class StorageCellTierTests
         }
     }
 
-    [TestCase(-1, 1)]
-    [TestCase(1, 1)]
-    [TestCase(16, 16)]
-    [TestCase(128, 128)]
-    [TestCase(int.MaxValue, 128)]
-    public void Layout_ClampsBaseBeforeMultiplying(int input, int expectedBase)
+    [Test]
+    public void PageLimit_LargestTierStaysWithinTheRestorableLimit()
     {
-        foreach (var tier in StorageCellTier.All)
-        {
-            var layout = tier.Layout(input);
-            Assert.That(layout.MaxPages, Is.EqualTo(expectedBase * tier.Multiplier));
-            Assert.That(layout.MaxTypes, Is.EqualTo(63));
-            Assert.That((layout.PageWidth, layout.PageHeight), Is.EqualTo((12, 12)));
-        }
-        Assert.That(StorageCellTier.All[4].Layout(128).MaxPages, Is.EqualTo(CellLayout.AbsoluteMaxPages));
+        Assert.That(CellRules.For(StorageCellTier.All[4]).MaxPages, Is.LessThanOrEqualTo(LayoutDescriptor.MaxPages));
     }
 }

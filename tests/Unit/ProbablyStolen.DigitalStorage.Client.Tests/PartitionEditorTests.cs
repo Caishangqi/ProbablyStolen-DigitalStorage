@@ -16,14 +16,14 @@ public sealed class PartitionEditorTests
         var editor = new PartitionEditor();
         var apple = new ItemKey("item.apple");
         var pear = new ItemKey("item.pear");
-        editor.Begin(CellPartition.FromUserSubmission(new[] { apple }));
+        editor.Begin(CellPartition.FromUserSubmission(new[] { apple }, 63));
 
         Assert.That(editor.Add(pear), Is.True);
         Assert.That(editor.Remove(apple), Is.True);
         var applied = editor.Apply();
 
-        Assert.That(applied.Mode, Is.EqualTo(CellPartitionMode.Whitelist));
-        Assert.That(applied.Keys, Is.EqualTo(new[] { pear }));
+        Assert.That(applied.Mode, Is.EqualTo(IncludeExclude.Whitelist));
+        Assert.That(applied.List.GetItems(), Is.EqualTo(new[] { pear }));
         Assert.That(editor.IsEditing, Is.False);
         Assert.That(editor.IsDirty, Is.False);
     }
@@ -32,25 +32,25 @@ public sealed class PartitionEditorTests
     public void ClearAndApply_UsesExplicitUnfilteredEmptyEdit()
     {
         var editor = new PartitionEditor();
-        editor.Begin(CellPartition.FromUserSubmission(new[] { new ItemKey("item.apple") }));
+        editor.Begin(CellPartition.FromUserSubmission(new[] { new ItemKey("item.apple") }, 63));
 
         Assert.That(editor.Clear(), Is.True);
         var applied = editor.Apply();
 
         Assert.That(applied, Is.SameAs(CellPartition.Unfiltered));
-        Assert.That(applied.Matches(new ItemKey("item.any")), Is.True);
+        Assert.That(applied.MatchesFilter(new ItemKey("item.any")), Is.True);
     }
 
     [Test]
     public void Cancel_RestoresBaselineAndDoesNotChangeTheOriginalPartition()
     {
-        var original = CellPartition.FromUserSubmission(new[] { new ItemKey("item.apple") });
+        var original = CellPartition.FromUserSubmission(new[] { new ItemKey("item.apple") }, 63);
         var editor = new PartitionEditor();
         editor.Begin(original);
         editor.Add(new ItemKey("item.pear"));
         editor.Cancel();
 
-        Assert.That(original.Keys.Select(key => key.Identifier), Is.EqualTo(new[] { "item.apple" }));
+        Assert.That(original.List.GetItems().Select(key => key.Identifier), Is.EqualTo(new[] { "item.apple" }));
         Assert.That(editor.IsEditing, Is.False);
         Assert.That(editor.DraftKeys, Is.EqualTo(new[] { new ItemKey("item.apple") }));
     }
@@ -61,24 +61,24 @@ public sealed class PartitionEditorTests
         var editor = new PartitionEditor();
         var apple = new ItemKey("item.apple");
         var pear = new ItemKey("item.pear");
-        editor.Begin(CellPartition.FromUserSubmission(new[] { apple }));
+        editor.Begin(CellPartition.FromUserSubmission(new[] { apple }, 63));
         editor.Add(pear);
         CellPartition? observed = null;
         Assert.That(editor.TryApply(candidate => { observed = candidate; return true; }, out var applied), Is.True);
         Assert.That(applied, Is.SameAs(observed));
-        Assert.That(applied!.Keys, Is.EqualTo(new[] { apple, pear }));
+        Assert.That(applied!.List.GetItems(), Is.EqualTo(new[] { apple, pear }));
         Assert.That(editor.IsEditing, Is.False);
         Assert.That(editor.IsDirty, Is.False);
         editor.Begin(CellPartition.Unfiltered);
         editor.Add(new ItemKey("item.other"));
-        Assert.That(applied.Keys, Is.EqualTo(new[] { apple, pear }));
+        Assert.That(applied.List.GetItems(), Is.EqualTo(new[] { apple, pear }));
     }
 
     [Test]
     public void TryApply_Rejected_LeavesDraftAndBaselineForCancel()
     {
         var apple = new ItemKey("item.apple"); var pear = new ItemKey("item.pear");
-        var editor = new PartitionEditor(); editor.Begin(CellPartition.FromUserSubmission(new[] { apple })); editor.Add(pear);
+        var editor = new PartitionEditor(); editor.Begin(CellPartition.FromUserSubmission(new[] { apple }, 63)); editor.Add(pear);
         Assert.That(editor.TryApply(_ => false, out var applied), Is.False);
         Assert.That(applied, Is.Null);
         Assert.That(editor.IsEditing, Is.True);
@@ -100,7 +100,7 @@ public sealed class PartitionEditorTests
         Assert.That(editor.IsDirty, Is.True);
         Assert.That(editor.DraftKeys, Is.EqualTo(new[] { key }));
         Assert.That(editor.TryApply(_ => true, out var applied), Is.True);
-        Assert.That(applied!.Keys, Is.EqualTo(new[] { key }));
+        Assert.That(applied!.List.GetItems(), Is.EqualTo(new[] { key }));
         Assert.That(editor.IsEditing, Is.False);
     }
 
@@ -114,7 +114,7 @@ public sealed class PartitionEditorTests
     public void TryApply_ReentrantOperations_FailWithoutChangingDraft(string operation)
     {
         var apple = new ItemKey("item.apple"); var pear = new ItemKey("item.pear");
-        var editor = new PartitionEditor(); editor.Begin(CellPartition.FromUserSubmission(new[] { apple })); editor.Add(pear);
+        var editor = new PartitionEditor(); editor.Begin(CellPartition.FromUserSubmission(new[] { apple }, 63)); editor.Add(pear);
         Assert.That(editor.TryApply(candidate =>
         {
             Assert.Throws<InvalidOperationException>((Action)(() =>
@@ -130,7 +130,7 @@ public sealed class PartitionEditorTests
                     case "submit": editor.TryApply(_ => true, out _); break;
                 }
             }));
-            Assert.That(candidate.Keys, Is.EqualTo(new[] { apple, pear }));
+            Assert.That(candidate.List.GetItems(), Is.EqualTo(new[] { apple, pear }));
             return false;
         }, out var applied), Is.False);
         Assert.That(applied, Is.Null);
@@ -146,7 +146,7 @@ public sealed class PartitionEditorTests
     {
         var editor = new PartitionEditor();
         var first = new ItemKey("item.first");
-        editor.Begin(CellPartition.FromUserSubmission(new[] { first }));
+        editor.Begin(CellPartition.FromUserSubmission(new[] { first }, 63));
 
         Assert.That(editor.Add(first), Is.False);
         for (var index = 1; index < 63; index++)

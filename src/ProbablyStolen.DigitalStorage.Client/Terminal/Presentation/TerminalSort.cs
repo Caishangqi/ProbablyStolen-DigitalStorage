@@ -1,6 +1,6 @@
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
-/// <summary>Selects the terminal ordering key, mirroring AE2's SORT_BY setting without the mod option.</summary>
+/// <summary>Selects the terminal ordering key.</summary>
 public enum TerminalSortOrder
 {
     /// <summary>Orders entries by display name.</summary>
@@ -10,7 +10,7 @@ public enum TerminalSortOrder
     Amount
 }
 
-/// <summary>Selects the terminal ordering direction, mirroring AE2's SORT_DIRECTION setting.</summary>
+/// <summary>Selects the terminal ordering direction.</summary>
 public enum TerminalSortDirection
 {
     /// <summary>Smallest name or amount first.</summary>
@@ -20,7 +20,7 @@ public enum TerminalSortDirection
     Descending
 }
 
-/// <summary>Terminal sizes mirroring AE2's TERMINAL_STYLE; the value is the quarter of available rows shown.</summary>
+/// <summary>Terminal sizes; the value is the quarter of available rows shown.</summary>
 public enum TerminalSize
 {
     /// <summary>A quarter of the rows that fit.</summary>

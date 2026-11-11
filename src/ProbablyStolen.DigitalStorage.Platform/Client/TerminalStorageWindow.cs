@@ -19,7 +19,7 @@ internal sealed class TerminalStorageWindow
     private const string WindowId = "digital_storage_terminal_storage";
     private const int Columns = TerminalWindowMetrics.Columns;
     private const int CellPixels = TerminalWindowMetrics.CellPixels;
-    // Session-only view settings shared by every terminal, like AE2's client-side terminal style; never saved.
+    // Session-only view settings shared by every terminal; never saved.
     private static TerminalSortOrder _sortOrder = TerminalSortOrder.Name;
     private static TerminalSortDirection _sortDirection = TerminalSortDirection.Ascending;
     private static TerminalSize _size = TerminalSize.Small;
@@ -180,7 +180,7 @@ internal sealed class TerminalStorageWindow
             .SetSize(TerminalWindowMetrics.Width, TerminalWindowMetrics.GetHeight(_rows))
             .OnClose(ClearControls);
 
-        // AE2 layout: the search field sits above the grid, the toolbar runs down its left side and the scrollbar
+        // Layout: the search field sits above the grid, the toolbar runs down its left side and the scrollbar
         // down its right side.
         builder.BeginRow(spacing: gap);
         builder.AddSpace(TerminalWindowMetrics.ToolbarButton);
@@ -341,7 +341,7 @@ internal sealed class TerminalStorageWindow
         }
     }
 
-    /// <summary>Cycles AE2's terminal styles and rebuilds the grid, keeping the search, scroll row and position.</summary>
+    /// <summary>Cycles the terminal sizes and rebuilds the grid, keeping the search, scroll row and position.</summary>
     private void CycleSize()
     {
         if (!IsCurrentSession() || _window == null) return;
@@ -704,7 +704,7 @@ internal sealed class TerminalStorageWindow
     }
 
     /// <summary>
-    /// Scrolls one page per wheel notch while the pointer is over the window, as AE2 does. During a native drag the
+    /// Scrolls one page per wheel notch while the pointer is over the window. During a native drag the
     /// wheel belongs to the game (rotation and drag amount), so it is left alone.
     /// </summary>
     private void ApplyWheel()
@@ -766,7 +766,7 @@ internal sealed class TerminalStorageWindow
 
     private static bool IsShiftHeld() => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
-    /// <summary>Takes from a slot like AE2: left click one stack, right click half, Shift + left click everything.</summary>
+    /// <summary>Takes from a slot: left click one stack, right click half, Shift + left click everything.</summary>
     private void Extract(int index, TerminalClick click)
     {
         if (!IsCurrentSession())

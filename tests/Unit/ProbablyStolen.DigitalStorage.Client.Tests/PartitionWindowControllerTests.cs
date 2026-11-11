@@ -63,7 +63,7 @@ public sealed class PartitionWindowControllerTests
     [Test]
     public void StaleSourceClosesAndDisposesDraft()
     {
-        var source = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }) };
+        var source = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }, 63) };
         var controller = new PartitionWindowController();
         controller.Open(source); controller.AddGhost(Key()); source.Current = false;
         Assert.That(controller.Clear(), Is.False);
@@ -180,14 +180,14 @@ public sealed class PartitionWindowControllerTests
     public void ReentrantCloseOrStaleContentsCannotInstallAnotherDraft()
     {
         var controller = new PartitionWindowController();
-        var source = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }) };
+        var source = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }, 63) };
         Assert.That(controller.Open(source), Is.True);
         source.OnContents = () => controller.Close();
         Assert.That(controller.SetFromContents(), Is.False);
         Assert.That(controller.Keys, Is.Empty);
         Assert.That(source.Disposed, Is.True);
 
-        var stale = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }) };
+        var stale = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }, 63) };
         controller.Open(stale);
         stale.OnContents = () => stale.Current = false;
         Assert.That(controller.SetFromContents(), Is.False);
@@ -244,7 +244,7 @@ public sealed class PartitionWindowControllerTests
     {
         var controller = new PartitionWindowController();
         var replacement = new Source();
-        var original = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }) };
+        var original = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }, 63) };
         controller.Open(original);
         original.Contents = Many(2);
         original.OnContents = () => Assert.That(controller.Open(replacement), Is.False);
@@ -270,7 +270,7 @@ public sealed class PartitionWindowControllerTests
     public void FailedOpenAndStaleCloseHidePreviouslyValidatedBaseline()
     {
         var controller = new PartitionWindowController();
-        var valid = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }) };
+        var valid = new Source { Partition = CellPartition.FromUserSubmission(new[] { Key() }, 63) };
         Assert.That(controller.Open(valid), Is.True);
         Assert.That(controller.Keys, Has.Count.EqualTo(1));
         var failed = new Source { Readable = false, ThrowOnDispose = true };

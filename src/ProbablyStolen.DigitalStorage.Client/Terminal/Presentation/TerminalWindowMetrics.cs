@@ -2,14 +2,14 @@ using System;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
-/// <summary>Defines the terminal's design coordinates, AE2-style row count and viewport fit.</summary>
+/// <summary>Defines the terminal's design coordinates, row count and viewport fit.</summary>
 public static class TerminalWindowMetrics
 {
-    /// <summary>Gets the number of columns, fixed like AE2's slots per row.</summary>
+    /// <summary>Gets the fixed number of columns.</summary>
     public const int Columns = 7;
     /// <summary>Gets the row count used before a viewport is known.</summary>
     public const int Rows = 4;
-    /// <summary>Gets AE2's minimum visible rows.</summary>
+    /// <summary>Gets the minimum visible rows.</summary>
     public const int MinimumRows = 2;
     /// <summary>Gets the square slot size in design units.</summary>
     public const int CellPixels = 40;
@@ -53,8 +53,7 @@ public static class TerminalWindowMetrics
     public static int GetHeight(int rows) => Chrome + Math.Max(GetGridHeight(rows), ToolbarHeight);
 
     /// <summary>
-    /// Counts rows like AE2 <c>MEStorageScreen.init</c>: the rows that fit the viewport at native scale, then
-    /// <c>max(2, possibleRows * size / 4)</c>.
+    /// Counts the rows that fit the viewport at native scale, then <c>max(2, possibleRows * size / 4)</c>.
     /// </summary>
     public static int GetRows(TerminalSize size, float viewportHeight, float canvasScale)
     {

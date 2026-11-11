@@ -7,7 +7,7 @@ using ProbablyStolen.DigitalStorage.Platform.Localization;
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
-/// Puts the mod's items on sale through the game's own vendor paths (Steam build 26525552):
+/// Puts the mod's items on sale through the game's own vendor paths:
 /// Dr. Jackson's visiting stock (<c>ModHook.OnPlaceInventorInventoryItemLate</c>, filled with
 /// <c>PlayerStore.AddDirectSellingItemToTable</c> like his vanilla goods), and a mod customer, the upper-level engineer,
 /// queued from <c>ModHook.OnGenerateCustomerLate</c>, which runs once per day while the day's customers are generated.

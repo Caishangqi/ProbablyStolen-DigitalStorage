@@ -22,19 +22,22 @@ internal sealed class CellPartitionSource : IPartitionWindowSource
         _cell = cell != null && CellPages.Tabs(cell) != null ? cell : null;
     }
 
-    public bool IsCurrent => _cell != null && ReferenceEquals(_bay.childItem, _cell) && !SaveManager.IsDecoding;
+    // Locked and unavailable cells keep their tags exactly as loaded.
+    public bool IsCurrent => _cell != null && ReferenceEquals(_bay.childItem, _cell) && !SaveManager.IsDecoding &&
+        CellHealth.Get(_cell).Status is not (CellHealthStatus.Locked or CellHealthStatus.Unavailable);
 
     public bool TryRead(out CellPartition? partition)
     {
         partition = IsCurrent ? CellTags.ReadPartition(_cell!) : null;
-        return partition?.IsValid == true;
+        // The window edits whitelists only; opening it on a blacklist would overwrite it as a whitelist.
+        return partition?.IsValid == true && partition.Mode == IncludeExclude.Whitelist;
     }
 
     public bool TryReadContents(out IReadOnlyList<ItemKey>? keys)
     {
         keys = IsCurrent
             // Fallback keys of unreadable items are session-only, so they cannot be written into a partition.
-            ? CellPages.Roots(_cell!).Select(NetworkStorage.Identify).OfType<ItemKey>()
+            ? CellPages.Roots(_cell!).Select(StorageService.Identify).OfType<ItemKey>()
                 .Where(key => key.IsCanonical).Distinct().ToArray()
             : null;
         return keys != null;
@@ -47,7 +50,14 @@ internal sealed class CellPartitionSource : IPartitionWindowSource
             return false;
         }
 
-        CellTags.WritePartition(_cell!, candidate);
+        var current = CellTags.ReadPartition(_cell!);
+        if (current.IsValid && current.Mode != IncludeExclude.Whitelist) return false;
+        // Keep the stored equal distribution flag; the window does not edit it.
+        var limit = CellTypeLimitSource.EffectiveOrBase(_cell!);
+        var merged = CellPartition.FromConfiguration(IncludeExclude.Whitelist, candidate.List.GetItems(),
+            current.EqualDistribution, limit);
+        if (!merged.IsValid) return false;
+        CellTags.WritePartition(_cell!, merged);
         return true;
     }
 

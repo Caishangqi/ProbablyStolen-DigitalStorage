@@ -4,7 +4,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 /// <summary>
 /// An extra box that follows the game's item tooltip, built like that tooltip (<c>OverlayHandler</c> creates a
-/// <c>PixelWindow</c> holding an 8-pixel padded <c>RichTextElement</c> under <c>overlayRoot</c>, Steam build 26496118),
+/// <c>PixelWindow</c> holding an 8-pixel padded <c>RichTextElement</c> under <c>overlayRoot</c>),
 /// so it looks native. It sits below the tooltip, leaving the right side to mods such as ItemDetail, and moves above
 /// the tooltip when there is no room below. Call <see cref="Show"/> every frame the tooltip is shown and
 /// <see cref="Hide"/> when it goes away.

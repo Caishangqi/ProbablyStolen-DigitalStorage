@@ -151,7 +151,7 @@ public sealed class StorageScreen
     /// <summary>Gets the fixed sprite cell size in logical pixels.</summary>
     public int CellPixels { get; }
 
-    /// <summary>Gets the rows moved per wheel notch or track click, AE2's <c>max(1, rows / 6)</c>.</summary>
+    /// <summary>Gets the rows moved per wheel notch or track click, <c>max(1, rows / 6)</c>.</summary>
     public int PageSize => Math.Max(1, Rows / 6);
 
     /// <summary>Gets the zero-based first visible row.</summary>
@@ -256,7 +256,7 @@ public sealed class StorageScreen
     /// <summary>Gets the number of rows the filtered results occupy.</summary>
     public int GetTotalRows() => (GetFilteredEntries(_searchText).Length + Columns - 1) / Columns;
 
-    /// <summary>Gets AE2's <c>max(0, totalRows - visibleRows)</c>.</summary>
+    /// <summary>Gets <c>max(0, totalRows - visibleRows)</c>.</summary>
     public int GetMaxScroll() => Math.Max(0, GetTotalRows() - Rows);
 
     /// <summary>Gets the current view with fixed slot count and stable ordering.</summary>

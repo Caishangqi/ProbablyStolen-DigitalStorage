@@ -57,7 +57,7 @@ internal sealed class MachineContentWindow
         else
         {
             // Saves restore child items by breadth-first inventory position and MachineHelper reads the battery at
-            // position 0 and modules at 1 (Steam build 26496118, SaveManager.EncodeNode/MachineHelper.GetModuleInv),
+            // position 0 and modules at 1 (SaveManager.EncodeNode/MachineHelper.GetModuleInv),
             // so the slot stays and is only hidden. A legacy battery keeps it visible until the player removes it.
             battery.mayInventoryAddItemFunc = (_, _) => false;
             battery.maxSlotAddItemFunc = (_, _, _) => 0;

@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
+using ProbablyStolen.DigitalStorage.Common.Application.Storage;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -87,5 +92,17 @@ public sealed class GridStorageTests
         internal StubCell(CellState state) => _state = state;
 
         public CellState GetStatus() => _state;
+
+        public bool IsPreferredStorageFor(ItemKey what, IActionSource source) => false;
+
+        public InsertResult Insert(IRootSource roots, Actionable mode, IActionSource source) =>
+            throw new NotSupportedException();
+
+        public ExtractResult Extract(ItemKey what, long amount, IRootSink destination, Actionable mode,
+            IActionSource source) => throw new NotSupportedException();
+
+        public void GetAvailableStacks(KeyCounter output) => throw new NotSupportedException();
+
+        public string GetDescription() => "stub";
     }
 }

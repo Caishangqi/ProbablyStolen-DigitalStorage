@@ -4,30 +4,14 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
-/// <summary>Selects whether a cell partition restricts the identities it accepts.</summary>
-public enum CellPartitionMode
-{
-    /// <summary>Accepts every supported identity.</summary>
-    Unfiltered = 0,
-
-    /// <summary>Accepts only the identities listed by the partition.</summary>
-    Whitelist = 1
-}
-
 /// <summary>Explains why a supplied partition configuration cannot be used.</summary>
 public enum CellPartitionFailure
 {
     /// <summary>The configuration is usable.</summary>
     None = 0,
 
-    /// <summary>The configuration requested a mode this build does not define.</summary>
+    /// <summary>The configuration requested a mode this version does not define.</summary>
     UnknownMode = 1,
-
-    /// <summary>A whitelist configuration listed no identities.</summary>
-    EmptyWhitelist = 2,
-
-    /// <summary>An unfiltered configuration also listed identities.</summary>
-    UnfilteredWithKeys = 3,
 
     /// <summary>The configuration contained a null identity.</summary>
     NullKey = 4,
@@ -39,29 +23,35 @@ public enum CellPartitionFailure
     MissingKeys = 6
 }
 
-/// <summary>Matches supplied item identities against an immutable exact whitelist.</summary>
+/// <summary>Immutable partition configuration of one cell: a mode and an exact identity list.</summary>
+/// <remarks>
+/// An empty list accepts every identity in both modes.
+/// </remarks>
 public sealed class CellPartition
 {
-    private const int MaxUniqueKeys = 63;
-
     private static readonly CellPartition UnfilteredPartition =
-        new(CellPartitionMode.Unfiltered, Array.Empty<ItemKey>(), CellPartitionFailure.None);
+        new(IncludeExclude.Whitelist, PrecisePriorityList.Empty, false, CellPartitionFailure.None);
 
-    private readonly IReadOnlyList<ItemKey> _keys;
-
-    private CellPartition(CellPartitionMode mode, ItemKey[] keys, CellPartitionFailure failure)
+    private CellPartition(IncludeExclude mode, IPartitionList list, bool equalDistribution, CellPartitionFailure failure)
     {
         Mode = mode;
+        List = list;
+        EqualDistribution = equalDistribution;
         Failure = failure;
         IsValid = failure == CellPartitionFailure.None;
-        _keys = Array.AsReadOnly(keys);
     }
 
-    /// <summary>Gets the partition that accepts every non-null supplied identity.</summary>
+    /// <summary>Gets the partition with an empty list, which accepts every non-null identity.</summary>
     public static CellPartition Unfiltered => UnfilteredPartition;
 
-    /// <summary>Gets the requested partition mode.</summary>
-    public CellPartitionMode Mode { get; }
+    /// <summary>Gets the requested filter mode.</summary>
+    public IncludeExclude Mode { get; }
+
+    /// <summary>Gets the listed identities; empty for invalid configurations.</summary>
+    public IPartitionList List { get; }
+
+    /// <summary>Gets whether each type is limited to an equal share of the cell capacity.</summary>
+    public bool EqualDistribution { get; }
 
     /// <summary>Gets whether this configuration may accept new identities.</summary>
     public bool IsValid { get; }
@@ -69,46 +59,37 @@ public sealed class CellPartition
     /// <summary>Gets why the configuration is unusable, or <see cref="CellPartitionFailure.None"/> when it is usable.</summary>
     public CellPartitionFailure Failure { get; }
 
-    /// <summary>Gets a read-only copy of the unique whitelist identities in submission order.</summary>
-    public IReadOnlyList<ItemKey> Keys => _keys;
-
-    /// <summary>Checks whether a supplied identity is accepted by this partition.</summary>
+    /// <summary>Checks whether a supplied identity passes this partition.</summary>
     /// <param name="key">The identity to check, or null when no identity is supplied.</param>
-    /// <returns>Whether the identity matches; invalid configurations and null never match.</returns>
-    public bool Matches(ItemKey? key)
+    /// <returns>Whether the identity passes; invalid configurations and null never pass.</returns>
+    public bool MatchesFilter(ItemKey? key) => key != null && IsValid && List.MatchesFilter(key, Mode);
+
+    /// <summary>
+    /// Gets how many types share the capacity under equal distribution: the listed count of a non-empty whitelist,
+    /// capped at the type limit, otherwise the type limit.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The type limit is not positive.</exception>
+    public int EqualShareBase(int typeLimit)
     {
-        if (key == null || !IsValid)
-        {
-            return false;
-        }
-
-        if (Mode == CellPartitionMode.Unfiltered)
-        {
-            return true;
-        }
-
-        foreach (var stored in _keys)
-        {
-            if (stored.Equals(key))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        if (typeLimit < 1) throw new ArgumentOutOfRangeException(nameof(typeLimit), typeLimit, "A type limit is positive.");
+        var listed = List.GetItems().Count;
+        return Mode == IncludeExclude.Whitelist && listed > 0 ? Math.Min(listed, typeLimit) : typeLimit;
     }
 
-    /// <summary>Builds the partition produced by a player's filter edit.</summary>
+    /// <summary>Builds the whitelist produced by a player's filter edit.</summary>
     /// <param name="submitted">The identities the edit left in the filter; empty when the edit cleared it.</param>
     /// <returns>A whitelist partition, or <see cref="Unfiltered"/> when the edit removed every identity.</returns>
     /// <exception cref="ArgumentNullException">No submission was supplied.</exception>
+    /// <param name="maxKeys">The most unique identities the edit may list.</param>
     /// <exception cref="ArgumentException">A submitted identity is null or the edit exceeds the unique key limit.</exception>
-    public static CellPartition FromUserSubmission(IEnumerable<ItemKey?> submitted)
+    public static CellPartition FromUserSubmission(IEnumerable<ItemKey?> submitted, int maxKeys)
     {
         if (submitted == null)
         {
             throw new ArgumentNullException(nameof(submitted));
         }
+
+        RequirePositive(maxKeys);
 
         var unique = new List<ItemKey>();
         var seen = new HashSet<ItemKey>();
@@ -130,57 +111,44 @@ public sealed class CellPartition
             return UnfilteredPartition;
         }
 
-        if (unique.Count > MaxUniqueKeys)
+        if (unique.Count > maxKeys)
         {
             throw new ArgumentException(
-                $"A partition accepts at most {MaxUniqueKeys} unique identities.", nameof(submitted));
+                $"A partition accepts at most {maxKeys} unique identities.", nameof(submitted));
         }
 
-        return new CellPartition(CellPartitionMode.Whitelist, unique.ToArray(), CellPartitionFailure.None);
+        return new CellPartition(IncludeExclude.Whitelist, new PrecisePriorityList(unique), false, CellPartitionFailure.None);
     }
 
     /// <summary>Validates a configuration supplied by persisted or otherwise external data.</summary>
-    /// <param name="mode">The requested partition mode.</param>
-    /// <param name="keys">The listed identities; a null collection is not a usable configuration.</param>
+    /// <param name="mode">The requested filter mode.</param>
+    /// <param name="keys">The listed identities, possibly empty; a null collection is not a usable configuration.</param>
+    /// <param name="equalDistribution">Whether equal distribution is on.</param>
+    /// <param name="maxKeys">The most unique identities, normally the cell's effective type limit.</param>
     /// <returns>A usable partition, or an invalid partition that never matches.</returns>
-    public static CellPartition FromConfiguration(CellPartitionMode mode, IEnumerable<ItemKey?>? keys)
+    /// <exception cref="ArgumentOutOfRangeException">The key limit is not positive.</exception>
+    public static CellPartition FromConfiguration(IncludeExclude mode, IEnumerable<ItemKey?>? keys,
+        bool equalDistribution, int maxKeys)
     {
-        // A missing collection is malformed external data. For a known mode it must never become the
-        // explicit empty user edit that FromUserSubmission clears back to Unfiltered. Unknown modes are
-        // classified by the switch below, so a null collection is not inspected there.
-        if (keys == null && (mode == CellPartitionMode.Unfiltered || mode == CellPartitionMode.Whitelist))
+        RequirePositive(maxKeys);
+        if (mode != IncludeExclude.Whitelist && mode != IncludeExclude.Blacklist)
         {
-            return CreateInvalid(mode, CellPartitionFailure.MissingKeys);
+            return CreateInvalid(mode, equalDistribution, CellPartitionFailure.UnknownMode);
         }
 
-        var supplied = new List<ItemKey?>(keys ?? Array.Empty<ItemKey?>());
-        switch (mode)
+        // A missing collection is malformed external data, never the explicit empty list.
+        if (keys == null)
         {
-            case CellPartitionMode.Unfiltered:
-                return supplied.Count == 0
-                    ? UnfilteredPartition
-                    : CreateInvalid(mode, CellPartitionFailure.UnfilteredWithKeys);
-            case CellPartitionMode.Whitelist:
-                return CreateWhitelist(supplied);
-            default:
-                return CreateInvalid(mode, CellPartitionFailure.UnknownMode);
-        }
-    }
-
-    private static CellPartition CreateWhitelist(IReadOnlyList<ItemKey?> supplied)
-    {
-        if (supplied.Count == 0)
-        {
-            return CreateInvalid(CellPartitionMode.Whitelist, CellPartitionFailure.EmptyWhitelist);
+            return CreateInvalid(mode, equalDistribution, CellPartitionFailure.MissingKeys);
         }
 
         var unique = new List<ItemKey>();
         var seen = new HashSet<ItemKey>();
-        foreach (var key in supplied)
+        foreach (var key in keys)
         {
             if (key == null)
             {
-                return CreateInvalid(CellPartitionMode.Whitelist, CellPartitionFailure.NullKey);
+                return CreateInvalid(mode, equalDistribution, CellPartitionFailure.NullKey);
             }
 
             if (seen.Add(key))
@@ -189,11 +157,21 @@ public sealed class CellPartition
             }
         }
 
-        return unique.Count > MaxUniqueKeys
-            ? CreateInvalid(CellPartitionMode.Whitelist, CellPartitionFailure.TooManyKeys)
-            : new CellPartition(CellPartitionMode.Whitelist, unique.ToArray(), CellPartitionFailure.None);
+        if (unique.Count > maxKeys)
+        {
+            return CreateInvalid(mode, equalDistribution, CellPartitionFailure.TooManyKeys);
+        }
+
+        return unique.Count == 0 && mode == IncludeExclude.Whitelist && !equalDistribution
+            ? UnfilteredPartition
+            : new CellPartition(mode, new PrecisePriorityList(unique), equalDistribution, CellPartitionFailure.None);
     }
 
-    private static CellPartition CreateInvalid(CellPartitionMode mode, CellPartitionFailure failure) =>
-        new(mode, Array.Empty<ItemKey>(), failure);
+    private static void RequirePositive(int maxKeys)
+    {
+        if (maxKeys < 1) throw new ArgumentOutOfRangeException(nameof(maxKeys), maxKeys, "A key limit is positive.");
+    }
+
+    private static CellPartition CreateInvalid(IncludeExclude mode, bool equalDistribution, CellPartitionFailure failure) =>
+        new(mode, PrecisePriorityList.Empty, equalDistribution, failure);
 }

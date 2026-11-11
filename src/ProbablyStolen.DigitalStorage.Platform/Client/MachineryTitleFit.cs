@@ -8,7 +8,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// <summary>
 /// Widens a machinery window so its title fits instead of being cut with an ellipsis. The native window is exactly as
 /// wide as its panel row, and centres the title between two equal margins that hold the close button and any header
-/// buttons (<c>PixelWindow.MachineryValidate</c>, Steam build 26525552). Call after the title is set, for example from
+/// buttons (<c>PixelWindow.MachineryValidate</c>). Call after the title is set, for example from
 /// the window's <c>openCallback</c>, which runs after <c>OpenContentAction</c> has set it.
 /// </summary>
 internal static class MachineryTitleFit

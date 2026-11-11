@@ -4,8 +4,8 @@ using System.Globalization;
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 /// <summary>
-/// The storage priority of a drive, shared by every cell mounted in it (AE2 <c>DriveBlockEntity.priority</c>; cells
-/// have none). Higher priorities receive items first and give them up last. The range is narrower than AE2's.
+/// The storage priority of a drive, shared by every cell mounted in it; cells
+/// have none. Higher priorities receive items first and give them up last.
 /// </summary>
 public static class DrivePriority
 {

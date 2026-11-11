@@ -60,7 +60,7 @@ public sealed class PartitionWindowController : IDisposable
             if (_closeRequested) return Fail("unavailable");
             if (!ReadCurrent(source, version) || _closeRequested ||
                 !source.TryRead(out var partition) || !Owns(source, version) || _closeRequested ||
-                partition == null || !partition.IsValid || !AllCanonical(partition.Keys) ||
+                partition == null || !partition.IsValid || !AllCanonical(partition.List.GetItems()) ||
                 !ReadCurrent(source, version) || _closeRequested)
                 return Fail("unavailable");
 
@@ -119,10 +119,10 @@ public sealed class PartitionWindowController : IDisposable
             if (!ReadCurrent(source, version) || _closeRequested ||
                 !source.TryReadContents(out var keys) || !Owns(source, version) || _closeRequested ||
                 keys == null || !AllCanonical(keys)) return Fail("invalid");
-            var candidate = CellPartition.FromUserSubmission(keys);
+            var candidate = CellPartition.FromUserSubmission(keys, PartitionEditor.MaxKeys);
             if (!ReadCurrent(source, version) || _closeRequested) return Fail("unavailable");
             _editor.Clear();
-            foreach (var key in candidate.Keys) _editor.Add(key);
+            foreach (var key in candidate.List.GetItems()) _editor.Add(key);
             Status = "ready";
             return true;
         }

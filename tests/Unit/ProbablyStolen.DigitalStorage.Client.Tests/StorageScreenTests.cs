@@ -71,7 +71,7 @@ public sealed class StorageScreenTests
         screen.SetScroll(99);
         var last = screen.GetPage();
 
-        // AE2 stops at totalRows - visibleRows, so the last view is full rather than one leftover row.
+        // Scrolling stops at totalRows - visibleRows, so the last view is full rather than one leftover row.
         Assert.That(last.ScrollRow, Is.EqualTo(1));
         Assert.That(last.MaxScroll, Is.EqualTo(1));
         Assert.That(last.Slots[0].Entry!.Key.Components[0].Value, Is.EqualTo("a"));

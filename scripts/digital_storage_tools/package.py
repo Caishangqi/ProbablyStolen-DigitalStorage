@@ -17,7 +17,7 @@ from typing import Sequence
 EXPECTED_ID = "digital_storage"
 EXPECTED_NAME = "Digital Storage"
 EXPECTED_AUTHOR = "Caizii"
-# The mods menu compares only the leading digits and dots of Application.version ("0.46D" in Steam build 26525552),
+# The mods menu compares only the leading digits and dots of Application.version (for example "0.46D"),
 # so "0.46" matches every 0.46 letter release.
 EXPECTED_GAME_VERSION = "0.46"
 CURRENT_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.dll"

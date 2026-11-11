@@ -12,13 +12,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
 /// <summary>
 /// The mod settings page. The native <c>ModConfigWindow</c> draws an int entry with a min and max as a slider and one
-/// without as a text box (Steam build 26496118), so numbers are defined without a range to let players type them,
+/// without as a text box, so numbers are defined without a range to let players type them,
 /// and every read clamps the stored value. Each section becomes a header in the order entries are defined.
 /// </summary>
 internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
 {
     internal const int MaximumPowerUsage = 1000;
-    // ConfigEntry.Section has an internal setter (Steam build 26525552).
+    // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
     private readonly ModText _text;
@@ -26,7 +26,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
-    private readonly ConfigEntry<int> _cellMaxPages;
     private readonly ConfigEntry<int> _engineerDailyChance;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _showCellPages;
@@ -63,7 +62,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         // The native panel shows the section string as the header, but Init runs before this mod's localization is
         // loaded, so these start as keys and RefreshSectionNames replaces them once the text is available.
         const string power = "config_section_power";
-        const string storage = "config_section_storage";
         const string debug = "config_section_debug";
         const string vendors = "config_section_vendors";
         const string search = "config_section_terminal_search";
@@ -73,8 +71,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             () => text.Get("network_power_drive_name"), tooltip: () => text.Get("network_power_drive_desc"));
         _terminalPowerUsage = config.Define("terminal_power_usage", 1, power,
             () => text.Get("network_power_terminal_name"), tooltip: () => text.Get("network_power_terminal_desc"));
-        _cellMaxPages = config.Define("storage_cell_max_pages", CellLayout.Cell1K.MaxPages, storage,
-            () => text.Get("storage_cell_max_pages_name"), tooltip: () => text.Get("storage_cell_max_pages_desc"));
         _engineerDailyChance = config.Define("upper_engineer_daily_chance", 25, vendors,
             () => text.Get("upper_engineer_daily_chance_name"), tooltip: () => text.Get("upper_engineer_daily_chance_desc"));
         _showCellPages = config.Define("debug_show_cell_pages", false, debug,
@@ -100,7 +96,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
-            (_cellMaxPages, storage), (_engineerDailyChance, vendors),
+            (_engineerDailyChance, vendors),
             (_showCellPages, debug), (_terminalDiagnostics, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
@@ -159,9 +155,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
 
     /// <summary>Gets the daily chance, in percent, that the upper-level engineer visits.</summary>
     internal int GetEngineerDailyChance() => Clamp(_engineerDailyChance.Value, 0, 100);
-
-    /// <summary>Applies the configured 1k base page limit.</summary>
-    internal void ApplyStorageLimits() => CellPages.Configure(Clamp(_cellMaxPages.Value, 1, CellLayout.MaxBasePages));
 
     public int GetPowerUsage(GridNodeKind kind) => Clamp(kind switch
     {

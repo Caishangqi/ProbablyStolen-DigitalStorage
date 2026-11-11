@@ -51,17 +51,16 @@ RETIRED_PATHS = (
     "src/ProbablyStolen.DigitalStorage.Platform/NativeContent/NativeFactoryResourceScope.cs",
 )
 
+# KeyCounter, Actionable, IActionSource and BasicCellInventory were names of the retired quantity ledger. The strip
+# storage reuses those names for types that move real native item roots and keep no ledger, so they are no longer
+# retired symbols; the retired file paths and the old namespace stay banned.
 RETIRED_SYMBOLS = (
     "AEItemKey",
     "AEKey",
-    "KeyCounter",
-    "Actionable",
-    "IActionSource",
     "StorageTransactionException",
     "AppEngCellInventory",
     "StorageComponentItem",
     "ProbablyStolen.DigitalStorage.Common.appeng",
-    "BasicCellInventory",
     "StorageCellSnapshot",
     "IStorageCellPersistencePort",
     "StorageHelper",
@@ -112,8 +111,10 @@ class RetirementContractTests(unittest.TestCase):
         # Stored items live on the cell's native pages; the resolver only finds the mounted cells.
         resolver = (NETWORK / "NativeCellResolver.cs").read_text(encoding="utf-8")
         self.assertIn("internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive)", resolver)
-        for forbidden in ("CellMetadataStore", "JsonConvert", "TransferContext", "GetAvailableStacks"):
+        for forbidden in ("CellMetadataStore", "JsonConvert", "TransferContext"):
             self.assertNotIn(forbidden, resolver)
+        # The status-only cell answers the storage contract without holding any count of its own.
+        self.assertRegex(resolver, r"public void GetAvailableStacks\(KeyCounter output\)\s*\{\s*\}")
         # GridStorage rejects one cell instance mounted twice, so every mounted cell needs its own instance,
         # cached per native cell; a shared instance made any network with two or more cells unreadable. The
         # behaviour is covered by NativeCellResolverTests.Resolver_TwoMountedCells_GetDistinctStableInstances.
@@ -130,7 +131,7 @@ class RetirementContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, coordinator)
 
     def test_terminal_rejections_do_not_call_storage_operations(self):
-        storage = (PLATFORM / "Storage" / "NetworkStorage.cs").read_text(encoding="utf-8")
+        storage = (PLATFORM / "Storage" / "StorageService.cs").read_text(encoding="utf-8")
         self.assertIn("terminal_storage_unavailable", storage)
         coordinator = (NETWORK / "GridNetworkPowerCoordinator.cs").read_text(encoding="utf-8")
         for forbidden in ("storage.insert(", "storage.extract(", "PoweredExtraction", "Journal", "Codec"):

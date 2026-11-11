@@ -87,7 +87,7 @@ internal sealed class DriveItem
     {
         var drag = ItemMouseDragHandler.current;
         if (drag?.IsDraggingItem != true || drag.GetCurrentItem() is not GameItem current) return null;
-        var key = NetworkStorage.Identify(current);
+        var key = StorageService.Identify(current);
         return key?.IsCanonical == true ? key : null;
     }
 

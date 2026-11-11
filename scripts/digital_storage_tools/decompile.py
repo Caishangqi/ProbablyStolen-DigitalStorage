@@ -1,4 +1,4 @@
-"""Decompile all managed game assemblies into a build-scoped local archive."""
+"""Decompile all managed game assemblies into a game-version-scoped local archive."""
 
 from __future__ import annotations
 

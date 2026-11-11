@@ -5,7 +5,7 @@ namespace ProbablyStolen.DigitalStorage.Mod.Patches;
 
 /// <summary>
 /// Opens the terminal's storage window instead of its native machinery window. Double-click, single-click interact
-/// and the context-menu Open all call <c>OpenContentAction</c> (Steam build 26496118). Like
+/// and the context-menu Open all call <c>OpenContentAction</c>. Like
 /// <see cref="CellPageRestorePatch"/>, it lives in the IMod assembly that the loader patches.
 /// </summary>
 [HarmonyPatch(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.OpenContentAction))]

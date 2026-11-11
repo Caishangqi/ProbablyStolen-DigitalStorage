@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
-/// <summary>Terminal slot clicks, after AE2's left-click, right-click and shift-click extraction.</summary>
+/// <summary>Terminal slot clicks: left-click, right-click and shift-click extraction.</summary>
 public enum TerminalClick
 {
     /// <summary>Left click: take up to one full stack.</summary>

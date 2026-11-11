@@ -1,11 +1,12 @@
 using ProbablyStolen.DigitalStorage.Client.Network;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
-using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
+using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -14,15 +15,15 @@ internal sealed class GridNetworkTooltipPresenter
     private readonly NativeNetworkScanner _scanner;
     private readonly GridNetworkPowerCoordinator _networkPower;
     private readonly ModText _text;
-    private readonly CellTooltipPresenter _cellTooltipPresenter;
+    private readonly BasicCellHandler _cellHandler;
 
     internal GridNetworkTooltipPresenter(NativeNetworkScanner scanner,
-        GridNetworkPowerCoordinator networkPower, ModText text, CellTooltipPresenter cellTooltipPresenter)
+        GridNetworkPowerCoordinator networkPower, ModText text, BasicCellHandler cellHandler)
     {
         _scanner = scanner;
         _networkPower = networkPower;
         _text = text;
-        _cellTooltipPresenter = cellTooltipPresenter;
+        _cellHandler = cellHandler;
     }
 
     internal void OnCreateTooltipLate(RichTextBuilder builder, GameItem item)
@@ -34,7 +35,7 @@ internal sealed class GridNetworkTooltipPresenter
 
         if (StorageCellTier.FromCellId(item.identifier) != null)
         {
-            _cellTooltipPresenter.AddCellLore(builder, item);
+            _cellHandler.AddCellInformationToTooltip(builder, item);
             return;
         }
 
@@ -75,7 +76,7 @@ internal sealed class GridNetworkTooltipPresenter
 
     /// <summary>
     /// Adds the game's own "Double-Click To Open" line, as ContainerHelper.CreateContainerTooltip does for items with
-    /// CONTAINER_TOOLTIP_TAG (Steam build 26496118). The line is added here rather than through the tag because
+    /// CONTAINER_TOOLTIP_TAG. The line is added here rather than through the tag because
     /// loading replaces item state with the saved tags, and the tag would then be written into saves.
     /// </summary>
     private static void AddOpenHint(RichTextBuilder builder, GameItem item)

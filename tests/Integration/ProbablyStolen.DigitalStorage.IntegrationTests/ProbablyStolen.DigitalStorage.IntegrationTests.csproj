@@ -21,8 +21,9 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeNetworkScanner.cs" Link="NativeNetwork\NativeNetworkScanner.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\BasicCellHandler.cs" Link="Storage\BasicCellHandler.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\EmptyPageReset.cs" Link="Storage\EmptyPageReset.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\PageSetSwap.cs" Link="Storage\PageSetSwap.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\TerminalSearchMetadata.cs" Link="Storage\TerminalSearchMetadata.cs" />
   </ItemGroup>
 

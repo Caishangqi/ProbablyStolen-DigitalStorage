@@ -127,8 +127,6 @@ terminal_storage_reject_no_cell,No storage cell accepts this item. Check partiti
 terminal_storage_reject_type_limit,The storage cells already hold their maximum number of item types.
 terminal_storage_reject_too_large,This item is too large to fit in a storage cell.
 terminal_storage_reject_no_space,The storage cells are full.
-cell_storage_usage,{0}/{1} space used, {2}/{3} item kinds
-cell_storage_partitioned,Partitioned ({0} item kinds)
 cell_storage_unavailable,Storage unavailable
 terminal_button_modules,M
 terminal_button_modules_tip,Open the module panel
@@ -160,10 +158,7 @@ terminal_hint_left,Left click: take one stack (one item if it does not stack)
 terminal_hint_right,Right click: take half a stack (stored stacks are not split)
 terminal_hint_shift,Shift + left click: take all
 config_section_power,Network power
-config_section_storage,Storage cells
 config_section_debug,Debug
-storage_cell_max_pages_name,1k base storage pages
-storage_cell_max_pages_desc,Maximum 12x12 pages for a 1k cell. Higher tiers multiply this limit. Range 1-128. Default: 16. Lowering it keeps existing pages and their items; only new pages are refused.
 debug_show_cell_pages_name,Show storage pages when opening a cell
 debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
 config_section_vendors,Vendors
@@ -180,3 +175,20 @@ priority_configure,Priority
 priority_title,Drive Priority
 priority_desc,Items go into higher-priority drives first and come out of lower-priority drives first. Range {0} to {1}.
 priority_invalid,Enter a whole number
+cell_storage_bytes,{0}/{1} bytes used
+cell_storage_types,{0}/{1} item types
+cell_storage_partition_include,Partitioned - Include
+cell_storage_partition_exclude,Partitioned - Exclude
+cell_storage_partition_include_equal,Partitioned - Include · Equal distribution
+cell_storage_partition_exclude_equal,Partitioned - Exclude · Equal distribution
+cell_storage_schema,Storage format v{0} (latest v{1})
+cell_storage_migration_refused,Pending migration: take some items out first
+cell_storage_migration_failed,Migration failed: do not save; quit and load again
+cell_storage_compaction_blocked,Empty pages could not be removed; the cell still works
+cell_storage_locked,Locked: first load and save this game with mod version {0}, then upgrade
+cell_storage_schema_too_new,Update the mod: this version supports storage format up to v{0}
+cell_storage_rollback_failed,Page cleanup failed: do not save; quit and load again
+cell_storage_type_limit_invalid,Item type limit settings are invalid; the cell is disabled
+terminal_storage_reject_capacity,The storage cells do not have enough free bytes for this item.
+terminal_storage_reject_quota,This item type has used up its equal share of the storage cell.
+terminal_storage_reject_read_only,This storage cell only allows taking items out until it is migrated.

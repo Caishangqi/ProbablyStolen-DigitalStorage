@@ -8,7 +8,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Identity;
 
-/// <summary>Outcome of a build-specific native identity capture.</summary>
+/// <summary>Outcome of a version-specific native identity capture.</summary>
 internal enum NativeItemIdentityReadStatus
 {
     Success = 0,
@@ -1118,7 +1118,7 @@ internal interface INativeIdentityInventorySource
     int Orientation { get; }
 }
 
-/// <summary>Build-26496118 native object adapter. It only reads fields and getters.</summary>
+/// <summary>Native object adapter. It only reads fields and getters.</summary>
 internal sealed class NativeIdentityAdapter
 {
     private readonly Dictionary<GameItem, NativeItemSource> _items = new(ReferenceComparer<GameItem>.Instance);

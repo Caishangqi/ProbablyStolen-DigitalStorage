@@ -11,7 +11,7 @@ internal static class TerminalTooltipPresenter
         var trigger = element.root.GetComponent<CustomUITooltipTrigger>();
         if (trigger != null && !string.Equals(trigger.tooltipText, text, StringComparison.Ordinal))
         {
-            // SetTooltip changes only the next pointer-enter text in the target game build.
+            // SetTooltip changes only the next pointer-enter text in the target game version.
             CustomUIManager.Instance?.HideTooltip(trigger);
         }
         element.SetTooltip(text);

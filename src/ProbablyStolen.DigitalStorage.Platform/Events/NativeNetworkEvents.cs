@@ -5,7 +5,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Events;
 
 /// <summary>
 /// Turns native inventory callbacks into <see cref="NetworkChanged"/> signals. Handlers only post a reason and never
-/// scan: an item's <c>onSlotRemoveItemFunc</c> runs before the item leaves its inventory (Steam build 26496118,
+/// scan: an item's <c>onSlotRemoveItemFunc</c> runs before the item leaves its inventory (,
 /// <c>GameGridInventory.Expel</c>), so the topology is read on the next frame instead.
 /// </summary>
 internal sealed class NativeNetworkEvents

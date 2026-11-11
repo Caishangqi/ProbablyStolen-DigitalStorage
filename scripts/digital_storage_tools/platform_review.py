@@ -62,7 +62,7 @@ def validate(root: Path = ROOT, tests_only: bool = False) -> dict:
     """Compare current inputs with the reviewed manifest.
 
     ``tests_only`` drops product sources and tooling scripts from the comparison but still pins the Platform test
-    project and auto-imported build configuration. Product code reached by the approved tests is not reviewed in
+    project and auto-imported MSBuild configuration. Product code reached by the approved tests is not reviewed in
     this mode, so a product change can still alter what those tests execute.
     """
     manifest = json.loads((root / MANIFEST.relative_to(ROOT)).read_text(encoding='utf-8'))

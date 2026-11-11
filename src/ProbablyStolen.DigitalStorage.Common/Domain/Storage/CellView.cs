@@ -5,108 +5,147 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
-/// <summary>The bounding width and height of an item in its stored orientation.</summary>
-public readonly struct BoundingSize : IEquatable<BoundingSize>
+/// <summary>Whether a cell accepts new items.</summary>
+public enum CellWriteState
 {
-    /// <summary>Creates a bounding size.</summary>
-    public BoundingSize(int width, int height)
-    {
-        Width = width;
-        Height = height;
-    }
+    /// <summary>The cell accepts and releases items.</summary>
+    Writable = 0,
 
-    /// <summary>Gets the width in grid cells.</summary>
-    public int Width { get; }
-
-    /// <summary>Gets the height in grid cells.</summary>
-    public int Height { get; }
-
-    /// <inheritdoc />
-    public bool Equals(BoundingSize other) => Width == other.Width && Height == other.Height;
-
-    /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is BoundingSize other && Equals(other);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(Width, Height);
-
-    /// <inheritdoc />
-    public override string ToString() => $"{Width}x{Height}";
+    /// <summary>Migration was refused; the cell only releases items.</summary>
+    ExtractOnly = 1
 }
 
-/// <summary>An item to place: its stored-orientation bounding size and type.</summary>
-public sealed class ItemFootprint
-{
-    /// <summary>Creates a footprint.</summary>
-    public ItemFootprint(BoundingSize size, ItemKey key)
-    {
-        Size = size;
-        Key = key ?? throw new ArgumentNullException(nameof(key));
-    }
-
-    /// <summary>Gets the bounding size.</summary>
-    public BoundingSize Size { get; }
-
-    /// <summary>Gets the item type.</summary>
-    public ItemKey Key { get; }
-}
-
-/// <summary>A read-only projection of one page: its size label (none when empty) and occupied slots.</summary>
+/// <summary>Projection of one page: its geometry and which roots it holds.</summary>
+/// <remarks>Strip pages track occupied slots; anchor and legacy pages only count their roots.</remarks>
 public sealed class PageView
 {
-    private readonly HashSet<int> _occupied;
+    private readonly bool[]? _occupied;
 
-    /// <summary>Creates a page projection.</summary>
-    public PageView(BoundingSize? label, IEnumerable<int> occupiedSlots)
+    private PageView(PageGeometry geometry, bool[]? occupied, int rootCount)
     {
-        _occupied = new HashSet<int>(occupiedSlots ?? throw new ArgumentNullException(nameof(occupiedSlots)));
-        if (label == null && _occupied.Count != 0)
+        Geometry = geometry;
+        _occupied = occupied;
+        RootCount = rootCount;
+    }
+
+    /// <summary>Creates a strip page projection.</summary>
+    /// <exception cref="ArgumentException">The geometry is not a strip page, or a slot is outside it or repeated.</exception>
+    public static PageView Strip(PageGeometry geometry, IEnumerable<int> occupiedSlots)
+    {
+        if (geometry.Kind != PageKind.Strip) throw new ArgumentException("Only strip pages have slots.", nameof(geometry));
+        if (occupiedSlots == null) throw new ArgumentNullException(nameof(occupiedSlots));
+        var occupied = new bool[geometry.SlotCount];
+        var count = 0;
+        foreach (var slot in occupiedSlots)
         {
-            throw new ArgumentException("A page without a size label cannot have occupied slots.");
+            if (slot < 0 || slot >= occupied.Length || occupied[slot])
+                throw new ArgumentException($"Slot {slot} is outside the page or repeated.", nameof(occupiedSlots));
+            occupied[slot] = true;
+            count++;
         }
 
-        Label = _occupied.Count == 0 ? null : label;
+        return new PageView(geometry, occupied, count);
     }
 
-    /// <summary>An empty page.</summary>
-    public static PageView Free => new(null, Array.Empty<int>());
+    /// <summary>Creates an anchor or legacy page projection holding <paramref name="rootCount"/> roots.</summary>
+    /// <exception cref="ArgumentException">The geometry is a strip page or the count is negative.</exception>
+    public static PageView Unslotted(PageGeometry geometry, int rootCount)
+    {
+        if (geometry.Kind == PageKind.Strip) throw new ArgumentException("Strip pages track slots.", nameof(geometry));
+        if (rootCount < 0) throw new ArgumentException("A root count cannot be negative.", nameof(rootCount));
+        return new PageView(geometry, null, rootCount);
+    }
 
-    /// <summary>Gets the bounding size this page holds, or null when the page is free.</summary>
-    public BoundingSize? Label { get; }
+    /// <summary>Gets the page geometry.</summary>
+    public PageGeometry Geometry { get; }
 
-    /// <summary>Gets whether no item is on this page.</summary>
-    public bool IsFree => Label == null;
+    /// <summary>Gets the page role.</summary>
+    public PageKind Kind => Geometry.Kind;
 
-    /// <summary>Gets whether a slot is occupied.</summary>
-    public bool IsOccupied(int slot) => _occupied.Contains(slot);
+    /// <summary>Gets the number of item roots on the page.</summary>
+    public int RootCount { get; private set; }
+
+    /// <summary>Gets whether the page holds no item root.</summary>
+    public bool IsEmpty => RootCount == 0;
+
+    /// <summary>Gets whether a strip slot is occupied; always false for anchor and legacy pages.</summary>
+    public bool IsOccupied(int slot) => _occupied != null && slot >= 0 && slot < _occupied.Length && _occupied[slot];
+
+    /// <summary>Gets the lowest free strip slot, or -1 when the page is full or not a strip page.</summary>
+    public int FirstFreeSlot()
+    {
+        if (_occupied == null) return -1;
+        for (var slot = 0; slot < _occupied.Length; slot++)
+            if (!_occupied[slot]) return slot;
+        return -1;
+    }
+
+    internal PageView Clone() => new(Geometry, (bool[]?)_occupied?.Clone(), RootCount);
+
+    internal void Occupy(int slot)
+    {
+        if (_occupied == null || slot < 0 || slot >= _occupied.Length || _occupied[slot])
+            throw new InvalidOperationException($"Slot {slot} is not free on this page.");
+        _occupied[slot] = true;
+        RootCount++;
+    }
+
+    internal void Release(int slot)
+    {
+        if (_occupied == null)
+        {
+            if (slot != -1 || RootCount == 0) throw new InvalidOperationException("The page holds no such root.");
+        }
+        else
+        {
+            if (slot < 0 || slot >= _occupied.Length || !_occupied[slot])
+                throw new InvalidOperationException($"Slot {slot} is not occupied on this page.");
+            _occupied[slot] = false;
+        }
+
+        RootCount--;
+    }
 }
 
-/// <summary>A read-only projection of one storage cell, built fresh for each operation.</summary>
+/// <summary>
+/// Projection of one storage cell for one operation. It is built from the live pages and updated in place as
+/// roots move during that operation; it is never kept across frames.
+/// </summary>
 public sealed class CellView
 {
-    private readonly HashSet<ItemKey> _types;
+    private readonly List<PageView> _pages;
+    private readonly Dictionary<BoundingSize, List<int>> _chains = new();
 
     /// <summary>Creates a cell projection.</summary>
-    public CellView(CellLayout layout, IEnumerable<PageView> pages, IEnumerable<ItemKey> storedTypes,
-        CellPartition partition, int priority = DrivePriority.Default)
+    /// <exception cref="ArgumentException">The pages do not start with the anchor or the type limit is not positive.</exception>
+    public CellView(CellRules rules, int typeLimit, IEnumerable<PageView> pages, CellUsage usage,
+        CellPartition partition, int priority = DrivePriority.Default, CellWriteState writeState = CellWriteState.Writable)
     {
-        Priority = DrivePriority.Clamp(priority);
-        Layout = layout ?? throw new ArgumentNullException(nameof(layout));
-        Pages = (pages ?? throw new ArgumentNullException(nameof(pages))).ToArray();
-        _types = new HashSet<ItemKey>(storedTypes ?? throw new ArgumentNullException(nameof(storedTypes)));
-        // A cell can hold more pages than the current limit after the limit was lowered. Those pages stay usable;
-        // the planner only refuses to add another one.
+        Rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        if (typeLimit < 1) throw new ArgumentException("A type limit is positive.", nameof(typeLimit));
+        TypeLimit = typeLimit;
+        _pages = (pages ?? throw new ArgumentNullException(nameof(pages))).ToList();
+        if (_pages.Count == 0 || _pages.Any(page => page == null) || _pages[0].Kind != PageKind.Anchor ||
+            _pages.Skip(1).Any(page => page.Kind == PageKind.Anchor))
+            throw new ArgumentException("Page 0, and only page 0, is the anchor.", nameof(pages));
+        for (var index = 0; index < _pages.Count; index++) Index(index);
+        Usage = usage ?? throw new ArgumentNullException(nameof(usage));
         Partition = partition ?? throw new ArgumentNullException(nameof(partition));
+        Priority = DrivePriority.Clamp(priority);
+        WriteState = writeState;
     }
 
-    /// <summary>Gets the tier layout.</summary>
-    public CellLayout Layout { get; }
+    /// <summary>Gets the tier page rules.</summary>
+    public CellRules Rules { get; }
 
-    /// <summary>Gets the pages in page order.</summary>
-    public IReadOnlyList<PageView> Pages { get; }
+    /// <summary>Gets the effective type limit.</summary>
+    public int TypeLimit { get; }
 
-    /// <summary>Gets the number of distinct stored types.</summary>
-    public int TypeCount => _types.Count;
+    /// <summary>Gets the pages in native page order.</summary>
+    public IReadOnlyList<PageView> Pages => _pages;
+
+    /// <summary>Gets the stored units and area units.</summary>
+    public CellUsage Usage { get; }
 
     /// <summary>Gets the partition filter.</summary>
     public CellPartition Partition { get; }
@@ -114,6 +153,137 @@ public sealed class CellView
     /// <summary>Gets the priority of the drive the cell is mounted in.</summary>
     public int Priority { get; }
 
-    /// <summary>Gets whether this cell already stores a type.</summary>
-    public bool Contains(ItemKey key) => _types.Contains(key);
+    /// <summary>Gets whether the cell accepts new items.</summary>
+    public CellWriteState WriteState { get; }
+
+    /// <summary>Gets the number of stored types.</summary>
+    public int TypeCount => Usage.TypeCount;
+
+    /// <summary>Gets whether this cell stores a type.</summary>
+    public bool Contains(ItemKey key) => Usage.Contains(key);
+
+    /// <summary>Area units billed per byte.</summary>
+    public const int AreaUnitsPerByte = 8;
+
+    /// <summary>
+    /// Gets used bytes: <c>types × bytesPerType + ⌈areaUnits ÷ 8⌉</c>, rounded once for the whole cell.
+    /// </summary>
+    public static long UsedBytes(int types, long areaUnits, long bytesPerType)
+    {
+        if (types < 0 || areaUnits < 0 || bytesPerType < 0) throw new ArgumentOutOfRangeException(nameof(types));
+        return checked(types * bytesPerType + (areaUnits + AreaUnitsPerByte - 1) / AreaUnitsPerByte);
+    }
+
+    /// <summary>Gets the bytes this cell uses now.</summary>
+    public long UsedBytes() => UsedBytes(TypeCount, Usage.AreaUnits, Rules.Tier.GetBytesPerType());
+
+    /// <summary>
+    /// Gets the area units one type may hold under equal distribution:
+    /// <c>⌈(totalBytes − bytesPerType × base) × 8 ÷ base⌉</c>, at least 0.
+    /// </summary>
+    public long EqualShareQuota()
+    {
+        long shares = Partition.EqualShareBase(TypeLimit);
+        var free = checked(Rules.Tier.GetBytes() - Rules.Tier.GetBytesPerType() * shares);
+        if (free <= 0) return 0;
+        var area = checked(free * AreaUnitsPerByte);
+        return (area + shares - 1) / shares;
+    }
+
+    /// <summary>Gets an independent copy for simulation; changes to the copy never reach this view.</summary>
+    public CellView Clone() => new(Rules, TypeLimit, _pages.Select(page => page.Clone()), Usage.Clone(), Partition,
+        Priority, WriteState);
+
+    /// <summary>Gets the strip slot a root occupies, or -1 for anchor and legacy pages.</summary>
+    /// <exception cref="ArgumentException">The position is not a slot origin of a strip page.</exception>
+    public int SlotAt(int page, int x, int y)
+    {
+        var view = PageAt(page);
+        if (view.Kind != PageKind.Strip) return -1;
+        var slot = StripLayout.SlotIndexAt(view.Geometry, x, y);
+        return slot >= 0 ? slot : throw new ArgumentException($"({x},{y}) is not a slot origin on page {page}.");
+    }
+
+    /// <summary>Gets the strip pages for one slot size in page order, whatever their slot count.</summary>
+    public IReadOnlyList<int> ChainOf(BoundingSize size) =>
+        _chains.TryGetValue(size, out var chain) ? chain : (IReadOnlyList<int>)Array.Empty<int>();
+
+    /// <summary>Records a newly appended page and returns its index.</summary>
+    /// <exception cref="ArgumentException">The page is an anchor page.</exception>
+    public int AppendPage(PageGeometry page)
+    {
+        if (page.Kind == PageKind.Anchor) throw new ArgumentException("Only page 0 may be the anchor.", nameof(page));
+        if (_pages.Count >= LayoutDescriptor.MaxPages) throw new InvalidOperationException("The cell is at the descriptor page limit.");
+        _pages.Add(page.Kind == PageKind.Strip ? PageView.Strip(page, Array.Empty<int>()) : PageView.Unslotted(page, 0));
+        Index(_pages.Count - 1);
+        return _pages.Count - 1;
+    }
+
+    /// <summary>Records a root stored in a strip slot.</summary>
+    public void RecordStored(int page, int slot, ItemKey key, long units, BoundingSize size)
+    {
+        var area = CellUsage.AreaOf(size, units);
+        PageAt(page).Occupy(slot);
+        try
+        {
+            Usage.Add(key, units, area);
+        }
+        catch
+        {
+            _pages[page].Release(slot);
+            throw;
+        }
+    }
+
+    /// <summary>Records a root leaving a page; <paramref name="slot"/> is -1 for anchor and legacy pages.</summary>
+    public void RecordRemoved(int page, int slot, ItemKey key, long units, BoundingSize size)
+    {
+        var area = CellUsage.AreaOf(size, units);
+        Usage.Remove(key, units, area);
+        try
+        {
+            PageAt(page).Release(slot);
+        }
+        catch
+        {
+            Usage.Add(key, units, area);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Records a root moving inside this cell from <paramref name="fromPage"/> to slot <paramref name="toSlot"/>
+    /// of <paramref name="toPage"/>; usage does not change.
+    /// </summary>
+    /// <param name="fromPage">The source page.</param>
+    /// <param name="fromSlot">The source slot, or -1 when the source is an anchor or legacy page.</param>
+    /// <param name="toPage">The target strip page.</param>
+    /// <param name="toSlot">The target slot.</param>
+    public void RecordRelocated(int fromPage, int fromSlot, int toPage, int toSlot)
+    {
+        var target = PageAt(toPage);
+        var source = PageAt(fromPage);
+        target.Occupy(toSlot);
+        try
+        {
+            source.Release(fromSlot);
+        }
+        catch
+        {
+            target.Release(toSlot);
+            throw;
+        }
+    }
+
+    private PageView PageAt(int page) =>
+        page >= 0 && page < _pages.Count ? _pages[page] : throw new ArgumentOutOfRangeException(nameof(page));
+
+    private void Index(int index)
+    {
+        var page = _pages[index];
+        if (page.Kind != PageKind.Strip) return;
+        if (!_chains.TryGetValue(page.Geometry.SlotSize, out var chain))
+            _chains[page.Geometry.SlotSize] = chain = new List<int>();
+        chain.Add(index);
+    }
 }

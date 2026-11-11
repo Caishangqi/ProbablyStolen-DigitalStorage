@@ -2,8 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using ProbablyStolen.DigitalStorage.Common.Application.Storage;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Network;
 
@@ -21,7 +27,7 @@ internal static class NativeCellResolver
 
     /// <summary>Gets the native cell items mounted in a drive, in bay order.</summary>
     internal static IReadOnlyList<GameItem> GetCellItems(GameItem drive) =>
-        GetBays(drive).Select(bay => bay.childItem).Where(IsMountedCell).Select(cell => cell!).ToArray();
+        GetBays(drive).Select(bay => bay.childItem).Where(BasicCellHandler.IsCell).Select(cell => cell!).ToArray();
 
     /// <summary>Gets every cell bay slot of a drive, empty or not, in bay order.</summary>
     internal static IReadOnlyList<GameSlotInventory> GetBays(GameItem drive)
@@ -37,21 +43,26 @@ internal static class NativeCellResolver
             .ToArray();
     }
 
-    /// <summary>Gets whether a bay holds an assembled storage cell with its storage component.</summary>
-    internal static bool IsMountedCell(GameItem? cell)
-    {
-        if (cell == null || StorageCellTier.FromCellId(cell.identifier) is not { } tier)
-        {
-            return false;
-        }
-
-        var component = CellContentWindow.Component(cell);
-        return component != null && StorageCellTier.FromComponentId(component.identifier) == tier &&
-            cell.unitCount == 1 && component.unitCount == 1;
-    }
-
+    // Grid status scans run for every terminal operation and tooltip and only ask whether a cell is present, so they
+    // use this cheap adapter instead of reading every page. Storing and extracting go through
+    // StorageService.GetInventory, which mounts real BasicCellInventory instances; these calls refuse without
+    // touching any item.
     private sealed class MountedCell : IStorageCell
     {
         public CellState GetStatus() => CellState.Empty;
+
+        public bool IsPreferredStorageFor(ItemKey what, IActionSource source) => false;
+
+        public InsertResult Insert(IRootSource roots, Actionable mode, IActionSource source) =>
+            new(0, TransferStep.Rejected(StoreRejection.ReadOnly), new StorageChangeSet());
+
+        public ExtractResult Extract(ItemKey what, long amount, IRootSink destination, Actionable mode,
+            IActionSource source) => new(0, TransferStep.SourceEmpty, new StorageChangeSet());
+
+        public void GetAvailableStacks(KeyCounter output)
+        {
+        }
+
+        public string GetDescription() => "status-only mounted cell";
     }
 }

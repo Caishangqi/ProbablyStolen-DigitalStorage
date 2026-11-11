@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 /// <summary>Counts immutable item keys without owning physical items.</summary>
-public sealed class ItemCounter
+public sealed class KeyCounter
 {
     private readonly Dictionary<ItemKey, long> _amounts = new();
 

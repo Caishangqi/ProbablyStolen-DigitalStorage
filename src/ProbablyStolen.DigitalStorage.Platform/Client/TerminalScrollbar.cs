@@ -7,7 +7,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 /// <summary>
-/// Draws and drives an AE2-style scrollbar (<see cref="ScrollbarModel"/>): a fixed-size handle that can be dragged,
+/// Draws and drives a scrollbar (<see cref="ScrollbarModel"/>): a fixed-size handle that can be dragged,
 /// and a track that pages toward the pointer, repeating after 250 ms and then every 150 ms while held.
 /// </summary>
 internal sealed class TerminalScrollbar : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler

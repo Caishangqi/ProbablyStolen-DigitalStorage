@@ -2,16 +2,16 @@ using System;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
-using ProbablyStolen.DigitalStorage.Common.Initialization;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Initialization;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Content;
-using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
@@ -24,9 +24,10 @@ public sealed class PlatformComposition : IDisposable
     private readonly string _modId;
     private readonly ItemAppearance _appearance;
     private readonly GridNetworkTooltipPresenter _networkTooltipPresenter;
-    private readonly CellTooltipPresenter _cellTooltipPresenter;
+    private readonly BasicCellHandler _cellHandler;
     private readonly StorageContentRegistration _content;
-    private readonly CellPageAudit _pageAudit;
+    private readonly CellHealth _health;
+    private readonly LegacyMigration _migration;
     private readonly StorageEventBus _events;
     private readonly DigitalStorageSettings _settings;
     private readonly StorageVendors _vendors;
@@ -39,9 +40,9 @@ public sealed class PlatformComposition : IDisposable
     private bool _isDisposed;
 
     private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
-        GridNetworkTooltipPresenter networkTooltipPresenter, CellTooltipPresenter cellTooltipPresenter,
+        GridNetworkTooltipPresenter networkTooltipPresenter, BasicCellHandler cellHandler,
         ItemAppearance appearance,
-        StorageContentRegistration content, CellPageAudit pageAudit, StorageEventBus events,
+        StorageContentRegistration content, CellHealth health, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search)
     {
         _events = events;
@@ -53,10 +54,11 @@ public sealed class PlatformComposition : IDisposable
         _statusPresenter = statusPresenter;
         _modId = modId;
         _networkTooltipPresenter = networkTooltipPresenter;
-        _cellTooltipPresenter = cellTooltipPresenter;
+        _cellHandler = cellHandler;
         _appearance = appearance;
         _content = content;
-        _pageAudit = pageAudit;
+        _health = health;
+        _migration = migration;
         _pinyinLifecycle = new PinyinLifecycleCoordinator(
             locale => _settings.GetSearchConfiguration(locale, message => _log.Error(message)),
             _search.Update, _search.Service.Configuration.PinyinEnabled);
@@ -99,15 +101,22 @@ public sealed class PlatformComposition : IDisposable
         var search = new TerminalSearchComposition(identity.Id, text,
             networkPowerSettings.GetSearchConfiguration(null, message => log.Error(message)),
             message => log.Error(message), registerSearchAddons);
-        networkPowerSettings.ApplyStorageLimits();
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
             message => log.Error(message),
             drive => NativeCellResolver.Get(drive));
-        var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message));
+        var cellHealth = new CellHealth(text, log);
+        var migration = new LegacyMigration(cellHealth, log);
+        var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message), cell =>
+        {
+            // A cell migrated during play warns like the load-time migration does when it fails.
+            var migrated = migration.TryMigrate(cell);
+            if (!migrated) cellHealth.WarnDoNotSave(1, "failed to migrate");
+            return migrated;
+        });
         var eventBus = new StorageEventBus(message => log.Error(message));
         var networkEvents = new NativeNetworkEvents(eventBus);
-        var cellTooltipPresenter = new CellTooltipPresenter(text);
-        var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellTooltipPresenter);
+        var cellHandler = new BasicCellHandler(text);
+        var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(key => text.Get(key),
             message => log.Error(message));
@@ -122,7 +131,7 @@ public sealed class PlatformComposition : IDisposable
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing,
             contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
-            networkTooltipPresenter, cellTooltipPresenter, appearance, content, new CellPageAudit(text, log), eventBus,
+            networkTooltipPresenter, cellHandler, appearance, content, cellHealth, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log), search);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
@@ -147,8 +156,10 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
             ModHook.OnGameLoadedNormal += OnGameLoaded;
-            ModHook.OnGameLoadedLate += _pageAudit.Run;
+            // Order matters: audit the restored pages, backfill item types, then migrate pending cells.
+            ModHook.OnGameLoadedLate += _health.Run;
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
+            ModHook.OnGameLoadedLate += _migration.Run;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             _log.Log(_statusPresenter.Present(ModuleStartupPhase.Enabled));
         }
@@ -179,8 +190,10 @@ public sealed class PlatformComposition : IDisposable
         _localeRegistration = null;
         ModHook.OnModConfigApplied -= OnConfigApplied;
         ModHook.OnGameLoadedNormal -= OnGameLoaded;
-        ModHook.OnGameLoadedLate -= _pageAudit.Run;
+        ModHook.OnGameLoadedLate -= _health.Run;
+        _health.Detach();
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
+        ModHook.OnGameLoadedLate -= _migration.Run;
         TerminalStorageWindow.CloseCurrent();
         PartitionConfigurationWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
@@ -209,7 +222,6 @@ public sealed class PlatformComposition : IDisposable
     {
         if (_isEnabled && string.Equals(modId, _modId, StringComparison.Ordinal))
         {
-            _settings.ApplyStorageLimits();
             if (_assetsReady) _settings.RefreshSectionNames();
             _pinyinLifecycle.OnConfigApplied();
             _log.Log("Digital Storage: configuration applied; open network views refresh now.");

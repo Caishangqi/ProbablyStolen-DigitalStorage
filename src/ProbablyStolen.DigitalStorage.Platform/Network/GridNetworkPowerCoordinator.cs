@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Energy;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Pathing;
-using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -16,18 +16,18 @@ internal sealed class GridNetworkPowerCoordinator
 {
     private readonly NativeNetworkScanner _scanner;
     private readonly EnergyService _energyService = new();
-    private readonly NetworkStorage _storage;
+    private readonly StorageService _storage;
 
     private readonly Action<string> _log;
 
-    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> log)
+    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> log, Func<GameItem, bool> migrate)
     {
         _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        _storage = new NetworkStorage(scanner, IsPowered, log);
+        _storage = new StorageService(scanner, IsPowered, log, migrate);
     }
 
-    internal TerminalInventorySnapshot ReadTerminalInventory(GameItem terminal) => _storage.Read(terminal);
+    internal TerminalInventorySnapshot ReadTerminalInventory(GameItem terminal) => _storage.GetCachedInventory(terminal);
 
     internal GameItem? FindStoredSample(GameItem terminal, ItemKey key) => _storage.FindSample(terminal, key);
 

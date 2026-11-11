@@ -1,4 +1,4 @@
-"""Resolve local game and build paths for repository scripts."""
+"""Resolve local game and output paths for repository scripts."""
 
 from __future__ import annotations
 

@@ -5,12 +5,12 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
 [TestFixture]
-public sealed class ItemCounterTests
+public sealed class KeyCounterTests
 {
     [Test]
     public void Add_AggregatesPerKeyAndIgnoresZero()
     {
-        var counter = new ItemCounter();
+        var counter = new KeyCounter();
         var key = new ItemKey("item.apple");
 
         counter.Add(key, 2);
@@ -25,7 +25,7 @@ public sealed class ItemCounterTests
     [Test]
     public void Add_RejectsNullNegativeAndOverflow()
     {
-        var counter = new ItemCounter();
+        var counter = new KeyCounter();
         var key = new ItemKey("item.apple");
         counter.Add(key, 1);
 
@@ -38,7 +38,7 @@ public sealed class ItemCounterTests
     [Test]
     public void Snapshot_IsADetachedCopy()
     {
-        var counter = new ItemCounter();
+        var counter = new KeyCounter();
         var key = new ItemKey("item.apple");
         counter.Add(key, 4);
         var snapshot = counter.Snapshot();
@@ -53,7 +53,7 @@ public sealed class ItemCounterTests
     [Test]
     public void Clear_RemovesAllAggregates()
     {
-        var counter = new ItemCounter();
+        var counter = new KeyCounter();
         var key = new ItemKey("item.apple");
         counter.Add(key, 4);
 

@@ -5,7 +5,7 @@ using UnityEngine;
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 /// <summary>
-/// Routes opening a terminal to its storage window instead of the native machinery window, like AE2 where the
+/// Routes opening a terminal to its storage window instead of the native machinery window, where the
 /// terminal screen is the only screen. The native window, which holds the module bay, opens only on request.
 /// </summary>
 public static class TerminalOpenRouter
@@ -24,7 +24,7 @@ public static class TerminalOpenRouter
 
     /// <summary>
     /// Called before <c>ItemMouseDoubleClickHandler.OpenContentAction</c>, which double-click, single-click interact
-    /// and the context-menu Open all use (Steam build 26496118). Returns whether the terminal window handled it.
+    /// and the context-menu Open all use. Returns whether the terminal window handled it.
     /// </summary>
     public static bool TryOpen(GameItem? item)
     {

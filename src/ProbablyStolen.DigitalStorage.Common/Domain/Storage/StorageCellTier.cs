@@ -26,6 +26,9 @@ public sealed class StorageCellTier
         CellId = "digital_storage.item_storage_cell_" + name;
     }
 
+    /// <summary>The base type limit of every tier.</summary>
+    public const int BaseTypeLimit = 128;
+
     /// <summary>Gets the immutable ordered catalog.</summary>
     public static IReadOnlyList<StorageCellTier> All => Tiers;
     /// <summary>Selects a merchant tier from an inclusive 1..100 draw.</summary>
@@ -41,7 +44,7 @@ public sealed class StorageCellTier
     }
     /// <summary>Gets the tier suffix.</summary>
     public string Name { get; }
-    /// <summary>Gets the multiplier applied to the 1k page limit.</summary>
+    /// <summary>Gets the multiplier applied to 1k capacity.</summary>
     public int Multiplier { get; }
     /// <summary>Gets the component base value.</summary>
     public int ComponentValue { get; }
@@ -68,6 +71,12 @@ public sealed class StorageCellTier
         return null;
     }
 
-    /// <summary>Gets the layout for a clamped 1k base page count.</summary>
-    public CellLayout Layout(int basePages) => CellLayout.ForTier(this, basePages);
+    /// <summary>Gets the byte capacity: 1024 per multiplier step.</summary>
+    public long GetBytes() => 1024L * Multiplier;
+
+    /// <summary>Gets the bytes each stored type costs: 4 per multiplier step.</summary>
+    public long GetBytesPerType() => 4L * Multiplier;
+
+    /// <summary>Gets the base type limit before extensions.</summary>
+    public int GetTotalTypes() => BaseTypeLimit;
 }

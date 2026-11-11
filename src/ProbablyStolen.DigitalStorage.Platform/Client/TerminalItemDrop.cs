@@ -1,15 +1,15 @@
 using System;
-using UnityEngine;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 /// <summary>
 /// Stores a whole stack dropped onto the terminal item itself, without opening the terminal. It uses the native
 /// "use item on item" hooks (<c>mayItemTargetThisFunc</c>, <c>canItemTargetThisFunc</c>, <c>onItemTargetThisFunc</c>),
-/// which <c>ItemMouseDragHandler.EndDrag</c> reaches after child inventory insertion and stacking (Steam build 26525552).
+/// which <c>ItemMouseDragHandler.EndDrag</c> reaches after child inventory insertion and stacking.
 /// </summary>
 internal sealed class TerminalItemDrop
 {
@@ -47,7 +47,7 @@ internal sealed class TerminalItemDrop
     private bool MayTarget(GameItem source, GameItem target) => Classify(source) switch
     {
         DropKind.Defer => true,
-        DropKind.Store => NetworkStorage.IsStorable(source),
+        DropKind.Store => StorageService.IsStorable(source),
         _ => false
     };
 

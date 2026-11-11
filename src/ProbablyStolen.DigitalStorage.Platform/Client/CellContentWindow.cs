@@ -1,9 +1,9 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
-using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
@@ -21,7 +21,6 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private readonly ItemContentSynchronization _contentSynchronization;
     private readonly CellAssemblyCallbacks _callbacks;
     private bool _reportedInvalid;
-    private readonly EmptyPageReset<MachineryTabs> _pageReset = new();
 
     internal GameSlotInventory Slot { get; }
 
@@ -36,7 +35,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         _callbacks = new CellAssemblyCallbacks(recipe, this);
         Slot = new GameSlotInventory(1, 2) { identifier = SlotId };
         Slot.mayInventoryAddItemFunc = (item, _) =>
-            !_pageReset.Pending && ShellReady() && _callbacks.CanInsert(ContentSnapshots.Item(item), ReferenceEquals(Slot.childItem, item),
+            !CellPages.SwapOf(_host).Pending && ShellReady() && _callbacks.CanInsert(ContentSnapshots.Item(item), ReferenceEquals(Slot.childItem, item),
                 GeneralHelper.CanAddItemToInv(item, _host));
         Slot.maxSlotAmountItemFunc = (_, _, _) => 1;
         Slot.mayInventoryRemoveItemFunc = (item, _) => CanRemoveFromSlot(item);
@@ -105,7 +104,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     }
 
     internal static StorageContentsState StorageState(GameItem host) =>
-        !CellPages.IsComplete(host) || CellPageAudit.IsUnavailable(host) ? StorageContentsState.Unavailable
+        !CellPages.IsComplete(host) || CellHealth.IsUnavailable(host) ? StorageContentsState.Unavailable
         : CellPages.IsEmpty(host) ? StorageContentsState.Empty : StorageContentsState.NonEmpty;
 
     internal static bool IsMounted(GameItem host) =>
@@ -142,7 +141,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         PresentInitial(tier);
         if (!assembled)
         {
-            _pageReset.Request();
+            CellPages.SwapOf(_host).Request();
             RetryReset();
         }
     }
@@ -160,16 +159,16 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     }
 
     private bool ShellReady() => _host.identifier != StorageCellDisassemblyRecipe.HousingId ||
-        CellPages.CanAssemble(_host, _pageReset);
+        CellPages.IsAtAnchor(_host);
 
     private void RetryReset()
     {
         if (SaveManager.IsDecoding || _host.identifier != StorageCellDisassemblyRecipe.HousingId || Slot.childItem != null)
             return;
-        if (!_pageReset.Pending && ShellReady()) return;
+        if (!CellPages.SwapOf(_host).Pending && ShellReady()) return;
         try
         {
-            CellPages.ResetEmpty(_host, _pageReset);
+            CellPages.ResetToAnchor(_host);
         }
         catch (Exception error)
         {

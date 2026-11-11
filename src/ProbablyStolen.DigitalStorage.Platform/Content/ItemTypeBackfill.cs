@@ -6,7 +6,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
 /// Gives the mod's items saved before item types were introduced the same types new items get. Loading restores the
-/// saved <c>itemTypes</c> and tags over what the factory set (Steam build 26525552, SaveManager.cs:162 and :181), so
+/// saved <c>itemTypes</c> and tags over what the factory set (SaveManager.cs:162 and :181), so
 /// without this an old controller could still nest in containers and an old housing would not be bought. Approved by
 /// the user as a save update: it only adds MACHINE or MATERIAL, or removes MATERIAL from an assembled cell, and the
 /// game writes the result with the next save.

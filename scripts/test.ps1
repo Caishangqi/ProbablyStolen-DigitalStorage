@@ -8,7 +8,7 @@ param(
     [string]$GameDirectory,
     [string]$SteamLibraryDirectory,
     # Skips review of product sources and tooling scripts and the approved Platform test list. The Platform test
-    # project, its sources and auto-imported build files stay hash-pinned and the source inventory is still
+    # project, its sources and auto-imported MSBuild files stay hash-pinned and the source inventory is still
     # enforced; product code reached by the approved tests is not reviewed while the switch is set.
     [switch]$SkipPlatformReview
 )

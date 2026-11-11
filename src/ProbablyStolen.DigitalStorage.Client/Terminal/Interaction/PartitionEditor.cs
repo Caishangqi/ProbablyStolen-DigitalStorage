@@ -9,9 +9,12 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Interaction;
 /// <summary>Pure draft editor for a cell partition; it never writes persistence or moves items.</summary>
 public sealed class PartitionEditor
 {
+    /// <summary>The most identities the player-facing whitelist editor accepts.</summary>
+    public const int MaxKeys = 63;
+
     private readonly List<ItemKey> _baseline = new();
     private readonly List<ItemKey> _draft = new();
-    private CellPartitionMode _baselineMode;
+    private IncludeExclude _baselineMode;
     private bool _submitting;
 
     /// <summary>Starts a draft from the current validated partition.</summary>
@@ -26,7 +29,7 @@ public sealed class PartitionEditor
         _baseline.Clear();
         _draft.Clear();
         _baselineMode = current.Mode;
-        foreach (var key in current.Keys)
+        foreach (var key in current.List.GetItems())
         {
             _baseline.Add(key);
             _draft.Add(key);
@@ -59,9 +62,9 @@ public sealed class PartitionEditor
             return false;
         }
 
-        if (_draft.Count >= 63)
+        if (_draft.Count >= MaxKeys)
         {
-            throw new InvalidOperationException("A partition draft accepts at most 63 identities.");
+            throw new InvalidOperationException($"A partition draft accepts at most {MaxKeys} identities.");
         }
 
         _draft.Add(key);
@@ -105,7 +108,7 @@ public sealed class PartitionEditor
     public CellPartition Apply()
     {
         EnsureEditing();
-        var result = CellPartition.FromUserSubmission(_draft);
+        var result = CellPartition.FromUserSubmission(_draft, MaxKeys);
         CompleteApply(result);
         return result;
     }
@@ -117,7 +120,7 @@ public sealed class PartitionEditor
         EnsureEditing();
         if (submit == null) throw new ArgumentNullException(nameof(submit));
 
-        var candidate = CellPartition.FromUserSubmission(_draft);
+        var candidate = CellPartition.FromUserSubmission(_draft, MaxKeys);
         applied = null;
         bool accepted;
         _submitting = true;
@@ -171,7 +174,7 @@ public sealed class PartitionEditor
 
     private void UpdateDirty()
     {
-        IsDirty = _baselineMode != (_draft.Count == 0 ? CellPartitionMode.Unfiltered : CellPartitionMode.Whitelist) ||
+        IsDirty = _baselineMode != IncludeExclude.Whitelist ||
             _baseline.Count != _draft.Count;
         if (!IsDirty)
         {

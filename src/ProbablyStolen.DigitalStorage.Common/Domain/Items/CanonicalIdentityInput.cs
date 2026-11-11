@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
-/// <summary>Detached values used only to build an identity, never a physical item.</summary>
+/// <summary>Detached values used only to create an identity, never a physical item.</summary>
 public sealed class CanonicalIdentityInput
 {
     /// <summary>Creates an immutable item identity projection.</summary>

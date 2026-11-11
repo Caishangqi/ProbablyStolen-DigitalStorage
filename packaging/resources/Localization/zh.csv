@@ -127,8 +127,6 @@ terminal_storage_reject_no_cell,没有存储元件可以接收此物品。请检
 terminal_storage_reject_type_limit,存储元件的物品种类已达上限。
 terminal_storage_reject_too_large,此物品尺寸过大, 无法放入存储元件.
 terminal_storage_reject_no_space,存储元件已满。
-cell_storage_usage,已用 {0}/{1} 格, {2}/{3} 种物品
-cell_storage_partitioned,已分区 ({0} 种物品)
 cell_storage_unavailable,存储不可用
 terminal_button_modules,模
 terminal_button_modules_tip,打开模块面板
@@ -160,10 +158,7 @@ terminal_hint_left,左键: 取出一组 (不可堆叠的物品每次 1 个)
 terminal_hint_right,右键: 取出半组 (已存的堆不会拆分)
 terminal_hint_shift,Shift+左键: 取出全部
 config_section_power,网络耗电
-config_section_storage,存储元件
 config_section_debug,调试
-storage_cell_max_pages_name,1k 基础存储页上限
-storage_cell_max_pages_desc,1k 元件最多可扩展的 12×12 存储页数量, 更高等级按倍率增加. 范围 1-128. 默认: 16. 调低后已有的页和其中物品都会保留, 只是不再新增页.
 debug_show_cell_pages_name,双击存储元件时显示存储页
 debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其中的存储页; 关闭时只显示存储组件. 存储页始终锁定, 物品只能通过终端存取.
 config_section_vendors,商人
@@ -180,3 +175,20 @@ priority_configure,优先级
 priority_title,驱动器优先级
 priority_desc,存入时先放入优先级高的驱动器, 取出时先从优先级低的驱动器取出. 范围 {0} 到 {1}.
 priority_invalid,请输入整数
+cell_storage_bytes,已用 {0}/{1} 字节
+cell_storage_types,{0}/{1} 种物品
+cell_storage_partition_include,已分区 - 包含
+cell_storage_partition_exclude,已分区 - 排除
+cell_storage_partition_include_equal,已分区 - 包含 · 均分
+cell_storage_partition_exclude_equal,已分区 - 排除 · 均分
+cell_storage_schema,存储格式 v{0}（最新 v{1}）
+cell_storage_migration_refused,待迁移：需要先取出部分物品
+cell_storage_migration_failed,迁移失败：请不要存档，退出后重新载入
+cell_storage_compaction_blocked,空页回收失败，元件仍可使用
+cell_storage_locked,已锁定：请先安装模组 {0} 载入并保存此存档，再升级
+cell_storage_schema_too_new,需要更新模组：本模组支持到存储格式 v{0}
+cell_storage_rollback_failed,页面清理失败：请不要存档，退出后重新载入
+cell_storage_type_limit_invalid,种类上限设置无效，元件已停用
+terminal_storage_reject_capacity,存储元件的剩余字节不足以放入此物品。
+terminal_storage_reject_quota,此物品种类已用完它在存储元件中的均分容量。
+terminal_storage_reject_read_only,此存储元件在迁移完成前只能取出物品。

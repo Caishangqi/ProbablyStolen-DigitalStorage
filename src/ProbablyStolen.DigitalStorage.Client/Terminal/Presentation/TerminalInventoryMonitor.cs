@@ -19,7 +19,7 @@ public enum TerminalRefreshReason
 
 /// <summary>Decides when a terminal rereads inventory and detects display changes without owning inventory state.</summary>
 /// <remarks>
-/// Network events mark the view dirty and the next frame reads once, mirroring AE2's dirty-cache-then-tick refresh.
+/// Network events mark the view dirty and the next frame reads once.
 /// There is no fixed polling; a periodic audit runs only while diagnostics are enabled.
 /// </remarks>
 public sealed class TerminalInventoryMonitor

@@ -1,7 +1,9 @@
+using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
+
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
-/// <summary>A storage cell mounted in a drive, as seen by grid status checks.</summary>
-public interface IStorageCell
+/// <summary>A storage cell mounted in a drive.</summary>
+public interface IStorageCell : IStorage
 {
     /// <summary>Gets the current cell state.</summary>
     CellState GetStatus();

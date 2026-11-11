@@ -3,8 +3,7 @@ using System;
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
 /// <summary>
-/// Scrollbar rules adapted from AE2 <c>appeng.client.gui.widgets.Scrollbar</c>: a fixed-size handle, a range of
-/// whole rows, one page per wheel notch and per track click, and no effect while the range is empty.
+/// Scrollbar rules: a fixed-size handle, a range of whole rows, one page per wheel notch and per track click, and no effect while the range is empty.
 /// Coordinates are measured downward from the top of the track.
 /// </summary>
 public sealed class ScrollbarModel
