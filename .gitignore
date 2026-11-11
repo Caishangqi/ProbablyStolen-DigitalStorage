@@ -29,6 +29,8 @@
 !.env.example
 *.local.json
 .secrets/
+# Platform review manifest: kept on each machine for the local test gate, never published.
+/tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/reviewed-inputs.json
 
 # Build and test output.
 **/bin/

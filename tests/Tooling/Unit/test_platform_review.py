@@ -6,15 +6,23 @@ from pathlib import Path
 from digital_storage_tools import platform_review
 
 
+def _reviewed_copy(root: Path) -> Path:
+    """Copies the reviewed inputs and writes a manifest matching them; the real manifest is local and untracked."""
+    for name in platform_review.CONFIG:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(platform_review.ROOT / name, root / name)
+    for name in platform_review.PROJECTS:
+        shutil.copytree(platform_review.ROOT / name, root / name,
+                        ignore=shutil.ignore_patterns('bin', 'obj', 'reviewed-inputs.json'))
+    manifest = root / platform_review.MANIFEST.relative_to(platform_review.ROOT)
+    manifest.write_text(json.dumps({'inputs': platform_review.input_hashes(root)}), encoding='utf-8')
+    return root
+
+
 class PlatformReviewTests(unittest.TestCase):
     def test_new_ancestor_build_imports_fail_before_test_execution(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in platform_review.CONFIG:
-                (root / name).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(platform_review.ROOT / name, root / name)
-            for name in platform_review.PROJECTS:
-                shutil.copytree(platform_review.ROOT / name, root / name, ignore=shutil.ignore_patterns('bin', 'obj'))
+            root = _reviewed_copy(Path(directory))
             platform_review.validate(root)
             for name in (
                 "tests/Unit/Directory.Build.targets",
@@ -36,12 +44,7 @@ class PlatformReviewTests(unittest.TestCase):
 
     def test_source_changes_and_new_inputs_fail_review(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in platform_review.CONFIG:
-                (root / name).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(platform_review.ROOT / name, root / name)
-            for name in platform_review.PROJECTS:
-                shutil.copytree(platform_review.ROOT / name, root / name, ignore=shutil.ignore_patterns('bin', 'obj'))
+            root = _reviewed_copy(Path(directory))
             platform_review.validate(root)
             test = root / platform_review.PROJECTS[-1] / 'NativeItemIdentityReaderTests.cs'
             original = test.read_bytes()
@@ -57,12 +60,7 @@ class PlatformReviewTests(unittest.TestCase):
 
     def test_tests_only_ignores_product_sources_but_pins_the_test_boundary(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in platform_review.CONFIG:
-                (root / name).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(platform_review.ROOT / name, root / name)
-            for name in platform_review.PROJECTS:
-                shutil.copytree(platform_review.ROOT / name, root / name, ignore=shutil.ignore_patterns('bin', 'obj'))
+            root = _reviewed_copy(Path(directory))
             platform_review.validate(root, tests_only=True)
             product = root / platform_review.PROJECTS[0] / 'UnreviewedProductChange.cs'
             product.write_text('class UnreviewedProductChange {}', encoding='utf-8')
