@@ -32,8 +32,8 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(calls, ["check-source", "check-assets", "check-ci", "check-format"])
 
     def test_format_rejects_protected_paths_before_dotnet(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(commands, "ROOT", Path(directory)):
-            root = Path(directory)
+        with tempfile.TemporaryDirectory() as directory, patch.object(commands, "ROOT", Path(directory).resolve()):
+            root = Path(directory).resolve()
             for path in (root / ".reference" / "output", root / "game" / "Mods"):
                 with self.subTest(path=path), patch.dict(os.environ, {"ArtifactsPath": str(path), "DIGITAL_STORAGE_GAME_DIR": str(root / "game")}, clear=True), patch.object(commands.subprocess, "run") as run:
                     with self.assertRaises(ValueError):

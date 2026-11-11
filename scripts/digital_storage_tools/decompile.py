@@ -31,12 +31,18 @@ def _is_reparse_point(path: Path) -> bool:
 
 
 def _reject_reparse_components(path: Path, root: Path) -> None:
-    try:
-        relative = path.absolute().relative_to(root.absolute())
-    except ValueError as error:
-        raise WorkflowError(f"Path is outside the repository: {path}") from error
-    cursor = root
-    for part in relative.parts:
+    """Rejects links below ``root`` (already resolved) without resolving ``path`` itself.
+
+    ``path`` may spell the repository differently, e.g. through an 8.3 short TEMP name, so the walk starts at the
+    first ancestor that resolves to ``root`` and checks each component below it as supplied.
+    """
+    path = path.absolute()
+    for cursor in reversed(path.parents):
+        if os.path.normcase(str(cursor.resolve(strict=False))) == os.path.normcase(str(root)):
+            break
+    else:
+        raise WorkflowError(f"Path is outside the repository: {path}")
+    for part in path.relative_to(cursor).parts:
         cursor = cursor / part
         if _is_reparse_point(cursor):
             raise WorkflowError(f"Refusing a linked or reparse archive path: {cursor}")

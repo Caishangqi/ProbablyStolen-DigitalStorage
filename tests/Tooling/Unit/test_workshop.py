@@ -159,7 +159,7 @@ class WorkshopTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
+        self.root = Path(self.temporary_directory.name).resolve()
         self.package_directory = self.root / "package with spaces" / "DigitalStorage"
         self.package_directory.mkdir(parents=True)
         (self.package_directory / "manifest.xml").write_text(

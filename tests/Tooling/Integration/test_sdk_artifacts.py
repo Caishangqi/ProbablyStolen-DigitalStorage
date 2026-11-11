@@ -21,7 +21,7 @@ class SdkArtifactsTests(unittest.TestCase):
         self.assertEqual(Path(default["ArtifactsPath"]), ROOT / "artifacts")
         self.assertTrue(Path(default["TargetPath"]).is_relative_to(ROOT / "artifacts" / "bin"))
         with tempfile.TemporaryDirectory(prefix="artifacts path ") as directory:
-            output = Path(directory) / "external output"
+            output = Path(directory).resolve() / "external output"
             override = self.query(f"-p:ArtifactsPath={output}")
             self.assertEqual(Path(override["ArtifactsPath"]), output)
             self.assertTrue(Path(override["TargetPath"]).is_relative_to(output))
