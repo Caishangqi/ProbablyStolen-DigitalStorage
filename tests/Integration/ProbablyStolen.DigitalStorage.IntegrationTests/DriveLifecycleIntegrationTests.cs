@@ -1,11 +1,6 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
-using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Contracts;
-using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
-using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
-using ProbablyStolen.DigitalStorage.Common.Ports;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 
@@ -33,7 +28,6 @@ public sealed class DriveLifecycleIntegrationTests
         Assert.That(extra.Host.Parent, Is.Null);
         Assert.That(drive.Bays.Select(slot => slot.Item).Distinct().Count(), Is.EqualTo(14));
         Assert.That(originals.Sum(cell => cell.Component.Item!.Count) + extra.Component.Item!.Count, Is.EqualTo(15));
-        Assert.That(drive.Insert(14, extra), Is.False);
     }
 
     [Test]
@@ -139,20 +133,5 @@ public sealed class DriveLifecycleIntegrationTests
         Assert.That(drive.RestoreCalls, Is.EqualTo(2));
         Assert.That(drive.Window, Is.SameAs(window));
         Assert.That(drive.Bays[4].Item, Is.SameAs(cell.Host));
-    }
-
-    [Test]
-    public void BayBinding_ReusedPhysicalPort_RejectsSharedSlotGraph()
-    {
-        var shared = new EmptyBay();
-        var ports = Enumerable.Repeat<ICellBayPort>(shared, 14).ToArray();
-        var rules = new DriveCellInventory(new StorageCellDisassemblyRecipe(new StorageComponent()));
-
-        Assert.Throws<ArgumentException>(new Action(() => new DriveBayBinding(rules, ports)));
-    }
-
-    private sealed class EmptyBay : ICellBayPort
-    {
-        public CellAssemblySnapshot? Read() => null;
     }
 }

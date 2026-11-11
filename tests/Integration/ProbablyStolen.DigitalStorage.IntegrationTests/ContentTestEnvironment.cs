@@ -160,8 +160,7 @@ internal sealed class NativeDriveBoundary : IMachineContentsPort
 
     internal bool Insert(int bay, NativeCellBoundary cell, bool cancel = false)
     {
-        if (!Binding.CanInsert(bay, cell.Read(),
-                bay >= 0 && bay < Bays.Length && ReferenceEquals(Bays[bay].Item, cell.Host), true) || cancel)
+        if (!Binding.CanInsert(bay, cell.Read(), ReferenceEquals(Bays[bay].Item, cell.Host), true) || cancel)
         {
             return false;
         }

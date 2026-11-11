@@ -97,11 +97,13 @@ internal sealed class CellContentWindow : ICellAssemblyPort
 
     void ICellAssemblyPort.Present(bool assembled) => Present(assembled);
 
-    internal static GameItem? Component(GameItem host)
-    {
-        var inventory = MachineHelper.GetBodyStorage(host, 0) as GameSlotInventory;
-        return inventory?.identifier == SlotId ? inventory.childItem : null;
-    }
+    // Drive bays ask this of whatever item is being dragged. MachineHelper.GetBodyStorage would also read a
+    // GridPixelElement root at row 1 without a bounds check, which throws for one-row windows of other mods.
+    internal static GameItem? Component(GameItem host) =>
+        (host.contentWindow?.childElement as MachineryPanelRow)?.GetStorage(0) is GameSlotInventory
+            { identifier: SlotId } slot
+            ? slot.childItem
+            : null;
 
     internal static StorageContentsState StorageState(GameItem host) =>
         !CellPages.IsComplete(host) || CellHealth.IsUnavailable(host) ? StorageContentsState.Unavailable

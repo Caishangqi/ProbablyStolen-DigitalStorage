@@ -11,38 +11,25 @@ public sealed class DriveBayBinding
     private readonly DriveCellInventory _rules;
     private readonly ICellBayPort[] _bays;
 
-    /// <summary>Requires fourteen distinct slot ports and stores no physical items or mutable item ledger.</summary>
+    /// <summary>Requires one slot port per bay, in bay order, and stores no physical items or mutable item ledger.</summary>
     public DriveBayBinding(DriveCellInventory rules, ICellBayPort[] bays)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         if (bays == null || bays.Length != rules.Size())
         {
-            throw new ArgumentException("The drive requires fourteen independent bay ports.", nameof(bays));
-        }
-
-        for (var index = 0; index < bays.Length; index++)
-        {
-            if (bays[index] == null)
-            {
-                throw new ArgumentException("A bay port is missing.", nameof(bays));
-            }
-
-            for (var previous = 0; previous < index; previous++)
-            {
-                if (ReferenceEquals(bays[index], bays[previous]))
-                {
-                    throw new ArgumentException("Drive bays must not share a slot.", nameof(bays));
-                }
-            }
+            throw new ArgumentException("The drive requires one bay port per bay.", nameof(bays));
         }
 
         _bays = (ICellBayPort[])bays.Clone();
     }
 
-    /// <summary>Uses live slot occupancy and complete cell facts before native placement.</summary>
+    /// <summary>
+    /// Uses live slot occupancy and complete cell facts before native placement. <paramref name="index"/> must be a
+    /// bay of this drive (0 to <see cref="DriveCellInventory.Size"/> - 1).
+    /// </summary>
     public bool CanInsert(int index, CellAssemblySnapshot candidate, bool isCurrent, bool ownershipAllowed)
     {
-        if (index < 0 || index >= _bays.Length || !ownershipAllowed)
+        if (!ownershipAllowed)
         {
             return false;
         }
