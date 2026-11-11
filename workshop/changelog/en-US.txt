@@ -1,0 +1,5 @@
+This version does not change the storage format, so you can upgrade directly from 0.4.0.
+[list]
+[*]Fixed a conflict with mods such as Atomic Tech: while a drive was in an open window, dragging a container with a single-row layout, such as the Document Box or the Topological Folding Pocket, kept throwing errors and the item could not be picked up.
+[*]Fixed a false "content resources are unavailable" error in the log at game startup. It did not affect game content.
+[/list]

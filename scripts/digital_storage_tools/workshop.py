@@ -29,13 +29,14 @@ _ENV_STEAM_USERNAME = "DIGITAL_STORAGE_STEAM_USERNAME"
 _ENV_WORKSHOP_VDF = "DIGITAL_STORAGE_WORKSHOP_VDF"
 _ENV_WORKSHOP_PREVIEW = "DIGITAL_STORAGE_WORKSHOP_PREVIEW"
 _ENV_WORKSHOP_VISIBILITY = "DIGITAL_STORAGE_WORKSHOP_VISIBILITY"
-_ENV_WORKSHOP_CHANGE_NOTE = "DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE"
 _ENV_WORKSHOP_LOCALE = "DIGITAL_STORAGE_WORKSHOP_LOCALE"
 REQUIRED_RELEASE_VERSION = (0, 3, 0)
 WORKSHOP_LOCALE_PATHS = {
     "en-US": ROOT / "workshop" / "i18n" / "en-US.txt",
     "zh-CN": ROOT / "workshop" / "i18n" / "zh-CN.txt",
 }
+# The current release's note per locale, e.g. workshop/changelog/en-US.txt; Git keeps earlier releases' notes.
+WORKSHOP_CHANGELOG_DIR = ROOT / "workshop" / "changelog"
 
 
 class WorkshopValidationError(ValueError):
@@ -50,7 +51,6 @@ class WorkshopSettings:
     preview_path: Path
     steam_username: str
     visibility: str = "0"
-    change_note: str | None = None
     locale: str = "en-US"
 
 
@@ -59,6 +59,7 @@ class WorkshopMetadata:
     version: str
     title: str
     description: str
+    change_note: str
 
 
 @dataclass(frozen=True)
@@ -135,7 +136,6 @@ def settings_from_arguments(
     )
     if visibility not in _VALID_VISIBILITY:
         raise WorkshopValidationError("Workshop visibility must be 0, 1, or 2.")
-    change_note = _configured_value(arguments.change_note, environment, _ENV_WORKSHOP_CHANGE_NOTE)
     locale = _configured_value(getattr(arguments, "locale", None), environment, _ENV_WORKSHOP_LOCALE, "en-US")
     if locale not in WORKSHOP_LOCALE_PATHS:
         raise WorkshopValidationError("Workshop locale must be en-US or zh-CN.")
@@ -159,7 +159,6 @@ def settings_from_arguments(
         ),
         steam_username=username,
         visibility=visibility,
-        change_note=change_note.strip() if change_note and change_note.strip() else None,
         locale=locale,
     )
 
@@ -175,6 +174,26 @@ def _localized_description(locale: str) -> str:
             raise WorkshopValidationError(f"Workshop description for {name} must not be empty.")
         descriptions[name] = description
     return descriptions[locale]
+
+
+def _change_note(version: str, locale: str) -> str:
+    """Joins the per-locale notes under one ``version`` heading, the publishing locale first.
+
+    SteamCMD sets a single change note per upload, so every locale goes into the same note.
+    """
+    notes = []
+    for name in sorted(WORKSHOP_LOCALE_PATHS, key=lambda name: name != locale):
+        path = WORKSHOP_CHANGELOG_DIR / f"{name}.txt"
+        try:
+            note = path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError as error:
+            raise WorkshopValidationError(f"Workshop change note ({name}) is missing: {path}") from error
+        except (OSError, UnicodeError) as error:
+            raise WorkshopValidationError(f"Could not read Workshop change note: {path}") from error
+        if not note:
+            raise WorkshopValidationError(f"Workshop change note must not be empty: {path}")
+        notes.append(note)
+    return f"[h2]{version}[/h2]\n" + "\n[hr][/hr]\n".join(notes)
 
 
 def _canonical_existing_identity(path: Path) -> str:
@@ -245,7 +264,9 @@ def _manifest_metadata(package_directory: Path, locale: str = "en-US") -> Worksh
     if match is None or tuple(map(int, match.groups())) < REQUIRED_RELEASE_VERSION:
         minimum = ".".join(map(str, REQUIRED_RELEASE_VERSION))
         raise WorkshopValidationError(f"Package manifest version must be at least {minimum} before publishing.")
-    return WorkshopMetadata(version_text, fields["Name"], _localized_description(locale))
+    return WorkshopMetadata(
+        version_text, fields["Name"], _localized_description(locale), _change_note(version_text, locale)
+    )
 
 
 def _validate_preview(path: Path) -> None:
@@ -393,7 +414,6 @@ def render_vdf(
     settings: WorkshopSettings,
     published_file_id: str,
 ) -> str:
-    change_note = settings.change_note or f"Release {metadata.version}"
     fields = (
         ("appid", WORKSHOP_APP_ID),
         ("publishedfileid", published_file_id),
@@ -402,7 +422,7 @@ def render_vdf(
         ("visibility", settings.visibility),
         ("title", metadata.title),
         ("description", metadata.description),
-        ("changenote", change_note),
+        ("changenote", metadata.change_note),
     )
     text_fields = {"title", "description", "changenote"}
     lines = ['"workshopitem"', "{"]
@@ -517,7 +537,6 @@ def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--preview")
     parser.add_argument("--steam-username")
     parser.add_argument("--visibility")
-    parser.add_argument("--change-note")
     parser.add_argument("--locale", choices=tuple(WORKSHOP_LOCALE_PATHS))
     return parser.parse_args(argv)
 

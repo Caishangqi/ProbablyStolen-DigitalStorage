@@ -69,7 +69,7 @@ elif 'internal-workshop-upload' in sys.argv:
     with open(os.environ['WORKSHOP_TEST_LOG'], 'a', encoding='utf-8') as stream:
         stream.write('upload|' + package + '\\n')
     with open(os.environ['WORKSHOP_TEST_LOG'] + '.json', 'w', encoding='utf-8') as stream:
-        json.dump({'arguments': sys.argv[1:], 'change_note': os.environ.get('DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE')}, stream)
+        json.dump({'arguments': sys.argv[1:]}, stream)
     if os.environ['WORKSHOP_TEST_FAILURE'] == 'upload':
         raise SystemExit(7)
 else:
@@ -111,30 +111,6 @@ else:
         )
         line = next(line for line in result.stdout.splitlines() if line.startswith("WORKSHOP_RESULT="))
         return json.loads(line.removeprefix("WORKSHOP_RESULT="))
-
-    def test_change_note_keeps_formatting_from_toml_and_argument_override(self) -> None:
-        self.run_wrapper()
-        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[/list]'
-        (self.repository / "mise.local.toml").write_text(
-            "[env]\nDIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = '''\n" + toml_note + "\n'''\n", encoding="utf-8"
-        )
-        note = '[h2]CLI 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[*]Path C:\\Mods\\DigitalStorage\n[/list]'
-        environment = os.environ.copy()
-        environment.pop("DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE", None)
-        environment.update(
-            WORKSHOP_TEST_PACKAGE=str(self.package),
-            WORKSHOP_TEST_LOG=str(self.log),
-            WORKSHOP_TEST_FAILURE="",
-        )
-        for override, expected in ((None, toml_note + "\n"), (note, note)):
-            with self.subTest(override=override):
-                args = ["-PackageDirectory", str(self.package)]
-                if override is not None:
-                    args += ["-ChangeNote", override]
-                with patch.object(commands, "ROOT", self.repository), patch.dict(os.environ, environment, clear=True):
-                    self.assertEqual(0, commands.run("publish-workshop", args))
-                received = json.loads(Path(str(self.log) + ".json").read_text(encoding="utf-8"))
-                self.assertEqual(expected, received["change_note"])
 
     def test_wrapper_uses_unique_package_and_cleans_it_after_child_outcomes(self) -> None:
         shared_before = (self.package / "shared.txt").read_text(encoding="utf-8")
@@ -183,6 +159,10 @@ Second line.</Description>
 
         Image.new("RGB", (64, 64), "white").save(self.preview_path)
         self.vdf_path = self.root / ".secrets" / "workshop.vdf"
+        changelog = patch.object(workshop, "WORKSHOP_CHANGELOG_DIR", self.root / "changelog")
+        changelog.start()
+        self.addCleanup(changelog.stop)
+        self.write_notes("Fix A.", "修复 A。")
         self.settings = workshop.WorkshopSettings(
             package_directory=self.package_directory,
             steamcmd_directory=self.steamcmd_directory,
@@ -190,6 +170,12 @@ Second line.</Description>
             preview_path=self.preview_path,
             steam_username="steam user",
         )
+
+    def write_notes(self, english: str, chinese: str) -> None:
+        directory = self.root / "changelog"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "en-US.txt").write_bytes(english.encode("utf-8"))
+        (directory / "zh-CN.txt").write_bytes(chinese.encode("utf-8"))
 
     def test_first_publish_writes_zero_id_and_manifest_metadata(self) -> None:
         with patch.object(workshop, "validate_package_directory"):
@@ -202,14 +188,14 @@ Second line.</Description>
         self.assertEqual(values["title"], 'Digital Storage “Workshop”')
         self.assertEqual(values["description"],
                          _typographic(workshop.WORKSHOP_LOCALE_PATHS["en-US"].read_text(encoding="utf-8").strip()))
-        self.assertEqual(values["changenote"], "Release 0.3.0")
+        self.assertEqual(values["changenote"], "[h2]0.3.0[/h2]\nFix A.\n[hr][/hr]\n修复 A。")
         self.assertEqual(values["visibility"], "0")
 
     def test_chinese_locale_uses_checked_in_workshop_description(self) -> None:
         arguments = SimpleNamespace(
             package_dir=str(self.package_directory), steamcmd_dir=str(self.steamcmd_directory),
             vdf_path=str(self.vdf_path), preview=str(self.preview_path), steam_username="steam user",
-            visibility="2", change_note=None, locale="zh-CN",
+            visibility="2", locale="zh-CN",
         )
         settings = workshop.settings_from_arguments(arguments, {}, repository_root=self.root)
         with patch.object(workshop, "validate_package_directory"):
@@ -219,21 +205,32 @@ Second line.</Description>
                          workshop.WORKSHOP_LOCALE_PATHS["zh-CN"].read_text(encoding="utf-8").strip())
         self.assertEqual(workshop._read_vdf(self.vdf_path)["description"],
                          _typographic(prepared.metadata.description))
+        self.assertEqual(prepared.metadata.change_note, "[h2]0.3.0[/h2]\n修复 A。\n[hr][/hr]\nFix A.")
+
+    def test_missing_or_empty_change_note_is_rejected_before_steamcmd(self) -> None:
+        notes = self.root / "changelog"
+        for name, action, message in (
+            ("zh-CN.txt", lambda path: path.unlink(), r"change note \(zh-CN\) is missing"),
+            ("en-US.txt", lambda path: path.write_text(" \n", encoding="utf-8"), "change note must not be empty"),
+        ):
+            with self.subTest(name=name):
+                self.write_notes("Fix A.", "修复 A。")
+                action(notes / name)
+                runner = Mock()
+                with patch.object(workshop, "validate_package_directory"), \
+                        self.assertRaisesRegex(workshop.WorkshopValidationError, message):
+                    workshop.publish_workshop(self.settings, runner=runner)
+                runner.assert_not_called()
+                self.assertFalse(Path(str(self.vdf_path) + ".pending").exists())
 
     def test_multiline_vdf_fields_keep_real_line_breaks(self) -> None:
-        note = '[h2]0.3.8[/h2]\n[list]\n[*]拼音搜索\n[/list]'
+        english, chinese = '[list]\n[*]Pinyin search\n[/list]', '[list]\n[*]拼音搜索\n[/list]'
+        note = '[h2]0.3.0[/h2]\n' + english + '\n[hr][/hr]\n' + chinese
         for separator in ("\n", "\r\n", "\r"):
             with self.subTest(separator=repr(separator)):
-                settings = workshop.WorkshopSettings(
-                    package_directory=self.package_directory,
-                    steamcmd_directory=self.steamcmd_directory,
-                    vdf_path=self.vdf_path,
-                    preview_path=self.preview_path,
-                    steam_username="test user",
-                    change_note=note.replace("\n", separator),
-                )
+                self.write_notes(english.replace("\n", separator), chinese.replace("\n", separator))
                 with patch.object(workshop, "validate_package_directory"):
-                    workshop.prepare_workshop_item(settings)
+                    workshop.prepare_workshop_item(self.settings)
                 raw = self.vdf_path.read_text(encoding="utf-8")
                 self.assertIn('"changenote"    "' + note + '"', raw)
                 self.assertIn('"description"    "[h1]Digital Storage[/h1]\n\n', raw)
@@ -243,54 +240,37 @@ Second line.</Description>
 
     def test_text_fields_are_written_without_escape_sequences(self) -> None:
         note = '[*]物品按"数量 × 占地格数"计费，"Pending migration" 提示'
-        settings = workshop.WorkshopSettings(
-            package_directory=self.package_directory,
-            steamcmd_directory=self.steamcmd_directory,
-            vdf_path=self.vdf_path,
-            preview_path=self.preview_path,
-            steam_username="test user",
-            change_note=note,
-        )
+        self.write_notes("Fix A.", note)
         with patch.object(workshop, "validate_package_directory"):
-            workshop.prepare_workshop_item(settings)
+            workshop.prepare_workshop_item(self.settings)
         raw = self.vdf_path.read_text(encoding="utf-8")
         # SteamCMD does not read escapes, so no backslash may appear in any text field.
         self.assertNotIn("\\", raw[raw.index('"title"'):])
-        self.assertIn('"changenote"    "[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示"', raw)
-        self.assertEqual(_typographic(note), workshop._read_vdf(self.vdf_path)["changenote"])
+        self.assertIn('[hr][/hr]\n[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示"', raw)
+        self.assertTrue(workshop._read_vdf(self.vdf_path)["changenote"].endswith(_typographic(note)))
 
     def test_backslash_in_text_is_rejected_before_steamcmd(self) -> None:
-        settings = workshop.WorkshopSettings(
-            package_directory=self.package_directory,
-            steamcmd_directory=self.steamcmd_directory,
-            vdf_path=self.vdf_path,
-            preview_path=self.preview_path,
-            steam_username="test user",
-            change_note="Path C:\\Mods",
-        )
+        self.write_notes("Path C:\\Mods", "修复 A。")
         with patch.object(workshop, "validate_package_directory"), \
                 self.assertRaisesRegex(workshop.WorkshopValidationError, "changenote must not contain a backslash"):
-            workshop.prepare_workshop_item(settings)
+            workshop.prepare_workshop_item(self.settings)
 
     def test_text_over_steam_byte_limit_is_rejected_before_steamcmd(self) -> None:
-        # 2666 CJK characters and two straight quotes: 7998 + 2 bytes as written, but 8004 once the quotes become
-        # three-byte typographic quotes, so the limit must be checked on the rendered UTF-8 text.
-        for note, accepted in (("材" * 2666 + "ab", True), ('"' + "材" * 2666 + '"', False)):
+        # The heading (15 bytes), separator (11) and Chinese note (1) leave 7973 bytes for the English note: 2657 CJK
+        # characters and two straight quotes fit as written, but not once the quotes become three-byte typographic
+        # quotes, so the limit must be checked on the rendered UTF-8 text.
+        for english, accepted in (("材" * 2657 + "ab", True), ('"' + "材" * 2657 + '"', False)):
             with self.subTest(accepted=accepted):
-                settings = workshop.WorkshopSettings(
-                    package_directory=self.package_directory, steamcmd_directory=self.steamcmd_directory,
-                    vdf_path=self.vdf_path, preview_path=self.preview_path, steam_username="steam user",
-                    change_note=note,
-                )
+                self.write_notes(english, "x")
                 runner = Mock(return_value=subprocess.CompletedProcess([], 1))
                 with patch.object(workshop, "validate_package_directory"), \
                         patch.object(workshop, "_localized_description", return_value="Short description."):
                     if accepted:
-                        workshop.prepare_workshop_item(settings)
+                        workshop.prepare_workshop_item(self.settings)
                         continue
                     with self.assertRaisesRegex(workshop.WorkshopValidationError,
                                                 "changenote is 8004 UTF-8 bytes; Steam accepts at most 8000"):
-                        workshop.publish_workshop(settings, runner=runner)
+                        workshop.publish_workshop(self.settings, runner=runner)
                 runner.assert_not_called()
                 self.assertFalse(Path(str(self.vdf_path) + ".pending").exists())
 
@@ -636,7 +616,6 @@ Second line.</Description>
             preview=None,
             steam_username=None,
             visibility=None,
-            change_note=None,
         )
         settings = workshop.settings_from_arguments(
             arguments,
@@ -649,30 +628,6 @@ Second line.</Description>
         )
         self.assertEqual(settings.visibility, "0")
         self.assertEqual(settings.vdf_path, self.root / ".secrets" / "workshop.vdf")
-
-    def test_change_note_argument_overrides_toml_and_preserves_vdf_formatting(self) -> None:
-        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive “priority”[/b]\n[*]Mods/DigitalStorage\n[/list]'
-        cli_note = '[b]CLI 更新[/b]\n[url=https://example.com]Details[/url]'
-        (self.root / "mise.local.toml").write_text(
-            "[env]\nDIGITAL_STORAGE_WORKSHOP_VISIBILITY = '0'\n"
-            "DIGITAL_STORAGE_WORKSHOP_CHANGE_NOTE = '''\n" + toml_note + "\n'''\n", encoding="utf-8"
-        )
-        with patch.object(commands, "ROOT", self.root), patch.dict(os.environ, {}, clear=True):
-            environment = commands.local_environment()
-        for override, expected in ((None, toml_note), (cli_note, cli_note)):
-            with self.subTest(override=override):
-                argv = [
-                    "--package-dir", str(self.package_directory), "--steamcmd-dir", str(self.steamcmd_directory),
-                    "--vdf-path", str(self.vdf_path), "--preview", str(self.preview_path), "--steam-username", "test user",
-                ]
-                if override is not None:
-                    argv += ["--change-note", override]
-                settings = workshop.settings_from_arguments(workshop._arguments(argv), environment, self.root)
-                with patch.object(workshop, "validate_package_directory"):
-                    workshop.prepare_workshop_item(settings)
-                values = workshop._read_vdf(self.vdf_path)
-                self.assertEqual(expected, values["changenote"])
-                self.assertEqual("0", values["visibility"])
 
     def test_visibility_argument_overrides_toml(self) -> None:
         arguments = workshop._arguments([
@@ -690,7 +645,6 @@ Second line.</Description>
             preview=str(self.preview_path),
             steam_username="steam user",
             visibility="3",
-            change_note=None,
         )
         with self.assertRaisesRegex(workshop.WorkshopValidationError, "visibility must be 0, 1, or 2"):
             workshop.settings_from_arguments(arguments, {}, repository_root=self.root)
