@@ -258,7 +258,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: content resources are unavailable ({error.GetType().Name}).");
+            _log.Error($"Digital Storage: content resources are unavailable ({error.GetType().Name}: {error.Message}).");
         }
     }
 

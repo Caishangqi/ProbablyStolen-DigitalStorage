@@ -14,11 +14,6 @@ internal sealed class ItemAppearance
 
     internal void EnsureReady(string spriteKey)
     {
-        if (UISettings.current == null || UISettings.current.gridSize != 16)
-        {
-            throw new InvalidOperationException("Digital Storage requires the verified 16-pixel item grid.");
-        }
-
         var mod = ModLoader.Mods.Find(candidate => candidate.Manifest.ID == _modId);
         if (mod == null || !mod.Sprites.TryGetValue(spriteKey, out var sprite) || sprite == null)
         {
@@ -44,6 +39,12 @@ internal sealed class ItemAppearance
         if (item == null)
         {
             throw new ArgumentNullException(nameof(item));
+        }
+
+        // UISettings lives in the game scene, so this cannot be checked when the main menu loads mod assets.
+        if (UISettings.current == null || UISettings.current.gridSize != 16)
+        {
+            throw new InvalidOperationException("Digital Storage requires the verified 16-pixel item grid.");
         }
 
         EnsureReady(spriteKey);
