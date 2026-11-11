@@ -358,6 +358,27 @@ def _vdf_quote(value: str) -> str:
     return f'"{escaped}"'
 
 
+def _vdf_text(name: str, value: str) -> str:
+    """Quote player-facing text without any escape sequence.
+
+    SteamCMD reads VDF values without escape sequences: a written backslash-n stayed literal on the Workshop page, and
+    an escaped quote ends the value early, so the rest of the text is lost. Straight double quotes therefore become
+    typographic quotes, and a backslash, which cannot be written safely, is rejected before SteamCMD runs.
+    """
+    if "\\" in value:
+        raise WorkshopValidationError(f"Workshop {name} must not contain a backslash.")
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    characters: list[str] = []
+    opening = True
+    for character in text:
+        if character == '"':
+            characters.append("“" if opening else "”")
+            opening = not opening
+        else:
+            characters.append(character)
+    return '"' + "".join(characters) + '"'
+
+
 def render_vdf(
     metadata: WorkshopMetadata,
     settings: WorkshopSettings,
@@ -374,8 +395,12 @@ def render_vdf(
         ("description", metadata.description),
         ("changenote", change_note),
     )
+    text_fields = {"title", "description", "changenote"}
     lines = ['"workshopitem"', "{"]
-    lines.extend(f"    {_vdf_quote(key)}    {_vdf_quote(value)}" for key, value in fields)
+    lines.extend(
+        f"    {_vdf_quote(key)}    {_vdf_text(key, value) if key in text_fields else _vdf_quote(value)}"
+        for key, value in fields
+    )
     lines.append("}")
     return "\n".join(lines) + "\n"
 

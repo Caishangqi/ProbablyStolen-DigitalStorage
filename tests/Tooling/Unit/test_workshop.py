@@ -28,6 +28,18 @@ Write-Output ('WORKSHOP_RESULT=' + ($result | ConvertTo-Json -Compress))
 '''
 
 
+
+def _typographic(text: str) -> str:
+    """Mirror the writer: straight double quotes alternate between opening and closing typographic quotes."""
+    characters, opening = [], True
+    for character in text:
+        if character == '"':
+            characters.append("“" if opening else "”")
+            opening = not opening
+        else:
+            characters.append(character)
+    return "".join(characters)
+
 class WorkshopWrapperWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -187,8 +199,9 @@ Second line.</Description>
         text = self.vdf_path.read_text(encoding="utf-8")
         values = workshop._read_vdf(self.vdf_path)
         self.assertEqual(values["publishedfileid"], "0")
-        self.assertEqual(values["title"], 'Digital Storage "Workshop"')
-        self.assertEqual(values["description"], workshop.WORKSHOP_LOCALE_PATHS["en-US"].read_text(encoding="utf-8").strip())
+        self.assertEqual(values["title"], 'Digital Storage “Workshop”')
+        self.assertEqual(values["description"],
+                         _typographic(workshop.WORKSHOP_LOCALE_PATHS["en-US"].read_text(encoding="utf-8").strip()))
         self.assertEqual(values["changenote"], "Release 0.3.0")
         self.assertEqual(values["visibility"], "0")
 
@@ -204,7 +217,8 @@ Second line.</Description>
 
         self.assertEqual(prepared.metadata.description,
                          workshop.WORKSHOP_LOCALE_PATHS["zh-CN"].read_text(encoding="utf-8").strip())
-        self.assertEqual(workshop._read_vdf(self.vdf_path)["description"], prepared.metadata.description)
+        self.assertEqual(workshop._read_vdf(self.vdf_path)["description"],
+                         _typographic(prepared.metadata.description))
 
     def test_multiline_vdf_fields_keep_real_line_breaks(self) -> None:
         note = '[h2]0.3.8[/h2]\n[list]\n[*]拼音搜索\n[/list]'
@@ -226,6 +240,37 @@ Second line.</Description>
                 self.assertNotIn(r"\n", raw)
                 self.assertNotIn(r"\r", raw)
                 self.assertEqual(note, workshop._read_vdf(self.vdf_path)["changenote"])
+
+    def test_text_fields_are_written_without_escape_sequences(self) -> None:
+        note = '[*]物品按"数量 × 占地格数"计费，"Pending migration" 提示'
+        settings = workshop.WorkshopSettings(
+            package_directory=self.package_directory,
+            steamcmd_directory=self.steamcmd_directory,
+            vdf_path=self.vdf_path,
+            preview_path=self.preview_path,
+            steam_username="test user",
+            change_note=note,
+        )
+        with patch.object(workshop, "validate_package_directory"):
+            workshop.prepare_workshop_item(settings)
+        raw = self.vdf_path.read_text(encoding="utf-8")
+        # SteamCMD does not read escapes, so no backslash may appear in any text field.
+        self.assertNotIn("\\", raw[raw.index('"title"'):])
+        self.assertIn('"changenote"    "[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示"', raw)
+        self.assertEqual(_typographic(note), workshop._read_vdf(self.vdf_path)["changenote"])
+
+    def test_backslash_in_text_is_rejected_before_steamcmd(self) -> None:
+        settings = workshop.WorkshopSettings(
+            package_directory=self.package_directory,
+            steamcmd_directory=self.steamcmd_directory,
+            vdf_path=self.vdf_path,
+            preview_path=self.preview_path,
+            steam_username="test user",
+            change_note="Path C:\\Mods",
+        )
+        with patch.object(workshop, "validate_package_directory"), \
+                self.assertRaisesRegex(workshop.WorkshopValidationError, "changenote must not contain a backslash"):
+            workshop.prepare_workshop_item(settings)
 
     def test_old_release_manifest_is_rejected_before_steamcmd(self) -> None:
         manifest = self.package_directory / "manifest.xml"
@@ -584,7 +629,7 @@ Second line.</Description>
         self.assertEqual(settings.vdf_path, self.root / ".secrets" / "workshop.vdf")
 
     def test_change_note_argument_overrides_toml_and_preserves_vdf_formatting(self) -> None:
-        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive "priority"[/b]\n[*]C:\\Mods\\DigitalStorage\n[/list]'
+        toml_note = '[h2]0.3.0 更新[/h2]\n[list]\n[*][b]Drive “priority”[/b]\n[*]Mods/DigitalStorage\n[/list]'
         cli_note = '[b]CLI 更新[/b]\n[url=https://example.com]Details[/url]'
         (self.root / "mise.local.toml").write_text(
             "[env]\nDIGITAL_STORAGE_WORKSHOP_VISIBILITY = '0'\n"
