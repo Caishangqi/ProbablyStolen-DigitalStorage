@@ -21,7 +21,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install pinned tools
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: 2026.9.10
           install: true
