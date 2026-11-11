@@ -21,19 +21,21 @@ The player's access point to the digital inventory. The terminal lets you search
 
 Assemble a storage cell by inserting a component into an Item Cell Housing. Components and cells come in five tiers: 1k, 4k, 16k, 64k, and 256k. Place an assembled cell in a drive to access its contents through the terminal.
 
-Each page measures 12x12. The default page limits are:
+Cell capacity is measured in bytes:
 
 [list]
-[*]1k: 16 pages
-[*]4k: 64 pages
-[*]16k: 256 pages
-[*]64k: 1,024 pages
-[*]256k: 4,096 pages
+[*]1k: 1,024 bytes
+[*]4k: 4,096 bytes
+[*]16k: 16,384 bytes
+[*]64k: 65,536 bytes
+[*]256k: 262,144 bytes
 [/list]
 
-Every tier holds up to 63 different item types. Larger tiers provide more space, with the same type limit. Pages are added as needed and grouped by item size. Items larger than 12x12 do not fit. Storage pages are locked, so items move in and out through a terminal.
+Each new item type first costs a fixed type overhead (4 bytes on a 1k cell, multiplied by 4 for each higher tier). Items then cost their count times their footprint, at 8 grid cells per byte. For example, on a 1k cell ten 2x2 items take 40 cells, or 5 bytes. Every tier holds up to 128 different item types; at 128 types the type overhead uses exactly half of the capacity.
 
-Mod settings let you adjust the 1k page limit; the other tiers scale with it. Lowering the limit preserves existing pages and their available space. The 63-type limit is fixed. Empty a cell before removing its component; disassembly returns the housing to a single empty page.
+Items are sorted by size onto the cell's internal storage pages automatically, so there is nothing to arrange. A single item wider or taller than 12 cells does not fit. Storage pages are locked, so items move in and out through a terminal. Emptied pages are removed automatically.
+
+Hover over a cell to see its bytes used, item types, partition, and storage format version. Empty a cell before removing its component; disassembly returns the housing to a single empty page.
 
 Storage components and assembled cells can appear in merchant stock. Larger tiers are rarer.
 
@@ -96,10 +98,22 @@ Pinyin defaults to [b]Auto[/b]: it is enabled when the game uses Chinese and dis
 [*]Right-click to take half a stack. Stored stacks are not split.
 [*]Shift + left-click to take the entire available amount of that item.
 [*]Drag a whole stack onto the terminal grid or an item already shown in the terminal to try to store it.
-[*]Rejected items stay where they were. Common reasons include insufficient capacity, the item type limit being reached, an item being too large, a partition mismatch, or an offline network.
+[*]Rejected items stay where they were. Common reasons include not enough free bytes, the item type limit being reached, an item being too large, a partition mismatch, or an offline network.
 [/list]
 
 The terminal and drive can open the game's native module panel. In the current version, native module properties do not change Digital Storage capacity, throughput, or power consumption.
+
+[h2]Upgrading from an older version[/h2]
+
+Version 0.4.0 updates the component storage format (v1 to v2). Please back up your save file before upgrading. This storage format update mainly uses a "unlimited page width but limited slots" design to make the page relationships and addressing clearer, and also prepares for future partitioning systems. Additionally, I want to apply the migration API design I recently learned to the project. Please provide feedback if you encounter any problems. Thank you!
+
+[list]
+[*]When you load a save, existing cells are reorganized automatically without losing items. Afterwards the cell tooltip shows "Storage format v2".
+[*]If a cell cannot fit its items after reorganizing, it stays as it is and only lets you take items out; its tooltip shows "Pending migration". Take some items out, save, and load again to finish.
+[*]Future versions that change the storage format only convert the previous format. If you skipped a version, upgrade in order: install the skipped version, load and save, check that no cell shows "Pending migration", then install the newer version. Cells in a format that is too old are locked; their items are kept, and the tooltip names the version to install first.
+[*]Downgrading is not supported. Older versions of the mod show upgraded cells as unavailable; do not save in that case.
+[*]If a "Do not save" warning appears, quit the game. Your last save is still intact.
+[/list]
 
 [h2]Compatibility and notes[/h2]
 

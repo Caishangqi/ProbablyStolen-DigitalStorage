@@ -3,7 +3,7 @@
   <ID>digital_storage</ID>
   <Name>Digital Storage</Name>
   <Author>Caizii</Author>
-  <ModVersion>0.3.8</ModVersion>
+  <ModVersion>0.4.0</ModVersion>
   <Description>A digital storage network. Search, store and take items across the network from a terminal.</Description>
   <GameVersions>
     <Version>0.46</Version>
