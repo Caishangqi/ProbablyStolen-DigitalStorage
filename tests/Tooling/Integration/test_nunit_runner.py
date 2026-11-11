@@ -1,10 +1,31 @@
+import contextlib
+import json
 import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
+from digital_storage_tools import platform_review
+
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@contextlib.contextmanager
+def _review_manifest():
+    """Provides a manifest for the current inputs when none exists, as on CI where it is never checked out.
+
+    The source inventory check runs after the review gate, so it is reachable only once the gate passes.
+    """
+    manifest = platform_review.MANIFEST
+    if manifest.exists():
+        yield
+        return
+    manifest.write_text(json.dumps({"inputs": platform_review.input_hashes()}), encoding="utf-8")
+    try:
+        yield
+    finally:
+        manifest.unlink()
 
 
 class NUnitRunnerTests(unittest.TestCase):
@@ -75,10 +96,11 @@ exit $LASTEXITCODE
                 PLATFORM_SOURCE_ROOT=str(ROOT / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests"),
                 RUNNER_SKIP_REVIEW="1" if skip_review else "0",
             )
-            result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
-                cwd=temp, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            )
+            with _review_manifest():
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
+                    cwd=temp, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Platform test sources changed", result.stderr)
             self.assertNotIn("> dotnet", result.stdout)
