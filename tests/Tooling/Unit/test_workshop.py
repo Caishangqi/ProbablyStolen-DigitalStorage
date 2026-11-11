@@ -272,6 +272,28 @@ Second line.</Description>
                 self.assertRaisesRegex(workshop.WorkshopValidationError, "changenote must not contain a backslash"):
             workshop.prepare_workshop_item(settings)
 
+    def test_text_over_steam_byte_limit_is_rejected_before_steamcmd(self) -> None:
+        # 2666 CJK characters and two straight quotes: 7998 + 2 bytes as written, but 8004 once the quotes become
+        # three-byte typographic quotes, so the limit must be checked on the rendered UTF-8 text.
+        for note, accepted in (("材" * 2666 + "ab", True), ('"' + "材" * 2666 + '"', False)):
+            with self.subTest(accepted=accepted):
+                settings = workshop.WorkshopSettings(
+                    package_directory=self.package_directory, steamcmd_directory=self.steamcmd_directory,
+                    vdf_path=self.vdf_path, preview_path=self.preview_path, steam_username="steam user",
+                    change_note=note,
+                )
+                runner = Mock(return_value=subprocess.CompletedProcess([], 1))
+                with patch.object(workshop, "validate_package_directory"), \
+                        patch.object(workshop, "_localized_description", return_value="Short description."):
+                    if accepted:
+                        workshop.prepare_workshop_item(settings)
+                        continue
+                    with self.assertRaisesRegex(workshop.WorkshopValidationError,
+                                                "changenote is 8004 UTF-8 bytes; Steam accepts at most 8000"):
+                        workshop.publish_workshop(settings, runner=runner)
+                runner.assert_not_called()
+                self.assertFalse(Path(str(self.vdf_path) + ".pending").exists())
+
     def test_old_release_manifest_is_rejected_before_steamcmd(self) -> None:
         manifest = self.package_directory / "manifest.xml"
         original = manifest.read_text(encoding="utf-8")

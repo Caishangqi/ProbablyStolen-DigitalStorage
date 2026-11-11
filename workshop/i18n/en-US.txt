@@ -105,7 +105,7 @@ The terminal and drive can open the game's native module panel. In the current v
 
 [h2]Upgrading from an older version[/h2]
 
-Version 0.4.0 updates the component storage format (v1 to v2). Please back up your save file before upgrading. This storage format update mainly uses a "unlimited page width but limited slots" design to make the page relationships and addressing clearer, and also prepares for future partitioning systems. Additionally, I want to apply the migration API design I recently learned to the project. Please provide feedback if you encounter any problems. Thank you!
+Version 0.4.0 updates the component storage format (v1 to v2). Please back up your save file before upgrading.
 
 [list]
 [*]When you load a save, existing cells are reorganized automatically without losing items. Afterwards the cell tooltip shows "Storage format v2".

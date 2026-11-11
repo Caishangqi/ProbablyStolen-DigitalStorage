@@ -23,6 +23,7 @@ DEFAULT_VDF_PATH = Path(".secrets") / "workshop.vdf"
 MAX_PREVIEW_BYTES = 1_048_576
 _VALID_ID = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 _VALID_VISIBILITY = {"0", "1", "2"}
+_TEXT_LIMITS = {"title": 128, "description": 8000, "changenote": 8000}
 _ENV_STEAMCMD_DIR = "DIGITAL_STORAGE_STEAMCMD_DIR"
 _ENV_STEAM_USERNAME = "DIGITAL_STORAGE_STEAM_USERNAME"
 _ENV_WORKSHOP_VDF = "DIGITAL_STORAGE_WORKSHOP_VDF"
@@ -376,7 +377,15 @@ def _vdf_text(name: str, value: str) -> str:
             opening = not opening
         else:
             characters.append(character)
-    return '"' + "".join(characters) + '"'
+    quoted = "".join(characters)
+    # Steamworks limits (k_cchPublishedDocument*Max) are UTF-8 buffer sizes. SteamCMD uploads content and preview
+    # first and only then fails the commit with "Invalid Parameter", which also leaves a new item empty.
+    size = len(quoted.encode("utf-8"))
+    if size > _TEXT_LIMITS[name]:
+        raise WorkshopValidationError(
+            f"Workshop {name} is {size} UTF-8 bytes; Steam accepts at most {_TEXT_LIMITS[name]}."
+        )
+    return f'"{quoted}"'
 
 
 def render_vdf(
