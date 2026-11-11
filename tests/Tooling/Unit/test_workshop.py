@@ -234,8 +234,10 @@ Second line.</Description>
                 raw = self.vdf_path.read_text(encoding="utf-8")
                 self.assertIn('"changenote"    "' + note + '"', raw)
                 self.assertIn('"description"    "[h1]Digital Storage[/h1]\n\n', raw)
-                self.assertNotIn(r"\n", raw)
-                self.assertNotIn(r"\r", raw)
+                # Only the text fields: quoted paths keep escaped backslashes, e.g. C:\\Users\\runneradmin on CI.
+                text = raw[raw.index('"title"'):]
+                self.assertNotIn(r"\n", text)
+                self.assertNotIn(r"\r", text)
                 self.assertEqual(note, workshop._read_vdf(self.vdf_path)["changenote"])
 
     def test_text_fields_are_written_without_escape_sequences(self) -> None:

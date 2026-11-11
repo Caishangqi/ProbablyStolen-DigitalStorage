@@ -29,4 +29,7 @@ jobs:
       - name: Prepare Python environment
         run: mise run setup
       - name: Verify Core
+        # The runner console is cp1252; without UTF-8 a failure message with Chinese text crashes the test report.
+        env:
+          PYTHONIOENCODING: utf-8
         run: mise run ci-core
