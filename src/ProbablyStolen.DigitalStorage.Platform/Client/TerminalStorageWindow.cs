@@ -55,6 +55,7 @@ internal sealed class TerminalStorageWindow
     private static readonly TooltipSideBox HintBox = new();
     private RichText? _hintText;
     private CustomUIWindow? _window;
+    private GameItem? _terminal;
     private TerminalInputHighlighter? _inputHighlighter;
     private CustomUIElement? _status;
     private readonly ItemSlotGrid _grid;
@@ -103,6 +104,7 @@ internal sealed class TerminalStorageWindow
             throw new ArgumentNullException(nameof(terminal));
         }
 
+        _terminal = terminal;
         TerminalOpenRouter.Register(terminal, this);
         var native = terminal.contentWindow;
         native.openCallback += () =>
@@ -236,6 +238,8 @@ internal sealed class TerminalStorageWindow
         _status = _window.Get("status");
         UpdateToolbar();
         AttachToNativeWindowLayer();
+        WindowPositionMemory.Restore(_terminal, _window);
+        WindowPositionMemory.Track(_terminal, _window);
         AttachNativeInputShield();
         CreateDropHighlight();
         var dropInput = _window.root.AddComponent<TerminalDropInputHandler>();

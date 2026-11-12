@@ -8,4 +8,6 @@
 [*]Redesigned the rule detail page with a card for each condition, keeping its field, operator, and value on one row. The list scrolls when there are more than 4 conditions, and sample attributes expand into a table.
 [*]Partition dropdowns now have arrows and a selected option indicator, and open upward when space below is limited. Field and item type lists support search, including pinyin when enabled.
 [*]Fixed long values widening condition cards, inconsistent input field sizes, and dropdown lists flashing while searching. Long input values show an ellipsis when idle; click to view and edit the full text.
+[*]Terminal and partition windows now remember their positions with the save. Each workbench keeps its own partition window position, even when you change its cell.
+[*]Fixed rule names and other input values appearing blank when the editor first opens and only showing after a click. Long values still show an ellipsis while the field is idle.
 [/list]

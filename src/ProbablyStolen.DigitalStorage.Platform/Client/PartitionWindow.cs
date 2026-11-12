@@ -64,6 +64,7 @@ internal sealed partial class PartitionWindow
     private bool _rendering;
     private int _rows = TerminalWindowMetrics.Rows;
     private PixelWindow? _workbenchWindow;
+    private readonly GameItem? _workbench;
     private int _selected = -1;
     private int _target = -1;
     private int _dragSource = -1;
@@ -86,7 +87,8 @@ internal sealed partial class PartitionWindow
         _pictures = new ItemPictureCapture(new PictureSourceChain<GameItem>(
             key => _dropped.TryGetValue(key, out var item) ? item : null, FindInCell), log, "partition");
         _draft.Changed += Save;
-        _workbenchWindow = cell.parentInventory?.GetParentItem()?.contentWindow;
+        _workbench = cell.parentInventory?.GetParentItem();
+        _workbenchWindow = _workbench?.contentWindow;
     }
 
     /// <summary>Opens the editor for a cell, closing any other partition editor first.</summary>
@@ -159,6 +161,8 @@ internal sealed partial class PartitionWindow
         // On the native window layer a dragged item's ghost is drawn above this window, as over the terminal.
         // Raised: the editor opens from the workbench window, a focused native window on the raised layer.
         NativeWindowLayer.Attach(_window, "digital_storage_partition_viewport", raised: true);
+        WindowPositionMemory.Restore(_workbench, _window);
+        WindowPositionMemory.Track(_workbench, _window);
         _shield = NativeWindowLayer.AttachInputShield(_window, "partition_input_shield");
         _window.root.AddComponent<SampleDropHandler>().Initialize(_window, _shield, OnSample, IsGridSampleTarget, OwnsWheel);
         _window.root.AddComponent<FrameHandler>().Initialize(Tick);
