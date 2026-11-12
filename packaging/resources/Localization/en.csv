@@ -1,21 +1,4 @@
 terminal_name,Terminal
-partition_configure,Configure partition
-partition_title,Drive partition
-partition_capture,Add dragged item
-partition_contents,Set from contents
-partition_clear,Clear
-partition_apply,Apply
-partition_cancel,Cancel
-partition_remove,Remove
-partition_unavailable,Partition unavailable
-partition_ready,Ready
-partition_invalid,Unsupported identity or contents
-partition_limit,Filter limit reached
-partition_failed,Apply failed; draft retained
-partition_applied,Applied
-partition_cleanup_failed,Source cleanup failed
-partition_applied_cleanup_failed,Applied; source cleanup failed
-partition_failed_cleanup_failed,Apply failed; source cleanup failed
 terminal_desc,Accesses the items stored on the network.
 terminal_storage_title,Terminal
 terminal_storage_drag_hint,Place {0} dragged stack(s) into {1}. Release to attempt storage; rejected items stay at their source.
@@ -140,8 +123,6 @@ terminal_button_direction_desc,v
 terminal_button_direction_tip,Sort direction: {0}
 terminal_direction_asc,Ascending
 terminal_direction_desc,Descending
-terminal_button_partitions,P
-terminal_button_partitions_tip,Configure partitions of storage cells on this network
 terminal_button_size_small,S
 terminal_button_size_medium,M
 terminal_button_size_tall,T
@@ -151,8 +132,6 @@ terminal_size_small,Small
 terminal_size_medium,Medium
 terminal_size_tall,Tall
 terminal_size_full,Full
-terminal_partition_none,No storage cells on this network can be configured.
-terminal_partition_label,Drive {0} slot {1}
 terminal_hint_title,Controls
 terminal_hint_left,Left click: take one stack (one item if it does not stack)
 terminal_hint_right,Right click: take half a stack (stored stacks are not split)
@@ -177,10 +156,8 @@ priority_desc,Items go into higher-priority drives first and come out of lower-p
 priority_invalid,Enter a whole number
 cell_storage_bytes,{0}/{1} bytes used
 cell_storage_types,{0}/{1} item types
-cell_storage_partition_include,Partitioned - Include
-cell_storage_partition_exclude,Partitioned - Exclude
-cell_storage_partition_include_equal,Partitioned - Include · Equal distribution
-cell_storage_partition_exclude_equal,Partitioned - Exclude · Equal distribution
+cell_storage_partition_include,Whitelist · {0}/{1} rules
+cell_storage_partition_exclude,Blacklist · {0}/{1} rules
 cell_storage_schema,Storage format v{0} (latest v{1})
 cell_storage_migration_refused,Pending migration: take some items out first
 cell_storage_migration_failed,Migration failed: do not save; quit and load again
@@ -192,3 +169,117 @@ cell_storage_type_limit_invalid,Item type limit settings are invalid; the cell i
 terminal_storage_reject_capacity,The storage cells do not have enough free bytes for this item.
 terminal_storage_reject_quota,This item type has used up its equal share of the storage cell.
 terminal_storage_reject_read_only,This storage cell only allows taking items out until it is migrated.
+terminal_storage_reject_partition_unknown,A storage cell partition cannot decide this item: its rules test attributes not yet known.
+terminal_storage_reject_partition_invalid,A storage cell partition is invalid. Apply it again in a cell workbench.
+partition_field_item,Item
+partition_field_type,Type
+partition_field_legality,Legality
+partition_field_stolen,Stolen
+partition_field_heat,Heat
+partition_field_feature,Feature: {0}
+partition_unit_percent,%
+workbench_name,Cell Workbench
+workbench_desc,Configure storage cell partitions and install cell modules. Needs no power or network.
+workbench_configure,Configure partition
+workbench_status_empty,Place an assembled storage cell here.
+workbench_cell_panel,Cell
+workbench_actions_panel,Partition
+workbench_reject_not_cell,Only assembled storage cells fit here.
+workbench_reject_migrate,This cell uses the old storage format. Put it in a powered network once to update it.
+workbench_reject_schema,This cell needs an older mod version first.
+workbench_reject_unavailable,This cell is unavailable.
+workbench_reject_not_owned,You do not own this cell.
+module_type_limit_name,Type Limit Module
+module_type_limit_desc,Raises a storage cell's type limit. Install it in a cell workbench.
+module_equal_distribution_name,Equal Distribution Module
+module_equal_distribution_desc,Shares a storage cell's capacity equally between its types. One per cell. Install it in a cell workbench.
+module_quality_common,Common
+module_quality_rare,Rare
+module_quality_epic,Epic
+module_type_limit_effect,{0}: type limit +{1} and +{2}%
+module_type_limit_invalid,Unreadable module: no effect
+module_refusal_notinworkbench,Cell modules can only be changed in a cell workbench
+module_refusal_limitreached,This cell already has the maximum number of this module
+module_refusal_typesexceedlimit,Remove {0} stored types before removing this module
+module_refusal_bytesexceedcapacity,Remove enough stored items to free {0} bytes before removing this module
+module_refusal_cellunavailable,This cell's storage is unavailable
+module_refusal_housingonly,Install a storage component first
+module_refusal_restoring,Wait until the cell has finished loading
+partition_title,Cell Partition
+partition_status,{0}/{1} rules
+partition_mode_whitelist,Whitelist
+partition_mode_blacklist,Blacklist
+partition_mode_button,Mode: {0}
+partition_empty_list_note,An empty list accepts every item.
+partition_open,Open
+partition_duplicate,Copy
+partition_remove,Remove
+partition_clear,Clear
+partition_undo,Undo
+partition_warning_nevermatches,These conditions never match.
+partition_warning_covered,Another rule already matches everything this rule matches.
+partition_duplicate_found,This rule already exists.
+partition_full,Rule limit {0} reached.
+partition_sample_unsupported,This item cannot be used as a sample.
+partition_invalid_draft,This change cannot be saved; it was undone.
+partition_conflict,The partition changed elsewhere; the stored version is shown.
+partition_failed,Saving failed; the change was undone and the previous partition stays in force.
+partition_repaired,Damaged partition data was removed ({0} rules). The rest stays in force and is saved with your next change.
+partition_rule_name,Rule name (optional)
+partition_all_conditions,Match all of these conditions
+partition_add_condition,+ Add condition
+partition_remove_condition,×
+partition_summary_label,Matches: {0}
+partition_sample_attributes,Sample attributes
+partition_back,Back
+partition_not_saved,Not saved: {0}
+partition_op_yes,yes
+partition_op_no,no
+partition_choose,Choose…
+partition_value_placeholder,Value
+partition_upper_placeholder,Up to
+partition_search,Search attributes…
+partition_unknown_value,unknown
+partition_summary_yes,{0} is yes
+partition_summary_no,{0} is no
+partition_summary_and,"; "
+partition_summary_empty,no conditions
+partition_summary_unknown,unknown attribute {0}
+partition_op_is,is
+partition_summary_is,{0} is {1}
+partition_op_isnot,is not
+partition_summary_isnot,{0} is not {1}
+partition_op_contains,contains
+partition_summary_contains,{0} contains {1}
+partition_op_notcontains,does not contain
+partition_summary_notcontains,{0} does not contain {1}
+partition_op_eq,=
+partition_summary_eq,{0} = {1}
+partition_op_ne,≠
+partition_summary_ne,{0} ≠ {1}
+partition_op_gt,>
+partition_summary_gt,{0} > {1}
+partition_op_ge,≥
+partition_summary_ge,{0} ≥ {1}
+partition_op_lt,<
+partition_summary_lt,{0} < {1}
+partition_op_le,≤
+partition_summary_le,{0} ≤ {1}
+partition_op_range,between
+partition_summary_range,{0} between {1} and {2}
+partition_value_legality_none,Legal
+partition_value_legality_low,Low contraband
+partition_value_legality_mid,Mid contraband
+partition_value_legality_high,High contraband
+partition_value_legality_critical,Critical contraband
+partition_issue_noconditions,Add at least one condition.
+partition_issue_unknownfield,A condition uses an unknown attribute.
+partition_issue_unsupportedoperator,A condition uses an unsupported comparison.
+partition_issue_missingvalue,Fill in every value.
+partition_issue_invalidvalue,A value is not valid.
+partition_issue_duplicateruleid,Duplicate rule.
+partition_issue_invalidslot,Invalid rule position.
+partition_issue_unknownmode,Unknown mode.
+cell_storage_type_modules,Type limit modules: {0}
+cell_storage_equal_distribution,Equal distribution
+cell_storage_expansion,Module bay expansion {0}/{1}

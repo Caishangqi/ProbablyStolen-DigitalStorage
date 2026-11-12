@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
@@ -27,7 +28,7 @@ public sealed class NetworkStorageTests
         return new InventoryHandler(inventory, partition);
     }
 
-    private static CellPartition Whitelist(params ItemKey[] keys) => CellPartition.FromUserSubmission(keys, 63);
+    private static CellPartition Whitelist(params ItemKey[] keys) => Partitions.Whitelist(keys);
 
     private static int[] Order(NetworkStorage network, IStorage[] mounted, ItemKey key) =>
         network.InsertOrder(key, Player).Select(storage => Array.IndexOf(mounted, storage)).ToArray();
@@ -37,6 +38,52 @@ public sealed class NetworkStorageTests
         var network = new NetworkStorage();
         foreach (var (priority, storage) in cells) network.Mount(priority, storage);
         return (network, cells.Select(cell => cell.Storage).ToArray());
+    }
+
+    private static CellPartition HeatBelow(PartitionMode mode, int heat) => CellPartition.From(new PartitionConfig(mode, new[]
+    {
+        new PartitionRule("heat", 0, null, null, new[]
+        {
+            new PartitionCondition(PartitionFieldRegistry.Heat, PartitionOperator.Lt, PartitionValue.Of(heat))
+        })
+    }), CanonicalAttributeSource.Instance);
+
+    [Test]
+    public void UndecidableCell_IsSkippedAndTheNextCellStoresTheItem()
+    {
+        // A legacy identity records no heat, so the first cell cannot decide and the second takes the item.
+        var undecided = Cell(HeatBelow(PartitionMode.Whitelist, 40));
+        var open = Cell(CellPartition.Unfiltered);
+        var (network, _) = Mount((5, undecided), (0, open));
+
+        var result = network.Insert(new MemoryInventory().With(OneByOne, "item.apple", 1), Actionable.Modulate, Player);
+
+        Assert.That(result.InsertedUnits, Is.EqualTo(1));
+        Assert.That(Stacks(open).Get(Apple), Is.EqualTo(1));
+        Assert.That(Stacks(undecided).Get(Apple), Is.Zero);
+    }
+
+    [Test]
+    public void OnlyUndecidableCells_ReportTheUndecidableReason()
+    {
+        var (network, _) = Mount((0, Cell(HeatBelow(PartitionMode.Blacklist, 40))), (0, Cell(Whitelist(Pear))));
+
+        var result = network.Insert(new MemoryInventory().With(OneByOne, "item.apple", 1), Actionable.Modulate, Player);
+
+        Assert.That(result.InsertedUnits, Is.Zero);
+        Assert.That(result.StoppedBy.Rejection, Is.EqualTo(StoreRejection.PartitionUnknown),
+            "Undecidable outranks a plain exclusion, and a blacklist never admits what it cannot decide.");
+    }
+
+    [Test]
+    public void InvalidPartition_ReportsItsReasonAndRefusesEverything()
+    {
+        var invalid = CellPartition.Invalid(PartitionMode.Whitelist, CellPartitionFailure.MalformedRule);
+        var (network, _) = Mount((0, Cell(invalid)), (0, Cell(Whitelist(Pear))));
+
+        var result = network.Insert(new MemoryInventory().With(OneByOne, "item.apple", 1), Actionable.Modulate, Player);
+
+        Assert.That(result.StoppedBy.Rejection, Is.EqualTo(StoreRejection.PartitionInvalid));
     }
 
     [Test]
@@ -95,7 +142,7 @@ public sealed class NetworkStorageTests
     [Test]
     public void BlacklistedCell_IsPreferredOnlyWhenItAlreadyHoldsTheType()
     {
-        var blacklist = CellPartition.FromConfiguration(IncludeExclude.Blacklist, new[] { Pear }, false, 128);
+        var blacklist = Partitions.Blacklist(Pear);
         var empty = Cell(blacklist);
         var holding = Cell(blacklist, Apple);
 
@@ -181,5 +228,12 @@ public sealed class NetworkStorageTests
         var counter = new KeyCounter();
         storage.GetAvailableStacks(counter);
         return counter.Get(key);
+    }
+
+    private static KeyCounter Stacks(IStorage storage)
+    {
+        var counter = new KeyCounter();
+        storage.GetAvailableStacks(counter);
+        return counter;
     }
 }

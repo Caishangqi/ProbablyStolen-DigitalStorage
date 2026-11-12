@@ -8,8 +8,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 /// Rebuilds a cell's pages while native decoding restores a save, and reports whether the decode hook is active.
 /// <c>SaveManager.DecodeNodesInternal</c> creates each item from its factory (the anchor page), restores its
 /// <c>itemState</c> (including the schema and layout tags), calls <c>StorageExpansionHelper.RestoreTabs</c>, and only
-/// then reattaches children by inventory index; the vanilla storage bay expansion relies on the same call
-/// (SaveManager.decompiled.cs:160-243). Pages are rebuilt from the recorded layout, or from
+/// then reattaches children by inventory index; the vanilla storage bay expansion relies on the same call.
+/// Pages are rebuilt from the recorded layout, or from
 /// the schema 1 page count, whatever the cell's migration state, so locked cells keep their items when saved.
 /// The Harmony postfix that calls <see cref="Restore"/> lives in the IMod assembly, the only assembly the game's
 /// loader patches.
@@ -22,7 +22,7 @@ public static class CellPageRestore
 
     /// <summary>
     /// Gets and clears the last failure raised while restoring, so each load reports only its own. A load that never
-    /// reaches the load audit leaves its failure to be reported by the next audit; the affected cells are re-checked
+    /// reaches the load audit leaves its failure to be reported by the next audit; the affected cells are checked again
     /// there anyway.
     /// </summary>
     internal static Exception? TakeLastFailure()
@@ -47,9 +47,20 @@ public static class CellPageRestore
             // An exception here would abort decoding of the whole save; the load audit reports the cell instead.
             _lastFailure = error;
         }
+
+        try
+        {
+            // Tags are restored before this postfix and children after it, so the expanded bay shape must be in place
+            // before saved modules are put back into its extra cells, even when the pages failed to restore.
+            if (item != null) CellUpgradeInventory.ApplyShape(item);
+        }
+        catch (Exception error)
+        {
+            _lastFailure ??= error;
+        }
     }
 
-    /// <summary>Gets whether this mod's loader-owned Harmony instance patched the decode hook; storing is disabled otherwise.</summary>
+    /// <summary>Storing requires the decode hook to be patched by the loader's Harmony instance.</summary>
     internal static bool IsApplied()
     {
         if (_harmonyId == null)

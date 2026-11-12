@@ -1,21 +1,4 @@
 terminal_name,终端
-partition_configure,配置分区
-partition_title,驱动器分区
-partition_capture,添加拖动的物品
-partition_contents,按当前内容设置
-partition_clear,清空
-partition_apply,应用
-partition_cancel,取消
-partition_remove,移除
-partition_unavailable,分区不可用
-partition_ready,就绪
-partition_invalid,不支持的身份或内容
-partition_limit,已达到过滤项上限
-partition_failed,应用失败; 草稿已保留
-partition_applied,已应用
-partition_cleanup_failed,数据源清理失败
-partition_applied_cleanup_failed,已应用; 数据源清理失败
-partition_failed_cleanup_failed,应用失败; 数据源清理失败
 terminal_desc,访问存储网络中的物品.
 terminal_storage_title,终端
 terminal_storage_drag_hint,将拖动的 {0} 个堆叠放入「{1}」. 松开鼠标尝试存入; 拒收物品留在原处.
@@ -140,8 +123,6 @@ terminal_button_direction_desc,降
 terminal_button_direction_tip,排序方向: {0}
 terminal_direction_asc,升序
 terminal_direction_desc,降序
-terminal_button_partitions,分
-terminal_button_partitions_tip,配置网络中存储元件的分区
 terminal_button_size_small,小
 terminal_button_size_medium,中
 terminal_button_size_tall,高
@@ -151,8 +132,6 @@ terminal_size_small,小
 terminal_size_medium,中
 terminal_size_tall,高
 terminal_size_full,全屏
-terminal_partition_none,网络中没有可配置的存储元件.
-terminal_partition_label,驱动器 {0} 槽位 {1}
 terminal_hint_title,操作
 terminal_hint_left,左键: 取出一组 (不可堆叠的物品每次 1 个)
 terminal_hint_right,右键: 取出半组 (已存的堆不会拆分)
@@ -177,10 +156,8 @@ priority_desc,存入时先放入优先级高的驱动器, 取出时先从优先�
 priority_invalid,请输入整数
 cell_storage_bytes,已用 {0}/{1} 字节
 cell_storage_types,{0}/{1} 种物品
-cell_storage_partition_include,已分区 - 包含
-cell_storage_partition_exclude,已分区 - 排除
-cell_storage_partition_include_equal,已分区 - 包含 · 均分
-cell_storage_partition_exclude_equal,已分区 - 排除 · 均分
+cell_storage_partition_include,白名单 · {0}/{1} 条规则
+cell_storage_partition_exclude,黑名单 · {0}/{1} 条规则
 cell_storage_schema,存储格式 v{0}（最新 v{1}）
 cell_storage_migration_refused,待迁移：需要先取出部分物品
 cell_storage_migration_failed,迁移失败：请不要存档，退出后重新载入
@@ -192,3 +169,117 @@ cell_storage_type_limit_invalid,种类上限设置无效，元件已停用
 terminal_storage_reject_capacity,存储元件的剩余字节不足以放入此物品。
 terminal_storage_reject_quota,此物品种类已用完它在存储元件中的均分容量。
 terminal_storage_reject_read_only,此存储元件在迁移完成前只能取出物品。
+terminal_storage_reject_partition_unknown,存储元件的分区无法判定此物品：规则用到了尚未知道的属性。
+terminal_storage_reject_partition_invalid,存储元件的分区设置无效，请在元件工作台中重新应用。
+partition_field_item,物品
+partition_field_type,类型
+partition_field_legality,合法性
+partition_field_stolen,赃物状态
+partition_field_heat,赃物热度
+partition_field_feature,特征：{0}
+partition_unit_percent,%
+workbench_name,元件工作台
+workbench_desc,配置存储元件分区并装卸元件模块。无需供电或接入网络。
+workbench_configure,配置分区
+workbench_status_empty,请放入一个已组装的存储元件。
+workbench_cell_panel,元件
+workbench_actions_panel,分区
+workbench_reject_not_cell,只能放入已组装的存储元件。
+workbench_reject_migrate,此元件还是旧存储格式。先把它放进通电的网络一次，完成升级。
+workbench_reject_schema,此元件需要先用旧版本模组升级。
+workbench_reject_unavailable,此元件当前不可用。
+workbench_reject_not_owned,此元件不归你所有。
+module_type_limit_name,种类上限模块
+module_type_limit_desc,提高存储元件的种类上限。在元件工作台中安装到元件。
+module_equal_distribution_name,均分模块
+module_equal_distribution_desc,让存储元件的容量在各种类之间均分。每个元件限一个。在元件工作台中安装到元件。
+module_quality_common,普通
+module_quality_rare,稀有
+module_quality_epic,史诗
+module_type_limit_effect,{0}：种类上限 +{1}，+{2}%
+module_type_limit_invalid,无法读取的模块：不生效
+module_refusal_notinworkbench,只能在元件工作台中装卸元件模块
+module_refusal_limitreached,该元件已装入此类模块的最大数量
+module_refusal_typesexceedlimit,取出 {0} 种物品后才能拆除此模块
+module_refusal_bytesexceedcapacity,请取出足够物品以释放 {0} 字节后再拆除此模块
+module_refusal_cellunavailable,元件存储当前不可用
+module_refusal_housingonly,请先装入存储组件
+module_refusal_restoring,元件仍在载入，请稍后再试
+partition_title,元件分区
+partition_status,{0}/{1} 条规则
+partition_mode_whitelist,白名单
+partition_mode_blacklist,黑名单
+partition_mode_button,模式：{0}
+partition_empty_list_note,空列表接受所有物品。
+partition_open,打开
+partition_duplicate,复制
+partition_remove,删除
+partition_clear,清空
+partition_undo,撤销
+partition_warning_nevermatches,这些条件永远不会匹配。
+partition_warning_covered,另一条规则已经覆盖了这条规则的匹配范围。
+partition_duplicate_found,已有相同的规则。
+partition_full,已达到 {0} 条规则的上限。
+partition_sample_unsupported,此物品不能作为样本。
+partition_invalid_draft,这项修改无法保存，已撤回。
+partition_conflict,分区已在别处被修改，已显示元件上保存的内容。
+partition_failed,保存失败，修改已撤回，原分区仍然生效。
+partition_repaired,已移除损坏的分区数据（{0} 条规则）。其余部分照常生效，下一次修改时一并保存。
+partition_rule_name,规则名称（可选）
+partition_all_conditions,满足以下全部条件
+partition_add_condition,＋ 添加条件
+partition_remove_condition,×
+partition_summary_label,匹配：{0}
+partition_sample_attributes,样本属性
+partition_back,返回
+partition_not_saved,未保存：{0}
+partition_op_yes,是
+partition_op_no,否
+partition_choose,请选择…
+partition_value_placeholder,值
+partition_upper_placeholder,至
+partition_search,搜索属性…
+partition_unknown_value,未知
+partition_summary_yes,{0}为是
+partition_summary_no,{0}为否
+partition_summary_and,，且
+partition_summary_empty,没有条件
+partition_summary_unknown,未知属性 {0}
+partition_op_is,是
+partition_summary_is,{0}是 {1}
+partition_op_isnot,不是
+partition_summary_isnot,{0}不是 {1}
+partition_op_contains,包含
+partition_summary_contains,{0}包含 {1}
+partition_op_notcontains,不包含
+partition_summary_notcontains,{0}不包含 {1}
+partition_op_eq,等于
+partition_summary_eq,{0}等于 {1}
+partition_op_ne,不等于
+partition_summary_ne,{0}不等于 {1}
+partition_op_gt,大于
+partition_summary_gt,{0}大于 {1}
+partition_op_ge,大于等于
+partition_summary_ge,{0}大于等于 {1}
+partition_op_lt,小于
+partition_summary_lt,{0}小于 {1}
+partition_op_le,小于等于
+partition_summary_le,{0}小于等于 {1}
+partition_op_range,介于
+partition_summary_range,{0}介于 {1} 与 {2}
+partition_value_legality_none,合法
+partition_value_legality_low,低级违禁品
+partition_value_legality_mid,中级违禁品
+partition_value_legality_high,高级违禁品
+partition_value_legality_critical,极危违禁品
+partition_issue_noconditions,至少添加一个条件。
+partition_issue_unknownfield,有条件使用了未知属性。
+partition_issue_unsupportedoperator,有条件使用了不支持的比较方式。
+partition_issue_missingvalue,请填写所有值。
+partition_issue_invalidvalue,有值无效。
+partition_issue_duplicateruleid,规则重复。
+partition_issue_invalidslot,规则位置无效。
+partition_issue_unknownmode,未知模式。
+cell_storage_type_modules,种类上限模块：{0} 个
+cell_storage_equal_distribution,均分
+cell_storage_expansion,模块舱扩展 {0}/{1}

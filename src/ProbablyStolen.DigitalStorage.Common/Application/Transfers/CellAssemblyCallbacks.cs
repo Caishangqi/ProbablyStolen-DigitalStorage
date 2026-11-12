@@ -1,6 +1,8 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
 namespace ProbablyStolen.DigitalStorage.Common.Application.Transfers;
@@ -30,7 +32,17 @@ public sealed class CellAssemblyCallbacks
 
         return ownershipAllowed && _recipe.CanAssemble(state.Host.Identifier, state.Host.Count,
             candidate.Identifier, candidate.Count, candidate.Width, candidate.Height,
-            state.Component != null, state.Mounted);
+            state.Component != null, state.Mounted) && !StageExceedsTier(candidate);
+    }
+
+    /// <summary>
+    /// Gets whether the housing's module bay was expanded beyond what the candidate component's tier allows, so the
+    /// component may not be assembled into it.
+    /// </summary>
+    public bool StageExceedsTier(PhysicalItemSnapshot candidate)
+    {
+        var tier = StorageCellTier.FromComponentId(candidate.Identifier);
+        return tier != null && !ModuleBayExpansion.Fits(_port.Read().ExpansionStage, tier);
     }
 
     /// <summary>Checks removal and exposes a stable reason for a rejected extraction.</summary>
@@ -69,6 +81,8 @@ public sealed class CellAssemblyCallbacks
 
         return state.StorageState switch
         {
+            StorageContentsState.Empty when state.HasModules => CellRemovalFailure.HAS_MODULES,
+            StorageContentsState.Empty when state.HasPartitionRules => CellRemovalFailure.HAS_PARTITION_RULES,
             StorageContentsState.Empty => CellRemovalFailure.NONE,
             StorageContentsState.NonEmpty => CellRemovalFailure.STORAGE_CELL_NOT_EMPTY,
             _ => CellRemovalFailure.STORAGE_STATE_UNAVAILABLE

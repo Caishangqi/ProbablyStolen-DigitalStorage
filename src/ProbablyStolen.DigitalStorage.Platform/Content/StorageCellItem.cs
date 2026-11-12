@@ -4,6 +4,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -48,6 +49,9 @@ internal sealed class StorageCellItem
             _appearance.Apply(item, spriteKey, Width, Height);
             NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages, _contentSynchronization);
+            // Without the schema tag a new cell reads as schema 1 until the network or a load migrates it, and the
+            // workbench refuses it meanwhile.
+            CellTags.WriteNew(item);
             var initializeSample = assembled && !SaveManager.IsDecoding;
             item.onSlotAddItemFunc += (_, _, _) =>
             {

@@ -125,7 +125,7 @@ internal sealed class StorageService
             : null;
     }
 
-    // Storage pages are the only grids this mod insert-locks (CellPages.AddPage).
+    // Only storage page grids have insertion locked by this mod (CellPages.AddPage).
     private static bool IsStoredIn(GameItem item, IReadOnlyList<GameItem> cells) =>
         !(item is GameItemElement element && element.IsDestroyed()) && item.parentInventory is GameGridInventory page &&
         cells.Any(cell => CellPages.Pages(cell).Contains(page));
@@ -137,11 +137,11 @@ internal sealed class StorageService
     /// <summary>
     /// Mounts every usable cell of the terminal's network. Pending schema 1
     /// cells, such as cells assembled during this session, are migrated first. Locked and unavailable cells are not
-    /// mounted; extract-only cells are mounted without insertion.
+    /// mounted; cells restricted to extraction are mounted without insertion.
     /// </summary>
     internal MountedNetwork GetInventory(GameItem terminal) => GetInventory(terminal, migratePending: true);
 
-    // Simulations pass false: a read-only check must never move items, even through a lazy migration.
+    // Simulations pass false because checking availability must not trigger a migration that moves items.
     private MountedNetwork GetInventory(GameItem terminal, bool migratePending)
     {
         var network = Connect(terminal);
@@ -252,7 +252,7 @@ internal sealed class StorageService
             return TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, amount, 0, "terminal_storage_no_items");
         }
 
-        // Extraction starts at the lowest priority, so higher-priority drives keep their items longest.
+        // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
         var destination = new InventoryRootSink(EmporiumEntry.Instance.invElement);
         try
         {
@@ -294,7 +294,7 @@ internal sealed class StorageService
         }
         catch (Exception error)
         {
-            // A verified native move can still fail afterwards in the per-operation bookkeeping; the item is then
+            // A verified native move can still fail in the operation's bookkeeping; the item is then
             // stored, and reporting a rejection would be wrong.
             var stored = mode == Actionable.Modulate && IsStoredIn(item, mounted.Cells);
             _viewsStale = true;
@@ -315,6 +315,8 @@ internal sealed class StorageService
             StoreRejection.DistributionQuota => "terminal_storage_reject_quota",
             StoreRejection.ReadOnly => "terminal_storage_reject_read_only",
             StoreRejection.PartitionRejected => "terminal_storage_reject_no_cell",
+            StoreRejection.PartitionUnknown => "terminal_storage_reject_partition_unknown",
+            StoreRejection.PartitionInvalid => "terminal_storage_reject_partition_invalid",
             _ => NoSpaceKey
         };
     }
@@ -424,7 +426,7 @@ internal sealed class StorageService
     }
 }
 
-/// <summary>One cell bay found on a grid, with 1-based drive and bay numbers for display.</summary>
+/// <summary>One cell bay found on a grid, with drive and bay display numbers starting at one.</summary>
 internal sealed class CellBayReference
 {
     internal CellBayReference(int drive, int slot, GameSlotInventory bay)

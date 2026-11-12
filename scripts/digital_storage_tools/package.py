@@ -27,8 +27,8 @@ EXPECTED_ASSEMBLIES = (
     CURRENT_PLATFORM_ASSEMBLY,
     "ProbablyStolen.DigitalStorage.Mod.dll",
 )
-# Known 5-file and 11-file layouts were installed before the Platform assembly was renamed, so they keep
-# the old on-disk DLL name for safe replacement and removal. The current layout never lists both names.
+# Layouts with 5 or 11 files predate the Platform assembly rename and retain the old DLL name for safe replacement
+# and removal. The current layout never lists both names.
 LEGACY_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.dll"
 LEGACY_FILES = (
     "manifest.xml",
@@ -46,16 +46,27 @@ LEGACY_RESOURCE_FILES = (
     "Textures/Items/item_storage_cell_1k.png", "Textures/Items/item_cell_housing.png",
     "Textures/Items/cell_component_1k.png", "Localization/en.csv", "Localization/zh.csv",
 )
-RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
-    *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
-      for prefix in ("item_storage_cell", "cell_component")),
+WORKBENCH_RESOURCE_FILES = (
+    "Textures/Items/workbench.png", "Textures/Items/module_type_expansion_common.png",
+    "Textures/Items/module_type_expansion_rare.png", "Textures/Items/module_type_expansion_epic.png",
+    "Textures/Items/module_equal_distribution.png",
+)
+SEARCH_RESOURCE_FILES = (
     "Search/pinyin-dictionary.txt",
     "Licenses/PininSharp-LICENSE.txt",
     "Licenses/pinyin-data-LICENSE.txt",
     "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
 )
+RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
+    *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
+      for prefix in ("item_storage_cell", "cell_component")),
+    *WORKBENCH_RESOURCE_FILES,
+    *SEARCH_RESOURCE_FILES,
+)
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
-# An installation made before the Platform assembly rename has the current 13-file layout with the old
+# The release before the cell workbench shipped the same files without the workbench and module textures.
+PREVIOUS_SEARCH_FILES = tuple(name for name in CURRENT_FILES if name not in WORKBENCH_RESOURCE_FILES)
+# An installation made before the Platform assembly rename has the current 13 file layout with the old
 # Platform DLL name. Deployment must still recognize it so upgrade and removal stay safe.
 RENAMED_PLATFORM_ASSEMBLIES = tuple(
     LEGACY_PLATFORM_ASSEMBLY if name == CURRENT_PLATFORM_ASSEMBLY else name
@@ -70,9 +81,10 @@ TIER_RESOURCE_FILES = tuple(
 )
 PREVIOUS_TIER_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
 RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
-# Each known on-disk layout pins the single Platform DLL name that its manifest must declare.
+# Each known installation layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
-    ("current21", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("current", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("previous-search", PREVIOUS_SEARCH_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous21", PREVIOUS_TIER_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous21-renamed", RENAMED_PLATFORM_TIER_FILES, LEGACY_PLATFORM_ASSEMBLY),
     ("current13", PREVIOUS_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
@@ -276,7 +288,7 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break

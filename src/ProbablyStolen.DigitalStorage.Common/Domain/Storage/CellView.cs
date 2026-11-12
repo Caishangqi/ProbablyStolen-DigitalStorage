@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -119,8 +120,10 @@ public sealed class CellView
     /// <summary>Creates a cell projection.</summary>
     /// <exception cref="ArgumentException">The pages do not start with the anchor or the type limit is not positive.</exception>
     public CellView(CellRules rules, int typeLimit, IEnumerable<PageView> pages, CellUsage usage,
-        CellPartition partition, int priority = DrivePriority.Default, CellWriteState writeState = CellWriteState.Writable)
+        CellPartition partition, int priority = DrivePriority.Default, CellWriteState writeState = CellWriteState.Writable,
+        IUpgradeInventory? upgrades = null)
     {
+        Upgrades = upgrades ?? UpgradeInventory.Empty;
         Rules = rules ?? throw new ArgumentNullException(nameof(rules));
         if (typeLimit < 1) throw new ArgumentException("A type limit is positive.", nameof(typeLimit));
         TypeLimit = typeLimit;
@@ -150,6 +153,12 @@ public sealed class CellView
     /// <summary>Gets the partition filter.</summary>
     public CellPartition Partition { get; }
 
+    /// <summary>Gets the installed modules.</summary>
+    public IUpgradeInventory Upgrades { get; }
+
+    /// <summary>Gets whether an equal distribution module limits each type to an equal share.</summary>
+    public bool EqualDistribution => Upgrades.IsInstalled(CellModuleKind.EqualDistribution);
+
     /// <summary>Gets the priority of the drive the cell is mounted in.</summary>
     public int Priority { get; }
 
@@ -165,26 +174,36 @@ public sealed class CellView
     /// <summary>Area units billed per byte.</summary>
     public const int AreaUnitsPerByte = 8;
 
-    /// <summary>
-    /// Gets used bytes: <c>types × bytesPerType + ⌈areaUnits ÷ 8⌉</c>, rounded once for the whole cell.
-    /// </summary>
-    public static long UsedBytes(int types, long areaUnits, long bytesPerType)
+    /// <summary>Gets the bytes stored types cost: <c>ceil(types * typeBudget / typeLimit)</c>.</summary>
+    public static long TypeBytes(long types, long typeBudget, int typeLimit)
     {
-        if (types < 0 || areaUnits < 0 || bytesPerType < 0) throw new ArgumentOutOfRangeException(nameof(types));
-        return checked(types * bytesPerType + (areaUnits + AreaUnitsPerByte - 1) / AreaUnitsPerByte);
+        if (types < 0 || typeBudget < 0) throw new ArgumentOutOfRangeException(nameof(types));
+        if (typeLimit < 1) throw new ArgumentOutOfRangeException(nameof(typeLimit), typeLimit, "A type limit is positive.");
+        return checked((types * typeBudget + typeLimit - 1) / typeLimit);
+    }
+
+    /// <summary>
+    /// Gets used bytes: <c>ceil(types * typeBudget / typeLimit) + ceil(areaUnits / 8)</c>. At the base limit of 128 this equals
+    /// the former <c>types * bytesPerType + ceil(areaUnits / 8)</c> exactly.
+    /// </summary>
+    public static long UsedBytes(int types, long areaUnits, long typeBudget, int typeLimit)
+    {
+        if (areaUnits < 0) throw new ArgumentOutOfRangeException(nameof(areaUnits));
+        return checked(TypeBytes(types, typeBudget, typeLimit) + (areaUnits + AreaUnitsPerByte - 1) / AreaUnitsPerByte);
     }
 
     /// <summary>Gets the bytes this cell uses now.</summary>
-    public long UsedBytes() => UsedBytes(TypeCount, Usage.AreaUnits, Rules.Tier.GetBytesPerType());
+    public long UsedBytes() => UsedBytes(TypeCount, Usage.AreaUnits, Rules.Tier.GetTypeBudget(), TypeLimit);
 
     /// <summary>
-    /// Gets the area units one type may hold under equal distribution:
-    /// <c>⌈(totalBytes − bytesPerType × base) × 8 ÷ base⌉</c>, at least 0.
+    /// Gets the area units one type may hold under equal distribution: the bytes left once the limit's worth of types
+    /// is paid for, shared over the effective type limit, <c>ceil((totalBytes - typeBudget) * 8 / limit)</c>, at least 0.
+    /// The share follows the type limit, not the rule count, so one rule matching many types does not widen it.
     /// </summary>
     public long EqualShareQuota()
     {
-        long shares = Partition.EqualShareBase(TypeLimit);
-        var free = checked(Rules.Tier.GetBytes() - Rules.Tier.GetBytesPerType() * shares);
+        long shares = TypeLimit;
+        var free = checked(Rules.Tier.GetBytes() - TypeBytes(shares, Rules.Tier.GetTypeBudget(), TypeLimit));
         if (free <= 0) return 0;
         var area = checked(free * AreaUnitsPerByte);
         return (area + shares - 1) / shares;
@@ -192,7 +211,7 @@ public sealed class CellView
 
     /// <summary>Gets an independent copy for simulation; changes to the copy never reach this view.</summary>
     public CellView Clone() => new(Rules, TypeLimit, _pages.Select(page => page.Clone()), Usage.Clone(), Partition,
-        Priority, WriteState);
+        Priority, WriteState, Upgrades);
 
     /// <summary>Gets the strip slot a root occupies, or -1 for anchor and legacy pages.</summary>
     /// <exception cref="ArgumentException">The position is not a slot origin of a strip page.</exception>

@@ -80,7 +80,7 @@ public sealed class TerminalWindowMetricsTests
     [TestCase(TerminalSize.Medium, 9)]
     [TestCase(TerminalSize.Tall, 14)]
     [TestCase(TerminalSize.Full, 19)]
-    public void Rows_FollowAe2QuarterSizesOfTheRowsThatFit(TerminalSize size, int expected)
+    public void Rows_ScaleByQuarterOfTheRowsThatFit(TerminalSize size, int expected)
     {
         // 1080 px at canvas scale 2 is 1080 design units: (1080 - 80 - 169 + 3) / 43 = 19 rows fit.
         Assert.That(TerminalWindowMetrics.GetRows(size, 1080f, 2f), Is.EqualTo(expected));
@@ -101,9 +101,20 @@ public sealed class TerminalWindowMetricsTests
         Assert.That(scale, Is.EqualTo(TerminalWindowMetrics.GetScale(width, height, canvas, 1)));
     }
 
+    [Test]
+    public void Scale_UsesTheWindowsOwnDesignWidth()
+    {
+        // 800 px wide at canvas 1: the width bound is 800 / width * 0.4, below the native 0.5 scale.
+        Assert.That(TerminalWindowMetrics.GetScale(800f, 4000f, 1f, TerminalWindowMetrics.Width, 100),
+            Is.EqualTo(TerminalWindowMetrics.GetScale(800f, 4000f, 1f, 100)), "The old overload is the terminal width.");
+        Assert.That(TerminalWindowMetrics.GetScale(800f, 4000f, 1f, 800, 100), Is.EqualTo(0.4f).Within(1e-6f),
+            "A wider window shrinks more.");
+        Assert.That(TerminalWindowMetrics.GetScale(800f, 4000f, 1f, 0, 100), Is.EqualTo(TerminalWindowMetrics.NativeScale));
+    }
+
     [TestCase(300f, 2f)]
     [TestCase(100f, 1f)]
-    public void Rows_NeverDropBelowTheAe2Minimum(float height, float canvas)
+    public void Rows_RespectTheMinimum(float height, float canvas)
     {
         foreach (TerminalSize size in System.Enum.GetValues(typeof(TerminalSize)))
         {

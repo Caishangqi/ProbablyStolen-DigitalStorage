@@ -25,7 +25,13 @@ public enum StoreRejection
     PhysicalLimit = 5,
 
     /// <summary>The partition excludes the type.</summary>
-    PartitionRejected = 6
+    PartitionRejected = 6,
+
+    /// <summary>What the player can see does not decide whether the partition admits the item.</summary>
+    PartitionUnknown = 7,
+
+    /// <summary>The stored partition cannot be read or its last apply was not confirmed.</summary>
+    PartitionInvalid = 8
 }
 
 /// <summary>Which rules apply to a plan.</summary>
@@ -41,7 +47,7 @@ public enum PlanScope
     Relocate = 1
 }
 
-/// <summary>One item root to plan: its stored-orientation bounding size, type and native units.</summary>
+/// <summary>One item root to plan: its bounding size in stored orientation, type and native units.</summary>
 public readonly struct StoreCandidate
 {
     /// <summary>Creates a candidate.</summary>

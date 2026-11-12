@@ -3,6 +3,8 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
@@ -43,6 +45,8 @@ internal sealed class GridNetworkTooltipPresenter
         {
             return;
         }
+
+        ModuleChangeTooltipPresenter.AppendRemovalRefusal(builder, item, _text);
 
         if (!IsNetworkMachine(item))
         {

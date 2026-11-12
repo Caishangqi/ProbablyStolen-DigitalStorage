@@ -57,7 +57,6 @@ internal sealed class TerminalItem
                 (entry, amount) => _networkPower.ExtractToPlayer(item, entry.Key, amount),
                 key => _networkPower.StackLimit(item, key),
                 () => TerminalOpenRouter.OpenNative(item),
-                () => OpenPartitions(item),
                 (items, diagnostic) => _networkPower.StoreSelected(item, items, diagnostic),
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
                 (source, amount) => _networkPower.CanStore(item, source, amount),
@@ -73,26 +72,5 @@ internal sealed class TerminalItem
             item.Destroy();
             throw;
         }
-    }
-
-    /// <summary>Opens partition editing for every cell on the terminal's grid; returns false when there is none.</summary>
-    private bool OpenPartitions(GameItem terminal)
-    {
-        IReadOnlyList<CellBayReference> bays;
-        try
-        {
-            bays = _networkPower.ListCellBays(terminal);
-        }
-        catch (Exception exception)
-        {
-            _log.Log($"Digital Storage: terminal partition scan failed error={exception.GetType().Name}");
-            return false;
-        }
-
-        if (bays.Count == 0) return false;
-        var labels = bays.Select(bay => _text.Get("terminal_partition_label", bay.Drive, bay.Slot)).ToArray();
-        new PartitionConfigurationWindow(_text, labels, index => new CellPartitionSource(bays[index].Bay),
-            DriveItem.CaptureDraggedIdentity).Open();
-        return true;
     }
 }

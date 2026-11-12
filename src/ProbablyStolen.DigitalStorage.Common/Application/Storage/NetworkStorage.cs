@@ -12,7 +12,7 @@ namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
 /// <summary>
 /// All storage of one network. Each root is offered to priority groups from high to low;
 /// inside a group, preferred storage (<see cref="IStorage.IsPreferredStorageFor"/>) comes first, then the rest, in
-/// mount order. Extraction walks priority groups from low to high, so high-priority drives keep items longest.
+/// mount order. Extraction walks priority groups from low to high, so drives with higher priority keep items longest.
 /// </summary>
 public sealed class NetworkStorage : IStorage
 {
@@ -127,13 +127,22 @@ public sealed class NetworkStorage : IStorage
             if (result.InsertedUnits > 0) return TransferStep.Moved;
             var step = result.StoppedBy;
             if (step.Outcome is TransferOutcome.Returned or TransferOutcome.Unowned) return step;
-            // Prefer a capacity-style reason over "excluded by partition" when both occur.
-            if (step.Rejection is { } reason && (rejection == null || rejection == StoreRejection.PartitionRejected))
+            // Prefer capacity failures over partition failures, then report the most
+            // informative one: invalid, then undecidable, then excluded.
+            if (step.Rejection is { } reason && (rejection == null || Rank(reason) > Rank(rejection.Value)))
                 rejection = reason;
         }
 
         return TransferStep.Rejected(rejection ?? StoreRejection.ReadOnly);
     }
+
+    private static int Rank(StoreRejection reason) => reason switch
+    {
+        StoreRejection.PartitionRejected => 0,
+        StoreRejection.PartitionUnknown => 1,
+        StoreRejection.PartitionInvalid => 2,
+        _ => 3
+    };
 
     private IEnumerable<IEnumerable<IStorage>> Groups(bool descending)
     {

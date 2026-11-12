@@ -24,8 +24,32 @@ internal sealed class CanonicalIdentityValidator
     private int _items;
     private int _edges;
     private int _records;
+    private CanonicalItemSummary.Builder? _summary;
 
     private CanonicalIdentityValidator(byte[] data) => _data = data;
+
+    /// <summary>Validates an envelope and returns what its root item records, or null when it is invalid.</summary>
+    internal static CanonicalItemSummary? ReadSummary(byte[] data, string expectedIdentifier)
+    {
+        if (data == null || data.Length > MaxBytes || string.IsNullOrWhiteSpace(expectedIdentifier))
+        {
+            return null;
+        }
+
+        try
+        {
+            var reader = new CanonicalIdentityValidator(data) { _summary = new CanonicalItemSummary.Builder() };
+            return reader.ReadEnvelope(expectedIdentifier) ? reader._summary.Build() : null;
+        }
+        catch (InvalidIdentityException)
+        {
+            return null;
+        }
+        catch (DecoderFallbackException)
+        {
+            return null;
+        }
+    }
 
     internal static bool IsValid(byte[] data, string expectedIdentifier)
     {
@@ -69,12 +93,16 @@ internal sealed class CanonicalIdentityValidator
         }
 
         Require(ReadByte() == 1);
+        // Only the root item describes the identity; children belong to its content window.
+        var capture = !child && itemDepth == 0 ? _summary : null;
         var identifier = ReadString();
         Require(!string.IsNullOrWhiteSpace(identifier));
         if (expectedIdentifier != null)
         {
             Require(string.Equals(identifier, expectedIdentifier, StringComparison.Ordinal));
         }
+
+        if (capture != null) capture.Identifier = identifier!;
 
         ReadString();
         ReadString();
@@ -83,11 +111,18 @@ internal sealed class CanonicalIdentityValidator
         var itemTypes = ReadItemTypeCount();
         for (var i = 0; i < itemTypes; i++)
         {
-            Require(ReadString() != null);
+            var type = ReadString();
+            Require(type != null);
+            capture?.ItemTypes.Add(type!);
         }
 
-        ReadString();
-        ReadString();
+        var atlas = ReadString();
+        var sprite = ReadString();
+        if (capture != null)
+        {
+            capture.SpriteAtlasPath = atlas;
+            capture.SpritePath = sprite;
+        }
         var tagCount = ReadCount();
         string? previous = null;
         for (var i = 0; i < tagCount; i++)
@@ -110,19 +145,20 @@ internal sealed class CanonicalIdentityValidator
             Require(enabled || !string.IsNullOrEmpty(valueString) || intValue != 0 ||
                 (floatBits & 0x7fffffffU) != 0 || longValue != 0 ||
                 (doubleBits & 0x7fffffffffffffffUL) != 0 || boolValue);
+            capture?.Tags.Add(key!, new CanonicalItemSummary.Tag(enabled, valueString, intValue));
         }
 
         var featureCount = ReadCount();
         for (var i = 0; i < featureCount; i++)
         {
-            ReadFeature();
+            ReadFeature(capture);
         }
 
         ReadItemWindow(1, itemDepth, nodeDepth);
         ReadItemWindow(2, itemDepth, nodeDepth);
     }
 
-    private void ReadFeature()
+    private void ReadFeature(CanonicalItemSummary.Builder? capture)
     {
         AddRecord();
         var featureType = ReadInt32();
@@ -146,7 +182,7 @@ internal sealed class CanonicalIdentityValidator
         ReadString();
         ReadInt32();
         ReadBool();
-        ReadBool();
+        var exposed = ReadBool();
         ReadBool();
         ReadBool();
         ReadOptionalCondition();
@@ -157,13 +193,14 @@ internal sealed class CanonicalIdentityValidator
         ReadBool();
         ReadBool();
         ReadInt32();
-        ReadBool();
+        var disabled = ReadBool();
         var id = ReadString();
         Require(!string.IsNullOrWhiteSpace(id));
         Require(_featureIds.Add(id!));
         var category = ReadString();
         Require(category != null && !string.Equals(category, "contrabandMarkUp", StringComparison.Ordinal));
         ReadBool();
+        capture?.Features.Add(new CanonicalItemSummary.Feature(id!, exposed, disabled));
     }
 
     private void ReadOptionalCondition()
@@ -281,7 +318,7 @@ internal sealed class CanonicalIdentityValidator
     private int ReadItemTypeCount()
     {
         var count = ReadUInt32();
-        // Every non-null string requires a marker and a four-byte length.
+        // Each string that is not null needs a marker and four bytes for its length.
         Require(count <= (uint)(_data.Length - _offset) / 5);
         return (int)count;
     }

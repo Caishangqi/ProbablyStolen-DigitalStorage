@@ -74,8 +74,14 @@ public sealed class StorageCellTier
     /// <summary>Gets the byte capacity: 1024 per multiplier step.</summary>
     public long GetBytes() => 1024L * Multiplier;
 
-    /// <summary>Gets the bytes each stored type costs: 4 per multiplier step.</summary>
+    /// <summary>Gets the bytes each stored type costs at the base type limit: 4 per multiplier step.</summary>
     public long GetBytesPerType() => 4L * Multiplier;
+
+    /// <summary>
+    /// Gets the bytes all types together cost when the cell holds as many types as its effective limit: half the
+    /// capacity. Each stored type costs <c>budget / limit</c>, so raising the limit spreads the same budget thinner.
+    /// </summary>
+    public long GetTypeBudget() => checked(GetBytesPerType() * BaseTypeLimit);
 
     /// <summary>Gets the base type limit before extensions.</summary>
     public int GetTotalTypes() => BaseTypeLimit;

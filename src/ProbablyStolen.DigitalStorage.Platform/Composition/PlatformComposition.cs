@@ -108,7 +108,7 @@ public sealed class PlatformComposition : IDisposable
         var migration = new LegacyMigration(cellHealth, log);
         var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message), cell =>
         {
-            // A cell migrated during play warns like the load-time migration does when it fails.
+            // Migration failures during play need the same warning as failures during loading.
             var migrated = migration.TryMigrate(cell);
             if (!migrated) cellHealth.WarnDoNotSave(1, "failed to migrate");
             return migrated;
@@ -118,8 +118,10 @@ public sealed class PlatformComposition : IDisposable
         var cellHandler = new BasicCellHandler(text);
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
-        var contentSynchronization = new ItemContentSynchronization(key => text.Get(key),
-            message => log.Error(message));
+        // The value adjustment reads native items, so only the composed mod passes it; the reviewed Platform tests keep
+        // the plain definitions.
+        var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
+            message => log.Error(message), ItemValueAdjustment.Adjust);
         var component = new StorageComponentFactory(appearance, componentDefinition, recipe, contentSynchronization);
         var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
             contentSynchronization);
@@ -128,11 +130,14 @@ public sealed class PlatformComposition : IDisposable
         var controller = new ControllerItem(appearance, windows, contentSynchronization);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization, search.Service);
-        var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing,
-            contentSynchronization, log);
+        var workbench = new CellWorkbenchItem(text, appearance, contentSynchronization,
+            target => PartitionWindow.Open(text, target, message => log.Log(message)), PartitionWindow.CloseFor);
+        var modules = new CellModuleFactory(appearance, contentSynchronization, text);
+        var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
+            modules, contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellHandler, appearance, content, cellHealth, migration, eventBus,
-            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log), search);
+            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -195,7 +200,7 @@ public sealed class PlatformComposition : IDisposable
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
         TerminalStorageWindow.CloseCurrent();
-        PartitionConfigurationWindow.CloseCurrent();
+        PartitionWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
         _vendors.Dispose();
         _content.Dispose();
@@ -206,7 +211,7 @@ public sealed class PlatformComposition : IDisposable
     private void OnGameLoaded()
     {
         TerminalStorageWindow.CloseCurrent();
-        PartitionConfigurationWindow.CloseCurrent();
+        PartitionWindow.CloseCurrent();
     }
 
     private void OnLocaleConfirmed(string? locale, bool settled)

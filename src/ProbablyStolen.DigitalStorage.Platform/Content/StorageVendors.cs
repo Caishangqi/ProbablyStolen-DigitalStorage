@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -17,14 +19,22 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 internal sealed class StorageVendors : IDisposable
 {
     internal const string EngineerId = "digital_storage.upper_engineer";
-    private static readonly string[] Machines = { ControllerItem.ItemId, DriveItem.ItemId, TerminalItem.ItemId };
+    // Dr. Jackson always stocks a machine the player does not own yet and a quarter of the time one already owned;
+    // the workbench and the equal distribution module follow the same rule.
+    private static readonly string[] Machines =
+    {
+        ControllerItem.ItemId, DriveItem.ItemId, TerminalItem.ItemId, CellWorkbenchItem.ItemId,
+        CellUpgradeInventory.EqualDistributionId
+    };
     private readonly ModText _text;
     private readonly Func<int> _engineerDailyChance;
     private readonly ModLog _log;
+    private readonly CellModuleFactory _modules;
     private bool _enabled;
 
-    internal StorageVendors(ModText text, Func<int> engineerDailyChance, ModLog log)
+    internal StorageVendors(ModText text, Func<int> engineerDailyChance, ModLog log, CellModuleFactory modules)
     {
+        _modules = modules ?? throw new ArgumentNullException(nameof(modules));
         _text = text ?? throw new ArgumentNullException(nameof(text));
         _engineerDailyChance = engineerDailyChance ?? throw new ArgumentNullException(nameof(engineerDailyChance));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -62,6 +72,8 @@ internal sealed class StorageVendors : IDisposable
 
             if (RNG.Roll(40)) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
             if (RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId);
+            // Dr. Jackson only sells common type limit modules; rarer ones come from the upper-level engineer.
+            if (RNG.Roll(25)) OfferTypeLimitModule(ModuleQuality.Common);
         }
         catch (Exception error)
         {
@@ -83,8 +95,9 @@ internal sealed class StorageVendors : IDisposable
     }
 
     /// <summary>
-    /// Sells one to three storage parts (40% component, 30% storage cell, 30% housing) and buys the mod's housings,
-    /// components and machines. Assembled cells are never bought: their value includes the items stored inside.
+    /// Sells one to three storage goods (30% component, 25% storage cell, 10% housing, 10% workbench, 7% equal
+    /// distribution module, 18% type limit module of a weighted quality) and buys the mod's housings, components,
+    /// modules and machines. Assembled cells are never bought: their value includes the items stored inside.
     /// </summary>
     private StoreClient CreateEngineer()
     {
@@ -97,7 +110,8 @@ internal sealed class StorageVendors : IDisposable
         };
         StoreClientFactionSetup.InitUpperLevelCitizen(client);
         client.SetClientBudget(800 + StoreStation.GetDayCounter() * 5, 400);
-        foreach (var id in new[] { MaterialItem.ItemId }.Concat(StorageCellTier.All.Select(tier => tier.ComponentId)).Concat(Machines))
+        foreach (var id in new[] { MaterialItem.ItemId, CellUpgradeInventory.TypeLimitId }
+                     .Concat(StorageCellTier.All.Select(tier => tier.ComponentId)).Concat(Machines))
         {
             client.clientBuyingIdList.Add(id);
         }
@@ -115,15 +129,37 @@ internal sealed class StorageVendors : IDisposable
         return client;
     }
 
-    private static void PlaceEngineerStock()
+    private void PlaceEngineerStock()
     {
         var count = RNG.GetRandomInt(1, 3);
         for (var index = 0; index < count; index++)
         {
             var roll = RNG.GetRandomInt(1, 100);
-            PlayerStore.Instance.AddDirectSellingItemToTable(roll <= 40 ? DrawTier().ComponentId
-                : roll <= 70 ? DrawTier().CellId
-                : MaterialItem.ItemId);
+            if (roll <= 30) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId);
+            else if (roll <= 55) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().CellId);
+            else if (roll <= 65) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
+            else if (roll <= 75) PlayerStore.Instance.AddDirectSellingItemToTable(CellWorkbenchItem.ItemId);
+            else if (roll <= 82) PlayerStore.Instance.AddDirectSellingItemToTable(CellUpgradeInventory.EqualDistributionId);
+            else OfferTypeLimitModule(TypeLimitRolls.RollQuality(NativeRandom.Instance));
+        }
+    }
+
+    /// <summary>Puts a freshly rolled type limit module on the counter, or creates nothing when the counter is full.</summary>
+    private void OfferTypeLimitModule(ModuleQuality quality)
+    {
+        var counter = EmporiumEntry.Instance?.frontInvinvElement;
+        if (counter != null && !counter.CanTakeAnything()) return;
+        var module = DirectoryMaster.Item(CellUpgradeInventory.TypeLimitId);
+        if (module == null) return;
+        try
+        {
+            _modules.Roll(module, TypeLimitRolls.Roll(quality, NativeRandom.Instance));
+            if (!PlayerStore.Instance.TryAddDirectSellingItemToTable(module)) module.Destroy();
+        }
+        catch
+        {
+            if (module.parentInventory == null) module.Destroy();
+            throw;
         }
     }
 

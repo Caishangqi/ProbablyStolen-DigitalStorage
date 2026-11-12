@@ -42,7 +42,7 @@ internal sealed partial class BasicCellHandler
     }
 
     /// <summary>
-    /// Adds the player-facing cell summary: bytes, item types, partition, then the storage format and,
+    /// Adds the cell summary for players: bytes, item types, partition, then the storage format and,
     /// when needed, a status and upgrade line. Stored items are not listed.
     /// </summary>
     internal void AddCellInformationToTooltip(RichTextBuilder builder, GameItem cell)
@@ -54,7 +54,10 @@ internal sealed partial class BasicCellHandler
             return;
         }
 
-        var input = new CellLoreInput { Schema = CellTags.ReadSchema(cell), Health = CellHealth.Get(cell) };
+        var input = new CellLoreInput
+        {
+            Schema = CellTags.ReadSchema(cell), Health = CellHealth.Get(cell), ExpansionStage = CellUpgradeInventory.Stage(cell)
+        };
         if (input.Health.Status != CellHealthStatus.Unavailable && StorageCellTier.FromCellId(cell.identifier) != null &&
             !SaveManager.IsDecoding && CellPages.IsComplete(cell))
         {

@@ -16,9 +16,6 @@ internal static class CellTags
     internal const string SchemaTag = "digital_storage.schema";
     internal const string LayoutTag = "digital_storage.layout";
     internal const string PageCountTag = "digital_storage.page_count";
-    internal const string PartitionTag = "digital_storage.partition";
-    internal const string PartitionModeTag = "digital_storage.partition_mode";
-    internal const string PartitionEqualTag = "digital_storage.partition_equal";
 
     /// <summary>Gets the storage schema; a cell without the tag is schema 1.</summary>
     internal static int ReadSchema(GameItem cell) =>
@@ -38,6 +35,17 @@ internal static class CellTags
         return CellRecord.TryLayout(text, hasCount, hasCount ? cell.GetTagReadonly(PageCountTag).GetInt() : 0, out layout);
     }
 
+    /// <summary>
+    /// Records a new cell or housing with the current schema and only its anchor page.
+    /// <c>SaveManager.DecodeNodesInternal</c> replaces the factory's entire item state with the saved state, so cells
+    /// saved without these tags still load as schema 1.
+    /// </summary>
+    internal static void WriteNew(GameItem cell)
+    {
+        WriteLayout(cell, LayoutDescriptor.AnchorOnly());
+        WriteSchema(cell, CellSchema.Current);
+    }
+
     /// <summary>Writes the layout descriptor and the downgrade guard page count together.</summary>
     internal static void WriteLayout(GameItem cell, LayoutDescriptor layout)
     {
@@ -49,53 +57,4 @@ internal static class CellTags
     /// <summary>Gets whether the recorded layout equals <paramref name="layout"/>.</summary>
     internal static bool HasLayout(GameItem cell, LayoutDescriptor layout) =>
         TryReadLayout(cell, out var recorded) && layout.Equals(recorded);
-
-    /// <summary>
-    /// Gets the cell partition; an absent tag means unfiltered. Unreadable entries, an unknown mode or more entries
-    /// than the effective type limit give an invalid partition, which refuses new items but keeps stored ones readable.
-    /// </summary>
-    internal static CellPartition ReadPartition(GameItem cell, int maxKeys)
-    {
-        var modeText = cell.IsTag(PartitionModeTag) ? cell.GetTagReadonly(PartitionModeTag).GetString() ?? string.Empty : null;
-        // An unknown mode is passed on as an undefined value so the partition reports UnknownMode.
-        var mode = CellRecord.PartitionMode(modeText) ?? (IncludeExclude)(-1);
-        var equal = cell.IsTag(PartitionEqualTag);
-        var keys = new List<ItemKey?>();
-        if (cell.IsTag(PartitionTag))
-        {
-            var text = cell.GetTagReadonly(PartitionTag).GetString() ?? string.Empty;
-            foreach (var line in text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                keys.Add(CanonicalFilterKeyCodec.TryDecode(line, out var key) ? key : null);
-            }
-        }
-
-        return CellPartition.FromConfiguration(mode, keys, equal, maxKeys);
-    }
-
-    /// <summary>Gets the partition with the cell's effective type limit as its entry limit.</summary>
-    internal static CellPartition ReadPartition(GameItem cell) => ReadPartition(cell, CellTypeLimitSource.EffectiveOrBase(cell));
-
-    /// <summary>Writes a partition. A whitelist removes the mode tag, so data stays readable by older versions.</summary>
-    internal static void WritePartition(GameItem cell, CellPartition partition)
-    {
-        if (!partition.IsValid) throw new ArgumentException("An invalid partition cannot be written.", nameof(partition));
-        if (partition.List.IsEmpty())
-        {
-            cell.DisableTag(PartitionTag);
-        }
-        else
-        {
-            var text = string.Join("\n", partition.List.GetItems().Select(key => CanonicalFilterKeyCodec.Encode(key)));
-            cell.ModifyTag(PartitionTag, state => state.Enable().SetString(text));
-        }
-
-        if (partition.Mode == IncludeExclude.Blacklist)
-            cell.ModifyTag(PartitionModeTag, state => state.Enable().SetString(CellRecord.BlacklistMode));
-        else
-            cell.DisableTag(PartitionModeTag);
-
-        if (partition.EqualDistribution) cell.ModifyTag(PartitionEqualTag, state => state.Enable().SetInt(1));
-        else cell.DisableTag(PartitionEqualTag);
-    }
 }

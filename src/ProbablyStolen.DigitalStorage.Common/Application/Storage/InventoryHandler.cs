@@ -42,7 +42,7 @@ public sealed class InventoryHandler : IStorage
     public bool IsPreferredStorageFor(ItemKey what, IActionSource source)
     {
         if (what == null) return false;
-        if (_partition.IsValid && _partition.Mode == IncludeExclude.Whitelist && _partition.List.IsListed(what)) return true;
+        if (_partition.IsPreferred(what)) return true;
         return _inner.IsPreferredStorageFor(what, source);
     }
 

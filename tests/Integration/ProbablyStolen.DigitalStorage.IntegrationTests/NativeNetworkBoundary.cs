@@ -111,6 +111,12 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client
 
         internal static ProbablyStolen.DigitalStorage.Common.Contracts.StorageContentsState StorageState(GameItem host) =>
             ProbablyStolen.DigitalStorage.Common.Contracts.StorageContentsState.Unavailable;
+
+        internal static int ExpansionStage(GameItem host) => 0;
+
+        internal static bool HasModules(GameItem host) => false;
+
+        internal static bool HasPartitionRules(GameItem host) => false;
     }
 }
 

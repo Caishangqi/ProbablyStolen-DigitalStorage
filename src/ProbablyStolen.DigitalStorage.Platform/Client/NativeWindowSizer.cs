@@ -3,8 +3,11 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
-/// <summary>Fits and positions the terminal inside the actual game viewport.</summary>
-internal sealed class TerminalWindowSizer : MonoBehaviour
+/// <summary>
+/// Fits and positions a window on the native window layer inside the actual game viewport, and removes its viewport
+/// with it; attached by <see cref="NativeWindowLayer.Attach"/>.
+/// </summary>
+internal sealed class NativeWindowSizer : MonoBehaviour
 {
     private TerminalDiagnostics? _diagnostics;
     private RectTransform? _viewport;
@@ -47,9 +50,10 @@ internal sealed class TerminalWindowSizer : MonoBehaviour
         // Native window roots need not fill the screen or use a centered origin.
         _viewport.localPosition = new Vector3((minimum.x + maximum.x) / 2f, (minimum.y + maximum.y) / 2f, 0f);
         _viewport.sizeDelta = new Vector2(Mathf.Abs(maximum.x - minimum.x), Mathf.Abs(maximum.y - minimum.y));
-        // The window height follows the chosen terminal size; only a window larger than the viewport shrinks.
+        // The window keeps its design size; only a window larger than the viewport shrinks.
+        var designWidth = Mathf.RoundToInt(window.rect.width);
         var designHeight = Mathf.RoundToInt(window.rect.height);
-        var scale = TerminalWindowMetrics.GetScale(width, height, canvasScale, designHeight);
+        var scale = TerminalWindowMetrics.GetScale(width, height, canvasScale, designWidth, designHeight);
         window.localScale = new Vector3(scale, scale, 1f);
         var position = window.anchoredPosition;
         window.anchoredPosition = new Vector2(
@@ -67,7 +71,7 @@ internal sealed class TerminalWindowSizer : MonoBehaviour
         _y = y;
         _canvasScale = canvasScale;
         _diagnostics?.Record("window_size",
-            $"design={TerminalWindowMetrics.Width}x{designHeight} local_scale={scale:0.###} canvas_scale={canvasScale:0.###} viewport={width}x{height}");
+            $"design={designWidth}x{designHeight} local_scale={scale:0.###} canvas_scale={canvasScale:0.###} viewport={width}x{height}");
         _diagnostics?.Record("window_position",
             $"viewport_origin={x},{y} viewport_local={_viewport.rect.width:0.##}x{_viewport.rect.height:0.##} offset={window.anchoredPosition.x:0.##},{window.anchoredPosition.y:0.##} clamped=true");
     }

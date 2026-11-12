@@ -17,7 +17,7 @@ public readonly struct TypeUsage
     /// <summary>Gets the stored native units.</summary>
     public long Units { get; }
 
-    /// <summary>Gets the stored area units: units × bounding width × bounding height.</summary>
+    /// <summary>Gets the stored area units: units * bounding width * bounding height.</summary>
     public long AreaUnits { get; }
 }
 
@@ -26,7 +26,7 @@ public sealed class CellUsage
 {
     private readonly Dictionary<ItemKey, TypeUsage> _types = new();
 
-    /// <summary>Gets the area units of an item root: <c>units × w × h</c>, checked.</summary>
+    /// <summary>Gets the area units of an item root: <c>units * w * h</c>, checked.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The units are negative.</exception>
     public static long AreaOf(BoundingSize size, long units)
     {

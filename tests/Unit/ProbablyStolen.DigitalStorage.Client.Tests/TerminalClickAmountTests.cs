@@ -17,7 +17,7 @@ public sealed class TerminalClickAmountTests
     [TestCase(TerminalClick.Half, 2L, 4L, 1L)]
     [TestCase(TerminalClick.Half, 1L, 4L, 1L)]
     [TestCase(TerminalClick.All, 12345L, 4L, 12345L)]
-    public void For_MapsAe2ClicksToTheRequestedAmount(TerminalClick click, long stored, long stackLimit, long expected)
+    public void For_ClickModifiers_ReturnExpectedAmount(TerminalClick click, long stored, long stackLimit, long expected)
     {
         Assert.That(TerminalClickAmount.For(click, stored, stackLimit), Is.EqualTo(expected));
     }

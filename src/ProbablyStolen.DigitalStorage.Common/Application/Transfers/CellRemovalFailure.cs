@@ -25,5 +25,11 @@ public enum CellRemovalFailure
     RESTORING,
 
     /// <summary>Stored contents are unavailable or require recovery.</summary>
-    STORAGE_STATE_UNAVAILABLE
+    STORAGE_STATE_UNAVAILABLE,
+
+    /// <summary>The module bay holds modules, which must be removed in a cell workbench first.</summary>
+    HAS_MODULES,
+
+    /// <summary>The cell has partition rules, which must be cleared in a cell workbench first.</summary>
+    HAS_PARTITION_RULES
 }

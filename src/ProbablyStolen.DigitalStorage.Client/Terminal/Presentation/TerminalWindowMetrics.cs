@@ -20,7 +20,7 @@ public static class TerminalWindowMetrics
     /// <summary>Gets the gap between toolbar buttons in design units.</summary>
     public const int ToolbarSpacing = 4;
     /// <summary>Gets the number of left toolbar buttons.</summary>
-    public const int ToolbarButtons = 5;
+    public const int ToolbarButtons = 4;
     /// <summary>Gets the scrollbar track width in design units.</summary>
     public const int ScrollbarWidth = 12;
     /// <summary>Gets the fixed scrollbar handle height in design units.</summary>
@@ -65,20 +65,24 @@ public static class TerminalWindowMetrics
         return Math.Max(MinimumRows, possibleRows * quarter / 4);
     }
 
-    /// <summary>Fits the default-height window without changing any global UI scaling.</summary>
+    /// <summary>Fits the default window height without changing global UI scaling.</summary>
     public static float GetScale(float viewportWidth, float viewportHeight, float canvasScale) =>
         GetScale(viewportWidth, viewportHeight, canvasScale, Height);
 
-    /// <summary>Fits a window of the given design height; only windows larger than the viewport shrink.</summary>
-    public static float GetScale(float viewportWidth, float viewportHeight, float canvasScale, int height)
+    /// <summary>Fits a window of terminal width and the given height; only windows larger than the viewport shrink.</summary>
+    public static float GetScale(float viewportWidth, float viewportHeight, float canvasScale, int height) =>
+        GetScale(viewportWidth, viewportHeight, canvasScale, Width, height);
+
+    /// <summary>Fits a window of the given design width and height; only windows larger than the viewport shrink.</summary>
+    public static float GetScale(float viewportWidth, float viewportHeight, float canvasScale, int width, int height)
     {
         if (!IsPositiveFinite(viewportWidth) || !IsPositiveFinite(viewportHeight) ||
-            !IsPositiveFinite(canvasScale) || height <= 0)
+            !IsPositiveFinite(canvasScale) || width <= 0 || height <= 0)
         {
             return NativeScale;
         }
 
-        var widthScale = viewportWidth / Width / canvasScale * MaximumWidthFraction;
+        var widthScale = viewportWidth / width / canvasScale * MaximumWidthFraction;
         var heightScale = viewportHeight / height / canvasScale * MaximumHeightFraction;
         return Math.Min(NativeScale, Math.Min(widthScale, heightScale));
     }

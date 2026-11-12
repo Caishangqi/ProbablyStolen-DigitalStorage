@@ -12,7 +12,7 @@ namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
 
 /// <summary>
 /// One storage cell: byte billing, type limit, partition, equal share and status,
-/// with native moves through <see cref="ICellPagesPort"/>. Billing counts area units (units × w × h), eight per
+/// with native moves through <see cref="ICellPagesPort"/>. Billing counts area units (units * w * h), eight per
 /// byte.
 /// </summary>
 public sealed class BasicCellInventory : IStorageCell
@@ -35,10 +35,7 @@ public sealed class BasicCellInventory : IStorageCell
     /// <summary>Gets the byte capacity.</summary>
     public long GetTotalBytes() => Tier.GetBytes();
 
-    /// <summary>Gets the bytes each stored type costs.</summary>
-    public long GetBytesPerType() => Tier.GetBytesPerType();
-
-    /// <summary>Gets <c>types × bytesPerType + ⌈areaUnits ÷ 8⌉</c>.</summary>
+    /// <summary>Gets <c>ceil(types * typeBudget / typeLimit) + ceil(areaUnits / 8)</c>.</summary>
     public long GetUsedBytes() => _view.UsedBytes();
 
     /// <summary>Gets the free bytes; negative when an older cell is over its capacity.</summary>
@@ -63,16 +60,19 @@ public sealed class BasicCellInventory : IStorageCell
     /// <summary>Gets how many more types fit, bounded by both the type limit and the free bytes; never negative.</summary>
     public long GetRemainingItemTypes()
     {
-        var byBytes = Math.Max(0, GetFreeBytes()) / GetBytesPerType();
+        // The largest type count t whose ceil(t * budget / limit) still fits beside the stored area.
+        var areaBytes = (GetStoredItemCount() + CellView.AreaUnitsPerByte - 1) / CellView.AreaUnitsPerByte;
+        var forTypes = Math.Max(0, checked(GetTotalBytes() - areaBytes));
+        var byBytes = checked(forTypes * _view.TypeLimit) / Tier.GetTypeBudget() - GetStoredItemTypes();
         return Math.Max(0, Math.Min(byBytes, GetTotalItemTypes() - GetStoredItemTypes()));
     }
 
     /// <summary>Gets whether one more type fits: its type cost and at least one area unit, and a free type slot.</summary>
     public bool CanHoldNewItem()
     {
-        var free = GetFreeBytes();
-        var bytesPerType = GetBytesPerType();
-        return (free > bytesPerType || (free == bytesPerType && GetUnusedItemCount() > 0)) && GetRemainingItemTypes() > 0;
+        var usedAfter = CellView.UsedBytes(checked(_view.TypeCount + 1), checked(GetStoredItemCount() + 1),
+            Tier.GetTypeBudget(), _view.TypeLimit);
+        return usedAfter <= GetTotalBytes() && GetRemainingItemTypes() > 0;
     }
 
     /// <summary>Gets the area units one type may hold under equal distribution.</summary>

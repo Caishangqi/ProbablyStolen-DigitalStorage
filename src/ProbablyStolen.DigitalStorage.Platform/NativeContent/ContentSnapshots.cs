@@ -14,6 +14,7 @@ internal static class ContentSnapshots
         var component = CellContentWindow.Component(host);
         return new CellAssemblySnapshot(Item(host), component == null ? null : Item(component),
             CellContentWindow.IsMounted(host), SaveManager.IsDecoding,
-            storageState: CellContentWindow.StorageState(host));
+            storageState: CellContentWindow.StorageState(host), expansionStage: CellContentWindow.ExpansionStage(host),
+            hasModules: CellContentWindow.HasModules(host), hasPartitionRules: CellContentWindow.HasPartitionRules(host));
     }
 }

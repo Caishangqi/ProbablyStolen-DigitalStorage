@@ -159,7 +159,7 @@ internal sealed class CellRootSource : INativeRootSource
     }
 }
 
-/// <summary>Items chosen by a player, offered in selection order while they stay where they were.</summary>
+/// <summary>Player selected items offered in selection order while they stay where they were.</summary>
 internal sealed class ItemListSource : INativeRootSource
 {
     private readonly GameItem[] _items;

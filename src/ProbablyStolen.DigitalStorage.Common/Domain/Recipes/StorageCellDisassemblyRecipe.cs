@@ -40,9 +40,10 @@ public sealed class StorageCellDisassemblyRecipe
         bool stuck, bool mounted) => CanDisassemble(cellId, cellCount, componentId, componentCount,
             stuck, mounted, false);
 
-    /// <summary>Also requires the digital storage component to be empty.</summary>
+    /// <summary>Also requires an empty digital storage component, an empty module bay and no partition rule.</summary>
     public bool CanDisassemble(string? cellId, int cellCount, string? componentId, int componentCount,
-        bool stuck, bool mounted, bool storageEmpty) =>
-        IsComplete(cellId, cellCount, componentId, componentCount) && !stuck && !mounted && storageEmpty;
+        bool stuck, bool mounted, bool storageEmpty, bool hasModules = false, bool hasRules = false) =>
+        IsComplete(cellId, cellCount, componentId, componentCount) && !stuck && !mounted && storageEmpty &&
+        !hasModules && !hasRules;
 
 }

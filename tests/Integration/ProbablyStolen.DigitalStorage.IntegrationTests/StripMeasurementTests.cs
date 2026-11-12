@@ -16,14 +16,17 @@ using ProbablyStolen.DigitalStorage.Common.Ports;
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 
 /// <summary>
-/// Synthetic strip-layout measurements. They only print data and
-/// never fail on a value. N = 16 runs through the real Common planner and inventory; N = 4, 8, 32 and the old 12×12
+/// Synthetic strip layout measurements. They only print data and
+/// never fail on a value. N = 16 runs through the real Common planner and inventory; N = 4, 8, 32 and the old 12x12
 /// chains are computed from the same root lists for comparison. No game code or save is involved.
 /// </summary>
 [TestFixture]
 [Category("Measurement")]
 public sealed class StripMeasurementTests
 {
+    // The former effective limit ceiling; the measurements keep their original workload.
+    private const int MeasuredTypeLimit = 192;
+
     // Item sprite sizes from the game asset export (1177 sprites, 16 px per grid cell).
     private static readonly (int W, int H, int Weight)[] Distribution =
     {
@@ -109,7 +112,7 @@ public sealed class StripMeasurementTests
             (100.0 * used / allocated).ToString("0.0", CultureInfo.InvariantCulture),
             double.IsNaN(ms) ? "-" : ms.ToString("0.0", CultureInfo.InvariantCulture)));
 
-    // Strip pages plus the empty 12×12 anchor.
+    // Strip pages plus the empty 12x12 anchor.
     private static (int Pages, long Allocated) Strip(IEnumerable<(int W, int H, string Id)> roots, int n)
     {
         var pages = 1;
@@ -124,7 +127,7 @@ public sealed class StripMeasurementTests
         return (pages, allocated);
     }
 
-    // The schema 1 layout: one size per 12×12 page, floor(12/w)·floor(12/h) slots.
+    // The schema 1 layout: one size per 12x12 page, floor(12/w)*floor(12/h) slots.
     private static (int Pages, long Allocated) Square(IEnumerable<(int W, int H, string Id)> roots)
     {
         var pages = 0;
@@ -141,7 +144,7 @@ public sealed class StripMeasurementTests
     private static double RunStrip16(List<(int W, int H, string Id)> roots, int expectedPages)
     {
         var pages = new MemoryPages();
-        var view = new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), CellTypeLimit.Max,
+        var view = new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(), CellPartition.Unfiltered);
         var inventory = new BasicCellInventory(view, pages);
         var source = new MemorySource(roots);
@@ -178,7 +181,7 @@ public sealed class StripMeasurementTests
         var catalog = Mixed(30, 30, seed: 6, distinctTypes: true);
         for (var round = 0; round < 21; round++)
         {
-            var view = new CellView(rules, CellTypeLimit.Max, pages, usage, CellPartition.Unfiltered);
+            var view = new CellView(rules, MeasuredTypeLimit, pages, usage, CellPartition.Unfiltered);
             foreach (var _ in Enumerable.Range(0, round == 0 ? 1000 : 300))
             {
                 var type = catalog[random.Next(catalog.Count)];
@@ -214,7 +217,7 @@ public sealed class StripMeasurementTests
 
     private static string Legacy()
     {
-        // A full old 1k cell: 16 pages of 12×12, each page filled with one mixed size.
+        // A full old 1k cell: 16 pages of 12x12, each page filled with one mixed size.
         var random = new Random(7);
         var roots = new List<RootSnapshot>();
         var total = Distribution.Sum(entry => entry.Weight);
@@ -290,7 +293,7 @@ public sealed class StripMeasurementTests
         public IRootSource StoredRoots(ItemKey key) => throw new NotSupportedException();
     }
 
-    /// <summary>A cell whose roots start on 12×12 legacy pages and move to its own strip pages.</summary>
+    /// <summary>A cell whose roots start on 12x12 legacy pages and move to its own strip pages.</summary>
     private sealed class SameCell : IRootSource, ICellPagesPort
     {
         private readonly List<RootSnapshot> _legacy;
@@ -311,7 +314,7 @@ public sealed class StripMeasurementTests
         {
             var usage = new CellUsage();
             foreach (var root in _legacy) usage.Add(root.Key, root.Units, CellUsage.AreaOf(root.Size, root.Units));
-            return new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), CellTypeLimit.Max,
+            return new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit,
                 _pages.Select((page, index) => PageView.Unslotted(page, _legacy.Count(root => root.Page == index))),
                 usage, CellPartition.Unfiltered);
         }

@@ -1,35 +1,32 @@
 using System;
-using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 /// <summary>The only place that computes a cell's effective type limit.</summary>
 public static class CellTypeLimit
 {
-    /// <summary>The highest effective type limit.</summary>
-    public const int Max = 192;
-
-    /// <summary>Gets the tier base plus every extension, clamped to <c>[1, Max]</c>.</summary>
-    /// <exception cref="ArgumentNullException">No tier or extension collection was supplied.</exception>
-    /// <exception cref="ArgumentException">An extension has no source, repeats a source, or has a negative bonus.</exception>
-    public static int Effective(StorageCellTier tier, IEnumerable<TypeLimitExtension> extensions)
+    /// <summary>
+    /// Gets <c>floor((base + sumAdd) * (100 + sumPercent) / 100)</c> over the valid type limit modules, at least 1: flat bonuses
+    /// first, then percentages summed, not compounded. There is no upper clamp: the type cost is spread over the
+    /// limit (<see cref="StorageCellTier.GetTypeBudget"/>), so a full cell's types always cost half its bytes.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">No tier or module view was supplied.</exception>
+    public static int Effective(StorageCellTier tier, IUpgradeInventory modules)
     {
         if (tier == null) throw new ArgumentNullException(nameof(tier));
-        if (extensions == null) throw new ArgumentNullException(nameof(extensions));
+        if (modules == null) throw new ArgumentNullException(nameof(modules));
 
-        long total = tier.GetTotalTypes();
-        var sources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var extension in extensions)
+        long add = 0, percent = 0;
+        foreach (var module in modules.Modules)
         {
-            if (extension.SourceId == null)
-                throw new ArgumentException("A type limit extension needs a source.", nameof(extensions));
-            if (!sources.Add(extension.SourceId))
-                throw new ArgumentException($"The type limit source '{extension.SourceId}' is repeated.", nameof(extensions));
-            if (extension.Bonus < 0)
-                throw new ArgumentException($"The type limit source '{extension.SourceId}' has a negative bonus.", nameof(extensions));
-            total += extension.Bonus;
+            // An unreadable roll adds nothing, so a damaged module can never raise the limit.
+            if (module.Kind != CellModuleKind.TypeLimit || !module.IsValid) continue;
+            add = checked(add + module.Roll!.Add);
+            percent = checked(percent + module.Roll.Percent);
         }
 
-        return (int)Math.Max(1, Math.Min(total, Max));
+        var total = checked((tier.GetTotalTypes() + add) * (100 + percent) / 100);
+        return (int)Math.Max(1, Math.Min(total, int.MaxValue));
     }
 }

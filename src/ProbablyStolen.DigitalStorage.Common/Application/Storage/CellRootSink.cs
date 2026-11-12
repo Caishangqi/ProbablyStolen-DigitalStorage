@@ -30,8 +30,8 @@ public sealed class CellRootSink : IRootSink
     public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
-        if (_scope == PlanScope.Insert && !_view.Partition.MatchesFilter(root.Key))
-            return TransferStep.Rejected(StoreRejection.PartitionRejected);
+        if (_scope == PlanScope.Insert && _view.Partition.Rejection(root.Key) is { } refused)
+            return TransferStep.Rejected(refused);
 
         var plan = CellStorePlanner.Plan(_view, root.ToCandidate(), _scope);
         if (plan.Rejection is { } rejection) return TransferStep.Rejected(rejection);

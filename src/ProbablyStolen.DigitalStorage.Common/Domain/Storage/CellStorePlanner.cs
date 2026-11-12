@@ -25,10 +25,11 @@ public static class CellStorePlanner
 
             var area = CellUsage.AreaOf(item.Size, item.Units);
             var types = cell.TypeCount + (isNewType ? 1 : 0);
-            var usedAfter = CellView.UsedBytes(types, checked(cell.Usage.AreaUnits + area), cell.Rules.Tier.GetBytesPerType());
+            var usedAfter = CellView.UsedBytes(types, checked(cell.Usage.AreaUnits + area), cell.Rules.Tier.GetTypeBudget(),
+                cell.TypeLimit);
             if (usedAfter > cell.Rules.Tier.GetBytes()) return StorePlan.Reject(StoreRejection.Capacity);
 
-            if (cell.Partition.EqualDistribution &&
+            if (cell.EqualDistribution &&
                 checked(cell.Usage.Get(item.Key).AreaUnits + area) > cell.EqualShareQuota())
                 return StorePlan.Reject(StoreRejection.DistributionQuota);
         }

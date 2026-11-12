@@ -8,7 +8,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Identity;
 
-/// <summary>Outcome of a version-specific native identity capture.</summary>
+/// <summary>Outcome of a native identity capture.</summary>
 internal enum NativeItemIdentityReadStatus
 {
     Success = 0,
@@ -32,7 +32,7 @@ internal enum NativeItemIdentityFailure
     EncodingRejected = 10
 }
 
-/// <summary>Result of one non-mutating native identity capture.</summary>
+/// <summary>Result of a native identity capture without mutations.</summary>
 internal sealed class NativeItemIdentityReadResult
 {
     private NativeItemIdentityReadResult(NativeItemIdentityReadStatus status, NativeItemIdentityFailure failure,
@@ -58,7 +58,7 @@ internal sealed class NativeItemIdentityReadResult
 }
 
 /// <summary>
-/// Reads the exact Steam 26496118 native item shape into the detached version 1 contract.
+/// Reads the supported native item structure into the detached identity contract.
 /// This adapter never creates, changes, or invokes behavior on a native item.
 /// </summary>
 internal sealed class NativeItemIdentityReader
@@ -1584,7 +1584,7 @@ internal sealed class NativeIdentityAdapter
 
         // The mod scanner classifies a reflection lookup by tracing its receiver back to a literal type
         // (typeof(...) or a literal type name, also through a local assigned once). _inventory.GetType() cannot be
-        // traced, counts as a "computed type" (reflection-external) and blocks activation. Each grid type
+        // traced, so the scanner treats it as a computed type requiring reflection-external. Each grid type
         // therefore gets its own literal lookup. childItems would avoid reflection but copies the list on every read.
         private static readonly FieldInfo? GridItems =
             typeof(GameGridInventory).GetField("items", BindingFlags.Instance | BindingFlags.NonPublic);

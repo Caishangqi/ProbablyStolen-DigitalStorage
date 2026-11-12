@@ -10,9 +10,9 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
 /// <summary>
-/// Migrates schema 1 cells (12×12 pages) to schema 2 strip pages after a save loads, one item root at a time
+/// Migrates schema 1 cells (12x12 pages) to schema 2 strip pages after a save loads, one item root at a time
 /// through <see cref="RootTransfer"/>. Old page positions are not kept.
-/// Handles schema 1 → 2 only. Delete this class when schema 3 ships; a schema 1 cell is then locked instead.
+/// Handles schema 1 to 2 only. Delete this class when schema 3 ships; a schema 1 cell is then locked instead.
 /// </summary>
 /// <remarks>
 /// The schema is written last, so a cell stopped partway is still pending next load and continues from its actual

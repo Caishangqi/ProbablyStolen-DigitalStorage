@@ -106,7 +106,7 @@ public sealed class StorageScreenTests
     [TestCase(11, 1)]
     [TestCase(12, 2)]
     [TestCase(19, 3)]
-    public void PageSize_FollowsAe2RowsDividedBySix(int rows, int expected)
+    public void PageSize_EqualsRowsDividedBySix(int rows, int expected)
     {
         Assert.That(new StorageScreen(columns: 7, rows: rows).PageSize, Is.EqualTo(expected));
     }

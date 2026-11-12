@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
+using ProbablyStolen.DigitalStorage.Platform.Storage;
+
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 internal sealed class StorageContentRegistration : IDisposable
@@ -18,6 +20,7 @@ internal sealed class StorageContentRegistration : IDisposable
 
     internal StorageContentRegistration(TerminalItem terminal, DriveItem drive, StorageCellItem cell,
         ControllerItem controller, StorageComponentFactory component, MaterialItem housing,
+        CellWorkbenchItem workbench, CellModuleFactory modules,
         ItemContentSynchronization contentSynchronization, ModLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -28,7 +31,10 @@ internal sealed class StorageContentRegistration : IDisposable
             new(TerminalItem.ItemId, () => Create(terminal.Create)),
             new(DriveItem.ItemId, () => Create(drive.Create)),
             new(ControllerItem.ItemId, () => Create(controller.Create)),
-            new(MaterialItem.ItemId, () => Create(housing.Create))
+            new(MaterialItem.ItemId, () => Create(housing.Create)),
+            new(CellWorkbenchItem.ItemId, () => Create(workbench.Create)),
+            new(CellUpgradeInventory.TypeLimitId, () => Create(modules.CreateTypeLimit)),
+            new(CellUpgradeInventory.EqualDistributionId, () => Create(modules.CreateEqualDistribution))
         };
         foreach (var tier in StorageCellTier.All)
         {

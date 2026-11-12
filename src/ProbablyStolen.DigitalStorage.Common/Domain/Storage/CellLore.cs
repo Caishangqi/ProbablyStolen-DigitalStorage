@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -34,11 +36,14 @@ public sealed class CellLoreInput
 
     /// <summary>Gets or sets the cell contents, or null when they cannot be read.</summary>
     public CellView? View { get; set; }
+
+    /// <summary>Gets or sets the module bay expansion stage.</summary>
+    public int ExpansionStage { get; set; }
 }
 
 /// <summary>
-/// Builds cell lore in a fixed order (bytes, types, partition), followed by the storage format and, when needed, a status line. Upgrade guidance lives only here, never in a
-/// dialog.
+/// Builds cell lore in a fixed order: bytes, types, partition, storage format, then any status line.
+/// Upgrade guidance appears in the lore instead of a dialog.
 /// </summary>
 public static class CellLore
 {
@@ -54,8 +59,13 @@ public static class CellLore
             var partition = view.Partition;
             if (!partition.IsValid)
                 lines.Add(new LoreLine("cell_storage_partition_invalid"));
-            else if (!partition.List.IsEmpty())
-                lines.Add(new LoreLine(PartitionKey(partition)));
+            else if (partition.RuleCount > 0)
+                lines.Add(new LoreLine(PartitionKey(partition), partition.RuleCount, view.TypeLimit));
+            var typeModules = view.Upgrades.GetInstalledUpgrades(CellModuleKind.TypeLimit);
+            if (typeModules > 0) lines.Add(new LoreLine("cell_storage_type_modules", typeModules));
+            if (view.EqualDistribution) lines.Add(new LoreLine("cell_storage_equal_distribution"));
+            if (input.ExpansionStage > 0)
+                lines.Add(new LoreLine("cell_storage_expansion", input.ExpansionStage, ModuleBayExpansion.MaxStage(view.Rules.Tier)));
         }
 
         lines.Add(new LoreLine("cell_storage_schema", input.Schema, CellSchema.Current));
@@ -64,8 +74,7 @@ public static class CellLore
     }
 
     private static string PartitionKey(CellPartition partition) =>
-        (partition.Mode == IncludeExclude.Blacklist ? "cell_storage_partition_exclude" : "cell_storage_partition_include") +
-        (partition.EqualDistribution ? "_equal" : string.Empty);
+        partition.Mode == PartitionMode.Blacklist ? "cell_storage_partition_exclude" : "cell_storage_partition_include";
 
     private static LoreLine? StatusLine(CellLoreInput input)
     {

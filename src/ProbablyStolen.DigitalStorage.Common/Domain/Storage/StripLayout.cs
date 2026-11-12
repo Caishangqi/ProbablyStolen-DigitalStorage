@@ -4,8 +4,8 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 /// <summary>
 /// Geometry of strip pages: one row of <see cref="SlotsPerPage"/> slots, all of one bounding size, so a page for a
-/// <c>w×h</c> item is <c>(w·N)×h</c>. There is no separate page width limit; the widest page is
-/// <c>MaxItemSide·N</c>.
+/// <c>wxh</c> item is <c>(w*N)xh</c>. There is no separate page width limit; the widest page is
+/// <c>MaxItemSide*N</c>.
 /// </summary>
 public static class StripLayout
 {

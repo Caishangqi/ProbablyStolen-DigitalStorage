@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
@@ -84,6 +85,63 @@ public sealed class CellAssemblyTests
 
         Assert.That(callbacks.CanRemove(), Is.False);
         Assert.That(callbacks.GetRemovalFailure(), Is.EqualTo(CellRemovalFailure.STORAGE_STATE_UNAVAILABLE));
+    }
+
+    [Test]
+    public void Disassembly_EmptyCellWithModulesOrRules_IsRefusedWithDistinctReasons()
+    {
+        var withModules = new CellAssemblyCallbacks(Recipe(), new SnapshotPort(() => Cell(StorageContentsState.Empty, hasModules: true)));
+        var withRules = new CellAssemblyCallbacks(Recipe(), new SnapshotPort(() => Cell(StorageContentsState.Empty, hasRules: true)));
+        var nonEmpty = new CellAssemblyCallbacks(Recipe(),
+            new SnapshotPort(() => Cell(StorageContentsState.NonEmpty, hasModules: true, hasRules: true)));
+        var clean = new CellAssemblyCallbacks(Recipe(), new SnapshotPort(() => Cell(StorageContentsState.Empty)));
+
+        Assert.That(withModules.GetRemovalFailure(), Is.EqualTo(CellRemovalFailure.HAS_MODULES));
+        Assert.That(withRules.GetRemovalFailure(), Is.EqualTo(CellRemovalFailure.HAS_PARTITION_RULES));
+        Assert.That(nonEmpty.GetRemovalFailure(), Is.EqualTo(CellRemovalFailure.STORAGE_CELL_NOT_EMPTY));
+        Assert.That(clean.CanRemove(), Is.True);
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public void Disassembly_RecipeRefusesModulesOrRules(bool hasModules, bool hasRules)
+    {
+        Assert.That(Recipe().CanDisassemble(StorageCellDisassemblyRecipe.CellId, 1, StorageComponent.ItemId, 1,
+            false, false, storageEmpty: true, hasModules: hasModules, hasRules: hasRules), Is.False);
+    }
+
+    [TestCase(0, 0, true)]
+    [TestCase(1, 0, false)]
+    [TestCase(1, 2, true)]
+    [TestCase(2, 3, false)]
+    [TestCase(2, 4, true)]
+    public void Assembly_HousingExpandedBeyondTheComponentTier_IsRefused(int stage, int tierIndex, bool allowed)
+    {
+        var tier = StorageCellTier.All[tierIndex];
+        var component = new PhysicalItemSnapshot(tier.ComponentId, 1, 1, 2);
+        var callbacks = new CellAssemblyCallbacks(Recipe(), new SnapshotPort(() => new CellAssemblySnapshot(
+            new PhysicalItemSnapshot(StorageCellDisassemblyRecipe.HousingId, 1, 1, 2), null,
+            storageState: StorageContentsState.Empty, expansionStage: stage)));
+
+        Assert.That(callbacks.StageExceedsTier(component), Is.EqualTo(!allowed));
+        Assert.That(callbacks.CanInsert(component, false, true), Is.EqualTo(allowed));
+    }
+
+    private static CellAssemblySnapshot Cell(StorageContentsState state, bool hasModules = false, bool hasRules = false) => new(
+        new PhysicalItemSnapshot(StorageCellDisassemblyRecipe.CellId, 1, 1, 2),
+        new PhysicalItemSnapshot(StorageComponent.ItemId, 1, 1, 2),
+        storageState: state, hasModules: hasModules, hasPartitionRules: hasRules);
+
+    private sealed class SnapshotPort : ICellAssemblyPort
+    {
+        private readonly Func<CellAssemblySnapshot> _read;
+
+        internal SnapshotPort(Func<CellAssemblySnapshot> read) => _read = read;
+
+        public CellAssemblySnapshot Read() => _read();
+
+        public void FixComponent() { }
+        public void Present(bool assembled) { }
     }
 
     private sealed class AssemblyPort : ICellAssemblyPort

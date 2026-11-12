@@ -43,7 +43,7 @@ internal sealed class StorageComponentFactory
             _appearance.Apply(item, spriteKey, Width, Height);
             NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             // MATERIAL lets engineers and Dr. Jackson buy it. ModuleHelper.InitModuleItem below also makes it a MODULE
-            // (ModuleHelper.cs:76-77), as before this change.
+            // as well.
             item.SetGameItemType(ItemPrices.MaterialType);
             ModuleHelper.InitModuleItem(item, "digital_storage.component_module", isShipModule: false);
             item.mayStackItemFunc = (_, _) => false;

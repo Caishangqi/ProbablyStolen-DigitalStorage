@@ -65,9 +65,8 @@ internal static class NativeItemView
             return false;
         }
 
-        // Layout-relative placement, like the plain stretched icon: a frame keeps the item's aspect ratio inside the
-        // slot and every layer is anchored at its fraction of the frame. Absolute sizes were unreliable because the
-        // slot's unit scale under the reparented, scaled terminal window is not known here.
+        // A frame keeps the item's aspect ratio inside the slot. Layer positions use fractions of that frame
+        // because the slot's unit scale under the reparented terminal window is not known here.
         var frame = Frame(container);
         frame.GetComponent<AspectRatioFitter>().aspectRatio = extent.x / extent.y;
         for (var index = 0; index < layers.Count; index++)
@@ -75,8 +74,7 @@ internal static class NativeItemView
             var layer = layers[index];
             var copy = Take(frame, pool, index);
             copy.sprite = layer.Sprite;
-            // Native item layers are Image.Type.Tiled at their native size; tiled drawing ignores the scaled-down
-            // rect and showed only a corner of the sprite, so the copies stretch the sprite instead.
+            // Tiled drawing ignores the reduced rect and clips the sprite, so copies stretch the whole sprite.
             copy.type = Image.Type.Simple;
             copy.color = layer.Color;
             copy.preserveAspect = false;
@@ -91,29 +89,12 @@ internal static class NativeItemView
         }
 
         Hide(pool, layers.Count);
-        // Diagnostics: per-layer details for the item_view log line in TerminalStorageWindow (also commented out).
-        // var details = new System.Text.StringBuilder();
-        // for (var index = 0; index < layers.Count; index++)
-        // {
-        //     var layer = layers[index];
-        //     var sprite = layer.Source.sprite;
-        //     var rect = pool[index].rectTransform;
-        //     details.Append($" [{index}:{sprite.name} px={sprite.rect.width:0}x{sprite.rect.height:0} ppu={sprite.pixelsPerUnit:0} " +
-        //         $"type={layer.Source.type} size={layer.Size.x:0.#}x{layer.Size.y:0.#} centre={layer.Centre.x:0.#},{layer.Centre.y:0.#} " +
-        //         $"anchor={rect.anchorMin.x:0.##},{rect.anchorMin.y:0.##}-{rect.anchorMax.x:0.##},{rect.anchorMax.y:0.##}]");
-        // }
-        //
-        // LastSummary = $"children={rotator.childCount} mirrored={layers.Count} extent={extent.x:0}x{extent.y:0} " +
-        //     $"rotator={rotator.rect.width:0}x{rotator.rect.height:0} container={container.rect.width:0.#}x{container.rect.height:0.#} " +
-        //     $"frame={frame.rect.width:0.#}x{frame.rect.height:0.#}{details}";
         return true;
     }
 
     /// <summary>Hides every mirrored layer.</summary>
     internal static void Clear(List<Image> pool) => Hide(pool, 0);
 
-    // Diagnostics only; written when the detail block in Sync is uncommented.
-    /// <summary>Gets a short description of the last sync, for diagnostics.</summary>
     internal static string LastSummary { get; private set; } = "none";
 
     private static List<Layer> Collect(RectTransform rotator, RectTransform? inner)
@@ -131,7 +112,7 @@ internal static class NativeItemView
 
             // Layers are direct rotator children, so their local transforms already are rotator space (which also
             // drops the stored rotation: the terminal shows the upright item). World transforms are avoided because
-            // the closed cell window's render chain does not carry the normal on-screen scale.
+            // the closed cell window's render chain does not carry the normal screen scale.
             var localScale = child.localScale;
             var centre = (Vector2)(child.localPosition +
                 child.localRotation * Vector3.Scale(child.rect.center, localScale));
@@ -144,7 +125,7 @@ internal static class NativeItemView
 
     private static Vector2 Divide(Vector2 value, Vector2 by) => new(value.x / by.x, value.y / by.y);
 
-    /// <summary>Gets the aspect-fitted frame inside a slot container, creating it on first use.</summary>
+    /// <summary>Gets the frame that preserves aspect ratio inside a slot, creating it on first use.</summary>
     private static RectTransform Frame(RectTransform container)
     {
         if (container.childCount > 0 && container.GetChild(0) is RectTransform existing &&

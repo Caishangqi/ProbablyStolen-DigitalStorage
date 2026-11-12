@@ -2,6 +2,7 @@ using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
@@ -47,11 +48,15 @@ public sealed class CellRecordTests
     }
 
     [Test]
-    public void PartitionMode_ReadsOldWhitelistsAndRejectsUnknownValues()
+    public void PartitionMode_ReadsBothModesAndRejectsUnknownValues()
     {
-        Assert.That(CellRecord.PartitionMode(null), Is.EqualTo(IncludeExclude.Whitelist));
-        Assert.That(CellRecord.PartitionMode("whitelist"), Is.EqualTo(IncludeExclude.Whitelist));
-        Assert.That(CellRecord.PartitionMode("blacklist"), Is.EqualTo(IncludeExclude.Blacklist));
+        Assert.That(CellRecord.PartitionMode(null), Is.EqualTo(PartitionMode.Whitelist), "No tag is the default whitelist.");
+        Assert.That(CellRecord.PartitionMode("none"), Is.EqualTo(PartitionMode.Whitelist),
+            "The removed unrestricted mode reads as a whitelist.");
+        Assert.That(CellRecord.PartitionMode("whitelist"), Is.EqualTo(PartitionMode.Whitelist));
+        Assert.That(CellRecord.PartitionMode("blacklist"), Is.EqualTo(PartitionMode.Blacklist));
+        foreach (var mode in new[] { PartitionMode.Whitelist, PartitionMode.Blacklist })
+            Assert.That(CellRecord.PartitionMode(CellRecord.PartitionModeText(mode)), Is.EqualTo(mode));
         Assert.That(CellRecord.PartitionMode("Blacklist"), Is.Null);
         Assert.That(CellRecord.PartitionMode(""), Is.Null);
     }
@@ -97,9 +102,32 @@ public sealed class CellRecordTests
     }
 
     [Test]
+    public void Lore_ShowsModulesExpansionAndAnInvalidPartition()
+    {
+        var modules = new ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.UpgradeInventory(new[]
+        {
+            ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.InstalledModule.TypeLimit(
+                new ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.TypeLimitRoll(
+                    ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.ModuleQuality.Common, 8, 5)),
+            ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.InstalledModule.EqualDistribution()
+        });
+        var view = new CellView(CellRules.For(StorageCellTier.All[2]), 142,
+            new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(),
+            CellPartition.Invalid(PartitionMode.Whitelist, CellPartitionFailure.MalformedRule), upgrades: modules);
+
+        var lines = CellLore.Lines(new CellLoreInput { View = view, ExpansionStage = 1 });
+
+        Assert.That(lines.Select(line => line.ToString()), Is.SupersetOf(new[]
+        {
+            "cell_storage_partition_invalid()", "cell_storage_type_modules(1)", "cell_storage_equal_distribution()",
+            "cell_storage_expansion(1,1)"
+        }));
+    }
+
+    [Test]
     public void Lore_ListsBytesTypesPartitionSchemaAndStatusInOrder()
     {
-        var partition = CellPartition.FromConfiguration(IncludeExclude.Blacklist, new[] { new ItemKey("item.a") }, true, 128);
+        var partition = Partitions.Blacklist(new ItemKey("item.a"));
         var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(), partition);
         var lines = CellLore.Lines(new CellLoreInput
@@ -111,7 +139,7 @@ public sealed class CellRecordTests
 
         Assert.That(lines.Select(line => line.Key), Is.EqualTo(new[]
         {
-            "cell_storage_bytes", "cell_storage_types", "cell_storage_partition_exclude_equal", "cell_storage_schema",
+            "cell_storage_bytes", "cell_storage_types", "cell_storage_partition_exclude", "cell_storage_schema",
             "cell_storage_migration_refused"
         }));
         Assert.That(lines[0].Arguments, Is.EqualTo(new object[] { 0L, 1024L }));

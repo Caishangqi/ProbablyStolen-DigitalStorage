@@ -24,7 +24,9 @@ internal static class MachineryTitleFit
     internal static void Fit(PixelWindow window, params int[] headerButtonWidths)
     {
         if (window?.childElement is not MachineryPanelRow row || string.IsNullOrEmpty(window.titleString)) return;
-        var panel = row.Panels.LastOrDefault(candidate => !candidate.isHidden);
+        // A cell draws its pages last although its module bay comes after them in save order, so widen the pages.
+        var pages = row.GetPanel(Storage.CellPages.PanelRole);
+        var panel = pages is { isHidden: false } ? pages : row.Panels.LastOrDefault(candidate => !candidate.isHidden);
         if (panel == null) return;
 
         // Start from the natural width: an earlier fit is kept as the panel's minimum and requested width.

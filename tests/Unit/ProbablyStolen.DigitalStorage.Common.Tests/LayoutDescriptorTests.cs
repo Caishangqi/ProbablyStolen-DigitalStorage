@@ -105,6 +105,9 @@ public sealed class LayoutDescriptorTests
     [Test]
     public void Legacy_IsAnchorFollowedByLegacyPages()
     {
+        Assert.That(LayoutDescriptor.AnchorOnly().Format(), Is.EqualTo("A"));
+        Assert.That(LayoutDescriptor.AnchorOnly(), Is.EqualTo(LayoutDescriptor.Legacy(1)),
+            "A new cell records the same layout an empty schema 1 cell gets from migration.");
         Assert.That(LayoutDescriptor.Legacy(1).Format(), Is.EqualTo("A"));
         Assert.That(LayoutDescriptor.Legacy(2).Format(), Is.EqualTo("A;L"));
         Assert.That(LayoutDescriptor.Legacy(16).Format(), Is.EqualTo("A;L*15"));

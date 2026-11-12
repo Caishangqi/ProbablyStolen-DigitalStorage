@@ -10,10 +10,11 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
 /// <summary>
 /// Native page operations on one storage cell item. Pages are locked <see cref="GameGridInventory"/>s inside a
-/// <see cref="MachineryTabs"/> on the cell's last machinery panel, so the native save graph stores their items.
-/// Page sizes follow the cell's layout descriptor: page 0 is the empty 12×12 anchor, schema 1 pages are 12×12, and
-/// strip pages are one row of N slots. Items move with the native precise-placement sequence (Expel → set
-/// <c>modifiedShape</c> → UncheckedAccept, as in <c>ItemMultiSelectHandler.CommitPrecisePlacement</c>); those calls
+/// <see cref="MachineryTabs"/> on the cell's pages panel (found by role, before the module bay in save order), so the
+/// native save graph stores their items.
+/// Page sizes follow the cell's layout descriptor: page 0 is the empty 12x12 anchor, schema 1 pages are 12x12, and
+/// strip pages are one row of N slots. Items move with the native placement sequence (Expel, then set
+/// <c>modifiedShape</c>, then UncheckedAccept, as in <c>ItemMultiSelectHandler.CommitPrecisePlacement</c>); those calls
 /// bypass the page locks.
 /// </summary>
 internal static class CellPages
@@ -76,9 +77,11 @@ internal static class CellPages
             !((PixelElement)tabs).IsRenderingChildOf(panel) || !ReferenceEquals(tabs.owner, panel.owner) ||
             tabs.count != count) return false;
         // The native children getter collects every panel once; GetBodyStorage would recollect for every page.
+        // Save order is component slot, pages, then the module bay (CellContentWindow), so the bay is last.
         var storage = row!.children;
-        if (storage.Count != count + 1 || storage[0] is not GameSlotInventory slot ||
-            slot.identifier != Client.CellContentWindow.SlotId || !slot.parents.Contains(panel.owner)) return false;
+        if (storage.Count != count + 2 || storage[0] is not GameSlotInventory slot ||
+            slot.identifier != Client.CellContentWindow.SlotId || !slot.parents.Contains(panel.owner) ||
+            storage[count + 1] is not GameGridInventory { identifier: CellUpgradeInventory.BayId }) return false;
         for (var index = 0; index < count; index++)
         {
             var geometry = layout.Pages[index];
@@ -119,7 +122,7 @@ internal static class CellPages
     }
 
     /// <summary>
-    /// Builds the per-operation view of a cell from its live pages.
+    /// Builds the view for one operation from the cell's live pages.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The layout cannot be read, the pages do not match it, a strip root is off its slot grid, or a root has no
@@ -159,8 +162,8 @@ internal static class CellPages
         }
 
         var typeLimit = CellTypeLimitSource.EffectiveOrBase(cell);
-        return new CellView(CellRules.For(tier), typeLimit, views, usage, CellTags.ReadPartition(cell, typeLimit),
-            DrivePriorityTag.ReadForCell(cell), writeState);
+        return new CellView(CellRules.For(tier), typeLimit, views, usage, CellPartitionTags.Read(cell),
+            DrivePriorityTag.ReadForCell(cell), writeState, CellUpgradeInventory.Read(cell));
     }
 
     /// <summary>
@@ -195,7 +198,7 @@ internal static class CellPages
     {
         var swap = SwapOf(cell);
         var status = CellHealth.Get(cell).Status;
-        // Extract-only cells keep their schema 1 layout untouched until a later load migrates them.
+        // Cells restricted to extraction keep their schema 1 layout until a later load migrates them.
         if (swap.Blocked || status != CellHealthStatus.Available) return;
         try
         {
@@ -243,7 +246,7 @@ internal static class CellPages
         }
         catch (Exception) when (swap.Blocked)
         {
-            // An extract-only cell stays extract-only; its compaction is blocked by the swap flag alone.
+            // The swap flag blocks compaction without changing an existing extraction restriction.
             if (CellHealth.Get(cell).Status == CellHealthStatus.Available)
                 CellHealth.Set(cell, new CellHealthState(CellHealthStatus.CompactionBlocked));
             throw;
@@ -256,7 +259,7 @@ internal static class CellPages
         // Players reach page items only through the terminal: no drag in or out, and no "use" from the cell window.
         // Insertion uses the native lock because it is checked before HopperHelper.MayBypassGridRules; removal uses
         // callbacks instead of the native lock, because a page locked both ways makes every item tooltip show
-        // "locked, machine running" (GameItemElement.GetTooltipBasic). An inventory-level false vetoes activation
+        // "locked, machine running" (GameItemElement.GetTooltipBasic). Returning false for the inventory vetoes activation
         // even when the item allows it (GameItem.MayActivateSlotItem). Expel/UncheckedAccept ignore all of these.
         page.overrideLockInsert = true;
         page.mayInventoryRemoveItemFunc = (_, _) => false;
@@ -275,7 +278,7 @@ internal static class CellPages
 
     /// <summary>
     /// Native steps of <see cref="PageSetSwap{T}"/>. A replacement <see cref="MachineryTabs"/> takes the kept page
-    /// intakes in order (AddTab re-parents their transforms immediately); attaching it through
+    /// intakes in order (AddTab reparents their transforms immediately); attaching it through
     /// <c>MachineryPanel.SetContent</c> unlinks and relinks storage in two <c>RelinkStorage</c> calls. Destroying
     /// the original container then only destroys what is still under it: tab captions and the removed empty pages.
     /// </summary>

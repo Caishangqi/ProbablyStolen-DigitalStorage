@@ -6,8 +6,12 @@ public sealed class CellAssemblySnapshot
     /// <summary>Captures the actual graph without creating replacement items.</summary>
     public CellAssemblySnapshot(PhysicalItemSnapshot host, PhysicalItemSnapshot? component,
         bool mounted = false, bool restoring = false,
-        StorageContentsState storageState = StorageContentsState.Unavailable)
+        StorageContentsState storageState = StorageContentsState.Unavailable, int expansionStage = 0,
+        bool hasModules = false, bool hasPartitionRules = false)
     {
+        ExpansionStage = expansionStage;
+        HasModules = hasModules;
+        HasPartitionRules = hasPartitionRules;
         Host = host;
         Component = component;
         Mounted = mounted;
@@ -29,6 +33,15 @@ public sealed class CellAssemblySnapshot
 
     /// <summary>Whether stored contents were positively read at this boundary.</summary>
     public StorageContentsState StorageState { get; }
+
+    /// <summary>Gets the module bay expansion stage recorded on the host.</summary>
+    public int ExpansionStage { get; }
+
+    /// <summary>Gets whether the host's module bay holds any module.</summary>
+    public bool HasModules { get; }
+
+    /// <summary>Gets whether the cell has any partition rule.</summary>
+    public bool HasPartitionRules { get; }
 }
 
 /// <summary>Evidence state for the physical contents of a digital storage component.</summary>

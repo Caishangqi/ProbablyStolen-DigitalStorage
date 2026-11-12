@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -68,6 +70,7 @@ internal sealed class ItemContentSynchronization
     private readonly IReadOnlyDictionary<string, ItemContentDefinition> _definitions;
     private readonly Func<string, string> _resolveText;
     private readonly Action<string> _logError;
+    private readonly Func<IItemContentState, long, long>? _adjustValue;
     private readonly HashSet<string> _reportedTextFailures = new(StringComparer.Ordinal);
 
     internal ItemContentSynchronization(Func<string, string> resolveText, Action<string> logError)
@@ -76,8 +79,10 @@ internal sealed class ItemContentSynchronization
     }
 
     internal ItemContentSynchronization(IReadOnlyDictionary<string, ItemContentDefinition> definitions,
-        Func<string, string> resolveText, Action<string> logError)
+        Func<string, string> resolveText, Action<string> logError,
+        Func<IItemContentState, long, long>? adjustValue = null)
     {
+        _adjustValue = adjustValue;
         _definitions = definitions ?? throw new ArgumentNullException(nameof(definitions));
         _resolveText = resolveText ?? throw new ArgumentNullException(nameof(resolveText));
         _logError = logError ?? throw new ArgumentNullException(nameof(logError));
@@ -117,7 +122,8 @@ internal sealed class ItemContentSynchronization
             if (!string.Equals(item.FlavorText, flavor, StringComparison.Ordinal)) item.FlavorText = flavor;
         }
 
-        if (item!.UnitValue != definition.UnitValue) item.UnitValue = definition.UnitValue;
+        var value = _adjustValue?.Invoke(item!, definition.UnitValue) ?? definition.UnitValue;
+        if (item!.UnitValue != value) item.UnitValue = value;
     }
 
     private string ResolveRequired(string key)
@@ -143,7 +149,13 @@ internal static class ItemContentDefinitions
             [TerminalItem.ItemId] = new(TerminalItem.ItemId, TerminalItem.NameKey, TerminalItem.DescriptionKey, ItemPrices.Terminal),
             [DriveItem.ItemId] = new(DriveItem.ItemId, DriveItem.NameKey, DriveItem.DescriptionKey, ItemPrices.Drive),
             [ControllerItem.ItemId] = new(ControllerItem.ItemId, ControllerItem.NameKey, ControllerItem.DescriptionKey, ItemPrices.Controller),
-            [MaterialItem.ItemId] = new(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing)
+            [MaterialItem.ItemId] = new(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing),
+            [CellWorkbenchItem.ItemId] = new(CellWorkbenchItem.ItemId, CellWorkbenchItem.NameKey, CellWorkbenchItem.DescriptionKey,
+                ItemPrices.Workbench),
+            [CellUpgradeInventory.TypeLimitId] = new(CellUpgradeInventory.TypeLimitId, "module_type_limit_name",
+                "module_type_limit_desc", ItemPrices.TypeLimitModule),
+            [CellUpgradeInventory.EqualDistributionId] = new(CellUpgradeInventory.EqualDistributionId,
+                "module_equal_distribution_name", "module_equal_distribution_desc", ItemPrices.EqualDistributionModule)
         };
         foreach (var tier in StorageCellTier.All)
         {
@@ -160,6 +172,8 @@ internal sealed class NativeItemContentState : IItemContentState
 {
     private readonly GameItem _item;
     internal NativeItemContentState(GameItem item) => _item = item;
+
+    internal GameItem Item => _item;
     public string? Identifier => _item.identifier;
     public string? Name { get => _item.name; set => _item.name = value; }
     public string? ShortDescription { get => _item.shortDescription; set => _item.shortDescription = value; }
@@ -171,4 +185,26 @@ internal static class NativeItemContentInitialization
 {
     internal static void Initialize(GameItem item, ItemContentSynchronization synchronization) =>
         synchronization.Synchronize(new NativeItemContentState(item));
+}
+
+/// <summary>
+/// Adjusts synchronized values: a module bay expansion adds 100 per stage, like the native kit, so the value survives
+/// the resynchronization on load and assembly; a type limit module is priced from its rolled values.
+/// </summary>
+internal static class ItemValueAdjustment
+{
+    internal static long Adjust(IItemContentState state, long baseValue)
+    {
+        if (state is not NativeItemContentState native) return baseValue;
+        var item = native.Item;
+        if (item.identifier == CellUpgradeInventory.TypeLimitId)
+        {
+            var roll = ModuleTags.Read(item);
+            return roll != null && TypeLimitRolls.IsValid(roll) ? TypeLimitRolls.Price(roll) : baseValue;
+        }
+
+        if (item.identifier == CellUpgradeInventory.EqualDistributionId) return baseValue;
+        var stage = CellUpgradeInventory.Stage(item);
+        return stage > 0 ? checked(baseValue + stage * ItemPrices.ExpansionStage) : baseValue;
+    }
 }

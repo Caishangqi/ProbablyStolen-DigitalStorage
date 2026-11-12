@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -16,10 +17,16 @@ public static class CellRecord
     /// </summary>
     public const int DowngradeGuardPageCount = LayoutDescriptor.MaxPages + 1;
 
-    /// <summary>The <c>partition_mode</c> value of a blacklist; a whitelist removes the tag.</summary>
+    /// <summary>The <c>partition_mode</c> value of a blacklist.</summary>
     public const string BlacklistMode = "blacklist";
 
-    private const string WhitelistMode = "whitelist";
+    /// <summary>The <c>partition_mode</c> value of a whitelist.</summary>
+    public const string WhitelistMode = "whitelist";
+
+    /// <summary>
+    /// The removed unrestricted mode reads as a whitelist and preserves its rules.
+    /// </summary>
+    public const string RemovedUnrestrictedMode = "none";
 
     /// <summary>Gets the storage schema: the tag value, or <see cref="CellSchema.Untagged"/> without the tag.</summary>
     public static int Schema(bool present, int value) => present ? value : CellSchema.Untagged;
@@ -43,13 +50,22 @@ public static class CellRecord
         return true;
     }
 
-    /// <summary>Gets the partition mode; a missing tag is a whitelist, an unknown value is null.</summary>
-    public static IncludeExclude? PartitionMode(string? text) => text switch
+    /// <summary>Gets the partition mode; a missing tag is the default whitelist, an unknown value is null.</summary>
+    public static PartitionMode? PartitionMode(string? text) => text switch
     {
-        null => IncludeExclude.Whitelist,
-        WhitelistMode => IncludeExclude.Whitelist,
-        BlacklistMode => IncludeExclude.Blacklist,
+        null => Partition.PartitionMode.Whitelist,
+        RemovedUnrestrictedMode => Partition.PartitionMode.Whitelist,
+        WhitelistMode => Partition.PartitionMode.Whitelist,
+        BlacklistMode => Partition.PartitionMode.Blacklist,
         _ => null
+    };
+
+    /// <summary>Gets the tag text of a partition mode.</summary>
+    public static string PartitionModeText(PartitionMode mode) => mode switch
+    {
+        Partition.PartitionMode.Whitelist => WhitelistMode,
+        Partition.PartitionMode.Blacklist => BlacklistMode,
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown partition mode.")
     };
 
     /// <summary>Gets the pages native decoding must append after the factory page, or null when it must not restore.</summary>

@@ -11,7 +11,7 @@ using ProbablyStolen.DigitalStorage.Common.Ports;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
-/// <summary>An in-memory container of roots; it is both a source and a destination.</summary>
+/// <summary>A container of roots in memory; it is both a source and a destination.</summary>
 internal sealed class MemoryInventory : IRootSource, IRootSink
 {
     private readonly List<RootSnapshot> _roots = new();
@@ -70,7 +70,7 @@ internal sealed class MemoryInventory : IRootSource, IRootSink
     }
 }
 
-/// <summary>An in-memory <see cref="ICellPagesPort"/> whose strip roots live in a list.</summary>
+/// <summary>An <see cref="ICellPagesPort"/> whose strip roots live in a list in memory.</summary>
 internal sealed class MemoryCellPages : ICellPagesPort
 {
     private readonly List<RootSnapshot> _roots = new();
@@ -82,9 +82,10 @@ internal sealed class MemoryCellPages : ICellPagesPort
     internal IReadOnlyList<PageGeometry> Pages => _pages;
     internal IReadOnlyList<RootSnapshot> Roots => _roots;
 
-    internal static CellView EmptyView(StorageCellTier tier, int typeLimit = 128, CellPartition? partition = null) =>
+    internal static CellView EmptyView(StorageCellTier tier, int typeLimit = 128, CellPartition? partition = null,
+        ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.IUpgradeInventory? upgrades = null) =>
         new(CellRules.For(tier), typeLimit, new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(),
-            partition ?? CellPartition.Unfiltered);
+            partition ?? CellPartition.Unfiltered, upgrades: upgrades);
 
     internal void Remove(RootSnapshot root) =>
         _roots.Remove(_roots.First(candidate => (candidate.Page, candidate.X, candidate.Y) == (root.Page, root.X, root.Y)));

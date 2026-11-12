@@ -8,12 +8,12 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 /// <summary>
 /// Immutable page list of one cell, stored in the <c>digital_storage.layout</c> tag as
-/// <c>A;S{w}x{h}x{n}*k;L*k</c>. The grammar is append-only: the meaning of an existing entry kind never changes.
+/// <c>A;S{w}x{h}x{n}*k;L*k</c>. New entry kinds may be appended; existing kinds never change meaning.
 /// </summary>
 /// <remarks>
-/// <c>A</c> is the factory 12×12 page and must come first, exactly once. <c>L</c> is a schema 1 12×12 page that
-/// only exists while migrating. <c>S{w}x{h}x{n}</c> is a strip page of <c>n</c> slots of <c>w×h</c>.
-/// <c>*k</c> repeats an entry <c>k ≥ 2</c> times. The format version lives in <c>digital_storage.schema</c>, so the
+/// <c>A</c> is the factory 12x12 page and must come first, exactly once. <c>L</c> is a schema 1 12x12 page that
+/// only exists while migrating. <c>S{w}x{h}x{n}</c> is a strip page of <c>n</c> slots of <c>wxh</c>.
+/// <c>*k</c> repeats an entry <c>k >= 2</c> times. The format version lives in <c>digital_storage.schema</c>, so the
 /// text carries no version prefix.
 /// </remarks>
 public sealed class LayoutDescriptor : IEquatable<LayoutDescriptor>
@@ -37,6 +37,9 @@ public sealed class LayoutDescriptor : IEquatable<LayoutDescriptor>
 
     /// <summary>Gets the pages in native page order; page 0 is the anchor.</summary>
     public IReadOnlyList<PageGeometry> Pages { get; }
+
+    /// <summary>Builds the descriptor of a new cell: only the empty anchor page.</summary>
+    public static LayoutDescriptor AnchorOnly() => new(new[] { PageGeometry.Anchor });
 
     /// <summary>Builds the migration start descriptor of a schema 1 cell: the anchor followed by legacy pages.</summary>
     /// <param name="pageCount">The schema 1 page count, including the factory page.</param>

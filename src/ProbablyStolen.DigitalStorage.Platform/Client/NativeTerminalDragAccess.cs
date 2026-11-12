@@ -10,6 +10,25 @@ internal static class NativeTerminalDragAccess
     private static readonly FieldInfo? LastItem = typeof(ItemMouseDragHandler).GetField("lastItem", PrivateInstance);
     private static readonly FieldInfo? LastInventory = typeof(ItemMouseDragHandler).GetField("lastInventory", PrivateInstance);
     private static readonly FieldInfo? LastSlot = typeof(ItemMouseDragHandler).GetField("lastSlot", PrivateInstance);
+    private static readonly FieldInfo? ScrollIgnore = typeof(ItemMouseDragHandler).GetField("isScrollIgnore", PrivateInstance);
+
+    /// <summary>
+    /// Suppresses native item rotation and quantity changes on scroll. Returns the previous state, or null when
+    /// the field is unavailable and nothing changed.
+    /// </summary>
+    internal static bool? SetScrollIgnore(ItemMouseDragHandler drag, bool value)
+    {
+        try
+        {
+            if (ScrollIgnore?.GetValue(drag) is not bool previous) return null;
+            ScrollIgnore.SetValue(drag, value);
+            return previous;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     internal static int GetAmount(ItemMouseDragHandler drag)
     {

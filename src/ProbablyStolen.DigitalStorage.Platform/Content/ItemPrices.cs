@@ -25,5 +25,17 @@ internal static class ItemPrices
     internal const long Component1K = 250;
 
     /// <summary>The native item type and tag that material buyers (engineers, Dr. Jackson) look for.</summary>
+    /// <summary>The cell workbench's base value.</summary>
+    internal const long Workbench = 400;
+
+    /// <summary>The equal distribution module's base value.</summary>
+    internal const long EqualDistributionModule = 500;
+
+    /// <summary>The value of a type limit module whose roll cannot be read; a valid roll is priced from its values.</summary>
+    internal const long TypeLimitModule = 300;
+
+    /// <summary>The value each module bay expansion stage adds, as the native kit does.</summary>
+    internal const long ExpansionStage = 100;
+
     internal const string MaterialType = "MATERIAL";
 }

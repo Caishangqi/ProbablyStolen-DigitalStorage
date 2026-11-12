@@ -10,7 +10,7 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 /// </summary>
 public static class CellSchema
 {
-    /// <summary>The schema of a cell without a schema tag: 12×12 pages counted by <c>page_count</c>.</summary>
+    /// <summary>The schema of a cell without a schema tag: 12x12 pages counted by <c>page_count</c>.</summary>
     public const int Untagged = 1;
 
     /// <summary>The schema written by this version: strip pages described by <c>digital_storage.layout</c>.</summary>

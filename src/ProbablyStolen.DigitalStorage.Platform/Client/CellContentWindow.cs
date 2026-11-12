@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -18,6 +20,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private readonly GameItem _host;
     private readonly ItemAppearance _appearance;
     private readonly ModLog _log;
+    private readonly ModText _text;
     private readonly ItemContentSynchronization _contentSynchronization;
     private readonly CellAssemblyCallbacks _callbacks;
     private bool _reportedInvalid;
@@ -31,6 +34,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         _host = host;
         _appearance = appearance;
         _log = log;
+        _text = text;
         _contentSynchronization = contentSynchronization;
         _callbacks = new CellAssemblyCallbacks(recipe, this);
         Slot = new GameSlotInventory(1, 2) { identifier = SlotId };
@@ -50,11 +54,23 @@ internal sealed class CellContentWindow : ICellAssemblyPort
             }
         };
         Slot.onSlotRemoveItemEndFunc = (_, _, _) => _callbacks.Removed();
-        // Panel order is the native save order: the pages panel must stay last.
+        // Panel order is the native save order. The module bay was added after the released pages panel, so saves
+        // of older cells keep every child at its position; displayOrder still shows it between component and pages.
         var pages = CellPages.CreatePanel(text.Get("storage_pages_panel"));
         var component = MachineHelper.Panel(text.Get("component_panel"), Slot, "component");
-        var window = MachineHelper.CreateMachineryWindow(true, component, pages);
+        var bay = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH)
+        {
+            identifier = CellUpgradeInventory.BayId
+        };
+        var modules = MachineHelper.Panel(text.Get("modules_panel"), bay, CellUpgradeInventory.ModulesPanelRole);
+        var window = MachineHelper.CreateMachineryWindow(true, new[] { 0, 2, 1 }, component, pages, modules);
         host.SetContentWindow(window);
+        SetupModuleBay(bay);
+        // The hidden panel preserves the module bay's save position while the workbench draws it.
+        // Reset the component panel's stretched size as SyncPages does.
+        modules.SetHidden(true);
+        MachineryContainerUtils.TryResize(component.content, 0, 0);
+        component.ResizePixels(0, 0);
         // Players reach stored items through the terminal; the pages show only with the debug setting. Hiding keeps
         // the panel, so the saved inventory order is unchanged.
         void SyncPages()
@@ -90,6 +106,43 @@ internal sealed class CellContentWindow : ICellAssemblyPort
 
     CellAssemblySnapshot ICellAssemblyPort.Read() => ContentSnapshots.Cell(_host);
 
+    private void SetupModuleBay(GameGridInventory bay)
+    {
+        MachineHelper.SetupModuleBay(bay, _host, null, new[] { CellUpgradeInventory.ModuleType });
+        // Delegates on one inventory combine with OR. Replacing the native filter lets this check reject modules
+        // that the type filter alone would accept.
+        bay.mayInventoryAddItemFunc = (item, _) => CanInstall(bay, item);
+        bay.mayInventoryRemoveItemFunc = (item, _) => CanRemoveModule(bay, item);
+        bay.onSlotAddItemEndFunc += (_, _, _) => CellUpgradeInventory.RaiseModulesChanged(_host);
+        bay.onSlotRemoveItemEndFunc += (_, _, _) => CellUpgradeInventory.RaiseModulesChanged(_host);
+    }
+
+    private bool CanInstall(GameGridInventory bay, GameItem item)
+    {
+        if (!GeneralHelper.IsItemOwned(item) || !item.IsTag(CellUpgradeInventory.ModuleType)) return false;
+        var module = CellUpgradeInventory.Module(item);
+        if (module == null) return false;
+        if (ReferenceEquals(item.parentInventory, bay)) return true;
+        var check = CellUpgradeCallbacks.CanInstall(CellUpgradeInventory.State(_host, withUsage: false), module.Kind);
+        if (!check.IsAllowed && !SaveManager.IsDecoding) CellUpgradeInventory.ReportRefusal(_host, check);
+        return check.IsAllowed;
+    }
+
+    private bool CanRemoveModule(GameGridInventory bay, GameItem item)
+    {
+        var module = CellUpgradeInventory.Module(item);
+        if (module == null) return true;
+        var index = 0;
+        foreach (var child in bay.childItems)
+        {
+            if (ReferenceEquals(child, item)) break;
+            if (CellUpgradeInventory.Module(child) != null) index++;
+        }
+
+        var state = CellUpgradeInventory.State(_host, withUsage: module.Kind == CellModuleKind.TypeLimit);
+        return index < state.Modules.Modules.Count && CellUpgradeCallbacks.CanRemove(state, index).IsAllowed;
+    }
+
     void ICellAssemblyPort.FixComponent()
     {
         ModuleHelper.SetModuleStuck(Slot.childItem);
@@ -98,7 +151,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     void ICellAssemblyPort.Present(bool assembled) => Present(assembled);
 
     // Drive bays ask this of whatever item is being dragged. MachineHelper.GetBodyStorage would also read a
-    // GridPixelElement root at row 1 without a bounds check, which throws for one-row windows of other mods.
+    // GridPixelElement root at row 1 without a bounds check, which throws for windows with one row from other mods.
     internal static GameItem? Component(GameItem host) =>
         (host.contentWindow?.childElement as MachineryPanelRow)?.GetStorage(0) is GameSlotInventory
             { identifier: SlotId } slot
@@ -108,6 +161,12 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     internal static StorageContentsState StorageState(GameItem host) =>
         !CellPages.IsComplete(host) || CellHealth.IsUnavailable(host) ? StorageContentsState.Unavailable
         : CellPages.IsEmpty(host) ? StorageContentsState.Empty : StorageContentsState.NonEmpty;
+
+    internal static int ExpansionStage(GameItem host) => CellUpgradeInventory.Stage(host);
+
+    internal static bool HasModules(GameItem host) => CellUpgradeInventory.HasModules(host);
+
+    internal static bool HasPartitionRules(GameItem host) => CellPartitionTags.HasRules(host);
 
     internal static bool IsMounted(GameItem host) =>
         host.parentInventory?.identifier?.StartsWith(BayPrefix, StringComparison.Ordinal) == true;
@@ -129,7 +188,8 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         var snapshot = ContentSnapshots.Cell(host);
         return recipe.CanDisassemble(host.identifier, host.unitCount,
             component.identifier, component.unitCount, component.IsTag(ModuleHelper.MODULE_STUCK_TAG),
-            snapshot.Mounted, storageEmpty: !snapshot.Restoring && snapshot.StorageState == StorageContentsState.Empty);
+            snapshot.Mounted, storageEmpty: !snapshot.Restoring && snapshot.StorageState == StorageContentsState.Empty,
+            hasModules: snapshot.HasModules, hasRules: snapshot.HasPartitionRules);
     }
 
     private bool CanRemoveFromSlot(GameItem component) =>

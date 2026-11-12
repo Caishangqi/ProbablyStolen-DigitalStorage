@@ -65,7 +65,7 @@ internal sealed class TerminalItemDrop
         _cachedItem = null;
         try
         {
-            // Target receives the whole dragged item without the chosen quantity; the store moves whole roots only.
+            // Target receives the whole dragged item; storage transfers whole roots regardless of the drag quantity.
             var result = _store(source, amount);
             _log($"Digital Storage: icon drop status={result.Status} units={source.unitCount} dragged={amount} stored={result.StoredAmount}");
         }

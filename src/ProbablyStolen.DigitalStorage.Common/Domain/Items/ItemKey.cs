@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
-/// <summary>Identifies one Probably Stolen item definition and its approved persistent state.</summary>
+/// <summary>Identifies an item definition and its persistent state.</summary>
 public sealed class ItemKey : IEquatable<ItemKey>, IComparable<ItemKey>
 {
     private readonly IReadOnlyList<KeyValuePair<string, string>> _components;
@@ -71,6 +71,13 @@ public sealed class ItemKey : IEquatable<ItemKey>, IComparable<ItemKey>
 
         return new ItemKey(identifier, copied);
     }
+
+    /// <summary>
+    /// Gets what the canonical state records about the root item, or null for a legacy identity. The state was
+    /// validated on creation, so a canonical identity always yields a summary.
+    /// </summary>
+    public CanonicalItemSummary? ReadSummary() =>
+        _canonicalState == null ? null : CanonicalIdentityValidator.ReadSummary(_canonicalState, Identifier);
 
     /// <summary>Gets whether this identity uses the versioned canonical representation.</summary>
     public bool IsCanonical => _canonicalState != null;
