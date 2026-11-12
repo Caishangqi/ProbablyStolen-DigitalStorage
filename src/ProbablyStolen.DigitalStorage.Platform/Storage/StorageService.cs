@@ -4,6 +4,9 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
@@ -11,7 +14,6 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
@@ -140,6 +142,12 @@ internal sealed class StorageService
     /// mounted; cells restricted to extraction are mounted without insertion.
     /// </summary>
     internal MountedNetwork GetInventory(GameItem terminal) => GetInventory(terminal, migratePending: true);
+
+    /// <summary>
+    /// Mounts the network of any network machine for the public API. Unlike terminal reads it never migrates pending
+    /// cells; those are migrated when a game loads or a terminal opens.
+    /// </summary>
+    internal MountedNetwork Mount(GameItem machine) => GetInventory(machine, migratePending: false);
 
     // Simulations pass false because checking availability must not trigger a migration that moves items.
     private MountedNetwork GetInventory(GameItem terminal, bool migratePending)

@@ -3,7 +3,7 @@ using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 
 namespace ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 
-/// <summary>The result of <see cref="IStorage.Insert"/>.</summary>
+/// <summary>The result of <see cref="IRootStorage.Insert"/>.</summary>
 public sealed class InsertResult
 {
     /// <summary>Creates a result.</summary>
@@ -24,7 +24,7 @@ public sealed class InsertResult
     public StorageChangeSet Changes { get; }
 }
 
-/// <summary>The result of <see cref="IStorage.Extract"/>.</summary>
+/// <summary>The result of <see cref="IRootStorage.Extract"/>.</summary>
 public sealed class ExtractResult
 {
     /// <summary>Creates a result.</summary>

@@ -87,6 +87,87 @@ class DecompileGameTests(unittest.TestCase):
             decompile_game._build_id(self.game)
 
 
+class DecompileModTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.repo = self.root / "repo"
+        (self.repo / ".reference").mkdir(parents=True)
+        self.mod = self.root / "workshop" / "content" / "4348910" / "3829653222"
+        (self.mod / "Localization").mkdir(parents=True)
+        (self.mod / "Stocking.dll").write_bytes(b"mod")
+        (self.mod / "Localization" / "en.csv").write_text("key,value", encoding="utf-8")
+        (self.mod / "icon.png").write_bytes(b"png")
+        self.write_manifest("<ID>CustomerStocking</ID><ModVersion>1.6.3</ModVersion>"
+                            "<Assemblies><Assembly>Stocking.dll</Assembly></Assemblies>")
+        self.commands = []
+
+    def write_manifest(self, body):
+        (self.mod / "manifest.xml").write_text(f"<Mod>{body}</Mod>", encoding="utf-8")
+
+    def fake_ilspy(self, command, **_kwargs):
+        self.commands.append(command)
+        destination = Path(command[command.index("-o") + 1])
+        destination.mkdir(parents=True)
+        (destination / "Restored.cs").write_text("class Restored {}", encoding="utf-8")
+        return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    def test_archives_declared_assemblies_with_mod_provenance(self):
+        with patch.object(decompile_game.subprocess, "run", side_effect=self.fake_ilspy):
+            output = decompile_game.decompile_mod(self.mod, ilspycmd="ilspycmd", repository_root=self.repo)
+
+        manifest = json.loads((output / "decompile-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(output.parent.name, "probably-stolen-mod-customerstocking-src")
+        self.assertTrue(output.name.startswith("v1.6.3-"))
+        self.assertEqual(manifest["workshopId"], "3829653222")
+        self.assertEqual([item["name"] for item in manifest["assemblies"]], ["Stocking.dll"])
+        self.assertEqual(set(manifest["copiedFiles"]), {"Localization/en.csv", "manifest.xml"})
+        self.assertIsNone(manifest["gameArchive"])
+        self.assertEqual(len(self.commands), 1)
+
+    def test_repeated_run_reuses_matching_archive(self):
+        with patch.object(decompile_game.subprocess, "run", side_effect=self.fake_ilspy):
+            first = decompile_game.decompile_mod(self.mod, ilspycmd="ilspycmd", repository_root=self.repo)
+            second = decompile_game.decompile_mod(self.mod, ilspycmd="ilspycmd", repository_root=self.repo)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(self.commands), 1)
+
+    def test_rejects_output_outside_mod_archive_pattern(self):
+        for output in (self.repo / ".reference" / "probably-stolen-src",
+                       self.repo / ".reference" / "Applied-Energistics-2",
+                       self.root / "probably-stolen-mod-x-src"):
+            with self.subTest(output=output), self.assertRaisesRegex(decompile_game.WorkflowError, "outside"):
+                decompile_game.decompile_mod(self.mod, output, ilspycmd="ilspycmd", repository_root=self.repo)
+
+    def test_rejects_assembly_path_traversal_in_manifest(self):
+        self.write_manifest("<ID>bad</ID><Assemblies><Assembly>..\\evil.dll</Assembly></Assemblies>")
+        with self.assertRaisesRegex(decompile_game.WorkflowError, "plain DLL"):
+            decompile_game.decompile_mod(self.mod, ilspycmd="ilspycmd", repository_root=self.repo)
+
+    def test_rejects_unsafe_mod_id(self):
+        self.write_manifest("<ID>../x</ID><Assemblies><Assembly>Stocking.dll</Assembly></Assemblies>")
+        with self.assertRaisesRegex(decompile_game.WorkflowError, "unsafe"):
+            decompile_game.decompile_mod(self.mod, ilspycmd="ilspycmd", repository_root=self.repo)
+
+    def test_with_game_requires_game_directory(self):
+        with self.assertRaisesRegex(decompile_game.WorkflowError, "requires the game directory"):
+            decompile_game.decompile_mod(self.mod, include_game=True, ilspycmd="ilspycmd", repository_root=self.repo)
+
+    def test_game_directory_is_passed_as_reference_only(self):
+        managed = self.root / "game" / "Probably Stolen_Data" / "Managed"
+        managed.mkdir(parents=True)
+        with patch.object(decompile_game.subprocess, "run", side_effect=self.fake_ilspy):
+            decompile_game.decompile_mod(self.mod, game_dir=self.root / "game", ilspycmd="ilspycmd",
+                                         repository_root=self.repo)
+
+        command = self.commands[0]
+        references = [command[i + 1] for i, value in enumerate(command) if value == "-r"]
+        self.assertEqual(references, [str(self.mod.resolve()), str(managed.resolve())])
+        self.assertFalse((self.repo / ".reference" / "probably-stolen-src").exists())
+
+
 class FakeRipperProcess:
     def __init__(self, poll_result=None):
         self.poll_result = poll_result

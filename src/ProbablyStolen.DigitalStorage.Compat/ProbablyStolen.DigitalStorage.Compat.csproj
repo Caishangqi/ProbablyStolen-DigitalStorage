@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Integration plugins for other mods. Only the public API and game assemblies are referenced, so this folder can move
+    unchanged into a separate bridge mod. The loader only runs PatchAll on the assembly that implements IMod; patches
+    here are applied by the integration host, never through [HarmonyPatch] attributes.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ProbablyStolen.DigitalStorage.Compat</AssemblyName>
+    <RootNamespace>ProbablyStolen.DigitalStorage.Compat</RootNamespace>
+    <RequireProbablyStolenReferences>true</RequireProbablyStolenReferences>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(DigitalStorageManagedDirectory)' != ''">
+    <Reference Include="0Harmony">
+      <HintPath>$(DigitalStorageManagedDirectory)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" />
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api\ProbablyStolen.DigitalStorage.Api.csproj" />
+  </ItemGroup>
+</Project>

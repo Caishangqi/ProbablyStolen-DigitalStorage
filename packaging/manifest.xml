@@ -3,16 +3,19 @@
   <ID>digital_storage</ID>
   <Name>Digital Storage</Name>
   <Author>Caizii</Author>
-  <ModVersion>0.4.3</ModVersion>
+  <ModVersion>0.5.1</ModVersion>
   <Description>A digital storage network. Search, store and take items across the network from a terminal.</Description>
   <GameVersions>
     <Version>0.46</Version>
   </GameVersions>
   <Prerequisites />
   <Assemblies>
+    <Assembly>ProbablyStolen.DigitalStorage.Api.Core.dll</Assembly>
+    <Assembly>ProbablyStolen.DigitalStorage.Api.dll</Assembly>
     <Assembly>ProbablyStolen.DigitalStorage.Common.dll</Assembly>
     <Assembly>ProbablyStolen.DigitalStorage.Client.dll</Assembly>
     <Assembly>ProbablyStolen.DigitalStorage.Platform.dll</Assembly>
+    <Assembly>ProbablyStolen.DigitalStorage.Compat.dll</Assembly>
     <Assembly>ProbablyStolen.DigitalStorage.Mod.dll</Assembly>
   </Assemblies>
   <Capabilities />

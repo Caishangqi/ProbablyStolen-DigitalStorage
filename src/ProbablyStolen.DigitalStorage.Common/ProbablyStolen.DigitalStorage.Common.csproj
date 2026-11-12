@@ -6,4 +6,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" />
+  </ItemGroup>
 </Project>

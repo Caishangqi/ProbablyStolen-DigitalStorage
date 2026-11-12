@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tests;
 

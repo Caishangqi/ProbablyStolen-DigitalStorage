@@ -25,6 +25,21 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\PageSetSwap.cs" Link="Storage\PageSetSwap.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\TerminalSearchMetadata.cs" Link="Storage\TerminalSearchMetadata.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\ExternalAccessScope.cs" Link="Storage\ExternalAccessScope.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Api\StorageOutcomes.cs" Link="Api\StorageOutcomes.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IExternalAccess.cs" Link="Api\IExternalAccess.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationHost.cs" Link="Integration\IntegrationHost.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationPorts.cs" Link="Integration\IntegrationPorts.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationRegistration.cs" Link="Integration\IntegrationRegistration.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Integration\IIntegrationPlugin.cs" Link="Api\IIntegrationPlugin.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Integration\IIntegrationConfig.cs" Link="Api\IIntegrationConfig.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\IDigitalStorageRuntime.cs" Link="Api\IDigitalStorageRuntime.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Networking\IGrid.cs" Link="Api\IGrid.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Networking\IGridHelper.cs" Link="Api\IGridHelper.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Networking\Storage\IStorageService.cs" Link="Api\IStorageService.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IStorage.cs" Link="Api\IStorage.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\StorageResult.cs" Link="Api\StorageResult.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\CustomerStocking\StockingBridge.cs" Link="Compat\StockingBridge.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using ProbablyStolen.DigitalStorage.Api.Integration;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -17,7 +20,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 /// without as a text box, so numbers are defined without a range to let players type them,
 /// and every read clamps the stored value. Each section becomes a header in the order entries are defined.
 /// </summary>
-internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings
+internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings, IIntegrationSettings
 {
     internal const int MaximumPowerUsage = 1000;
     internal const string SortOrderKey = "terminal_view_sort";
@@ -28,6 +31,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
     private readonly ModText _text;
+    private readonly ModConfig _config;
     private readonly List<KeyValuePair<ConfigEntry, string>> _sections = new();
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
@@ -69,6 +73,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
         _text = text;
         var config = ModHelper.GetConfig(modId);
+        _config = config;
         // The native panel shows the section string as the header, but Init runs before this mod's localization is
         // loaded, so these start as keys and RefreshSectionNames replaces them once the text is available.
         const string power = "config_section_power";
@@ -156,6 +161,130 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             _zh2z.Value, _sh2s.Value, _ch2c.Value,
             _ang2an.Value, _ing2in.Value, _eng2en.Value, _u2v.Value, _tagSearchMode.Value,
             _typeSearchMode.Value, _descriptionSearchMode.Value, _identifierSearchMode.Value, _searchHighlighting.Value);
+    }
+
+    /// <summary>
+    /// Defines an integration switch in the integrations section, after every other section. The integration host
+    /// calls this one frame after Init, once the other mod's version is known; <c>ModConfig</c> applies the saved value
+    /// whenever an entry is defined. Verified versions of
+    /// the other mod share one key, so a player's choice survives its updates; an unverified version gets a key of its
+    /// own that starts off, so an update of the other mod never runs untested code because of an earlier choice.
+    /// </summary>
+    public (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion, bool verified,
+        Func<string?> status)
+    {
+        if (plugin == null) throw new ArgumentNullException(nameof(plugin));
+        if (status == null) throw new ArgumentNullException(nameof(status));
+        // Plugin properties are read here, inside the host's guarded call, so the native settings panel never runs
+        // plugin code. The native panel orders headers by their first entry, and integrations are defined after every
+        // built-in entry (once all mods are loaded), so each plugin's header follows the built-in ones.
+        var section = plugin.SettingSectionKey;
+        if (!PluginKey.IsMatch(section ?? string.Empty) || _sections.Any(pair => pair.Value == section))
+            throw new InvalidOperationException($"The settings header {section} is not unique.");
+        var labelKey = plugin.SettingLabelKey;
+        var tooltipKey = plugin.SettingTooltipKey;
+        var entry = _config.Define(IntegrationKey(plugin.PluginUid, verified ? null : modVersion), verified, section,
+            () => _text.Get(labelKey), tooltip: () => IntegrationTooltip(tooltipKey, status));
+        AddIntegrationEntry(entry, section!);
+        return (() => entry.Value, new PluginConfig(this, plugin.PluginUid, section!));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex PluginKey = new("^[a-z0-9_]+$");
+
+    private void AddIntegrationEntry(ConfigEntry entry, string section)
+    {
+        _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
+        // Defined after Init, possibly after the section names were localized; name this one now as well.
+        SectionSetter?.Invoke(entry, new object[] { _text.Get(section) });
+    }
+
+    /// <summary>One plugin's options: keys are stored under the plugin id, entries go below its switch.</summary>
+    private sealed class PluginConfig : IIntegrationConfig
+    {
+        private readonly DigitalStorageSettings _owner;
+        private readonly string _prefix;
+        private readonly string _section;
+        private readonly HashSet<string> _keys = new();
+
+        internal PluginConfig(DigitalStorageSettings owner, string pluginUid, string section)
+        {
+            _owner = owner;
+            _prefix = IntegrationPrefix(pluginUid);
+            _section = section;
+        }
+
+        public IIntegrationOption<bool> DefineBool(string key, bool defaultValue, string labelKey, string tooltipKey)
+        {
+            var entry = _owner._config.Define(Key(key), defaultValue, _section, () => _owner._text.Get(labelKey),
+                tooltip: () => _owner._text.Get(tooltipKey));
+            _owner.AddIntegrationEntry(entry, _section);
+            return new Option<bool>(() => entry.Value);
+        }
+
+        public IIntegrationOption<int> DefineInt(string key, int defaultValue, int min, int max, string labelKey,
+            string tooltipKey)
+        {
+            if (min > max || defaultValue < min || defaultValue > max)
+                throw new ArgumentOutOfRangeException(nameof(defaultValue), defaultValue, "The default must lie in the range.");
+            // No native range: the panel then shows a text box players can type into; reads clamp, as built-in numbers.
+            var entry = _owner._config.Define(Key(key), defaultValue, _section, () => _owner._text.Get(labelKey),
+                tooltip: () => _owner._text.Get(tooltipKey));
+            _owner.AddIntegrationEntry(entry, _section);
+            return new Option<int>(() => Math.Min(max, Math.Max(min, entry.Value)));
+        }
+
+        private string Key(string key)
+        {
+            if (!PluginKey.IsMatch(key ?? string.Empty) || key == "enabled")
+                throw new ArgumentException($"Integration option keys use lowercase letters, digits and '_': {key}", nameof(key));
+            if (!_keys.Add(key!)) throw new ArgumentException($"The integration option {key} is defined twice.", nameof(key));
+            return _prefix + "option_" + key;
+        }
+    }
+
+    private sealed class Option<T> : IIntegrationOption<T>
+    {
+        private readonly Func<T> _read;
+
+        internal Option(Func<T> read) => _read = read;
+
+        public T Value => _read();
+    }
+
+    /// <summary>Gets the settings key of an integration switch; <paramref name="unverifiedVersion"/> is null for verified versions.</summary>
+    internal static string IntegrationKey(string pluginUid, string? unverifiedVersion)
+    {
+        var prefix = IntegrationPrefix(pluginUid);
+        return unverifiedVersion == null
+            ? $"{prefix}enabled"
+            : $"{prefix}enabled_untested_{EscapeVersion(unverifiedVersion)}";
+    }
+
+    // Plugin ids are this mod's own, so a readable form is enough; versions come from other mods and are escaped.
+    private static string IntegrationPrefix(string pluginUid) =>
+        "integration_" + new string(pluginUid.Select(c => c < 128 && char.IsLetterOrDigit(c) ? c : '_').ToArray()) + "_";
+
+    // Injective: ASCII letters, digits, '.' and '-' stay; any other character, '_' included, becomes '_' and its code,
+    // so an unknown version ("_") never meets a real one.
+    private static string EscapeVersion(string version) => version.Length == 0
+        ? "_"
+        : string.Concat(version.Select(c =>
+            c < 128 && (char.IsLetterOrDigit(c) || c == '.' || c == '-') ? c.ToString() : "_" + ((int)c).ToString("x4")));
+
+    private string IntegrationTooltip(string tooltipKey, Func<string?> status)
+    {
+        var description = _text.Get(tooltipKey);
+        string? state;
+        try
+        {
+            state = status();
+        }
+        catch (Exception)
+        {
+            state = null;
+        }
+
+        return state == null ? description : description + "\n\n" + _text.Get(state);
     }
 
     private static ConfigEntry<bool> DefineSearchBool(ModConfig config, string key, bool initial, string section,

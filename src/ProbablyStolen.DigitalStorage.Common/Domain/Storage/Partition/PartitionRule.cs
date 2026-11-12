@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 

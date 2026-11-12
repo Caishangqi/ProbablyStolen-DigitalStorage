@@ -2,9 +2,12 @@
   "schemaVersion": 1,
   "current": [
     "manifest.xml",
+    "ProbablyStolen.DigitalStorage.Api.Core.dll",
+    "ProbablyStolen.DigitalStorage.Api.dll",
     "ProbablyStolen.DigitalStorage.Common.dll",
     "ProbablyStolen.DigitalStorage.Client.dll",
     "ProbablyStolen.DigitalStorage.Platform.dll",
+    "ProbablyStolen.DigitalStorage.Compat.dll",
     "ProbablyStolen.DigitalStorage.Mod.dll",
     "Textures/Items/terminal.png",
     "Textures/Items/drive.png",

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;

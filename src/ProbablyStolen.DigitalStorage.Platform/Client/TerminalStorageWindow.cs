@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
-using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
+using ProbablyStolen.DigitalStorage.Platform.Localization;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -43,7 +43,8 @@ internal sealed class TerminalStorageWindow
     private TreeNodeRender? _shield;
     private readonly StorageMenu _menu = new();
     // Pages are locked to players, so outside the terminal's own operations contents only change when cells,
-    // machines, batteries or controller power change; those raise NetworkChanged and the next frame rereads.
+    // machines, batteries or controller power change, or when the public API moves items (another mod or an
+    // integration plugin); those raise NetworkChanged and the next frame rereads.
     private readonly TerminalInventoryMonitor _inventoryMonitor = new();
     private readonly Func<Action<NetworkChanged>, IDisposable> _subscribeNetwork;
     private IDisposable? _networkSubscription;

@@ -12,9 +12,12 @@ $python = Join-Path $repositoryRoot ".venv/Scripts/python.exe"
 $toolPath = Join-Path $repositoryRoot "scripts/tool.py"
 $manifestPath = Join-Path $repositoryRoot 'packaging/manifest.xml'
 $productAssemblies = @(
+    'ProbablyStolen.DigitalStorage.Api.Core.dll',
+    'ProbablyStolen.DigitalStorage.Api.dll',
     'ProbablyStolen.DigitalStorage.Common.dll',
     'ProbablyStolen.DigitalStorage.Client.dll',
     'ProbablyStolen.DigitalStorage.Platform.dll',
+    'ProbablyStolen.DigitalStorage.Compat.dll',
     'ProbablyStolen.DigitalStorage.Mod.dll'
 )
 $stagingDirectory = $null

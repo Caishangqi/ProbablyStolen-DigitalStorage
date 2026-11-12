@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>Validates a detached version 1 identity envelope without interpreting native objects.</summary>
 internal sealed class CanonicalIdentityValidator

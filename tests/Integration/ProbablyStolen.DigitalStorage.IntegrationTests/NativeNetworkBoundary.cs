@@ -23,7 +23,7 @@ internal static class SaveManager
     internal static bool IsDecoding { get; set; }
 }
 
-internal sealed class GameItem
+public sealed class GameItem
 {
     internal GameItem(string id)
     {
@@ -47,7 +47,12 @@ internal sealed class GameItem
         : new List<T>();
 }
 
-internal class GameInventory
+/// <summary>Stands in for the native graph node base type.</summary>
+public class GraphNodeStorage
+{
+}
+
+public class GameInventory : GraphNodeStorage
 {
     internal string identifier = string.Empty;
     internal readonly List<GameItem> childItems = new();
@@ -60,7 +65,7 @@ internal class GameInventory
     }
 }
 
-internal sealed class GameGridInventory : GameInventory
+public sealed class GameGridInventory : GameInventory
 {
     private readonly List<(GameItem First, GameItem Second)> _contacts = new();
 
@@ -94,6 +99,17 @@ internal sealed class GameSlotInventory
 internal static class GraphUtils
 {
     internal static List<T> FindAllChildrenType<T>(GameItem item) => item.Slots.OfType<T>().ToList();
+
+    /// <summary>Records native transfer calls; returns the units that did not move, as the game does.</summary>
+    internal static readonly List<(GraphNodeStorage? Node, GameItem? Item, int Amount)> NativeTransfers = new();
+
+    internal static int NativeRemaining { get; set; }
+
+    internal static int TryAcceptAll(GraphNodeStorage? node, GameItem? item, int amount = -1)
+    {
+        NativeTransfers.Add((node, item, amount));
+        return NativeRemaining;
+    }
 }
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client

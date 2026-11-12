@@ -306,3 +306,9 @@ partition_issue_unknownmode,未知模式。
 cell_storage_type_modules,种类上限模块：{0} 个
 cell_storage_equal_distribution,均分
 cell_storage_expansion,模块舱扩展 {0}/{1}
+integration_customerstocking_section,顾客上货助手
+integration_state_incompatible,未生效: 另一个模组的这个版本不兼容. 原因见游戏日志.
+integration_state_not_running,未生效: 另一个模组没有运行.
+integration_state_unverified,另一个模组的这个版本尚未与数字存储一起测试过. 此选项默认关闭, 可以手动开启尝试.
+integration_customerstocking_label,从数字网络取货
+integration_customerstocking_tooltip,一键上货时也可以从其扫描范围内 (店铺, 打烊后区域, 飞船) 的在线数字网络取货. 离线网络和散放的元件不会被取货. 取出和放回都像终端一样经过网络. 上货助手开启「跳过机器内物品」时, 网络中的货也会被跳过, 因为驱动器属于机器.

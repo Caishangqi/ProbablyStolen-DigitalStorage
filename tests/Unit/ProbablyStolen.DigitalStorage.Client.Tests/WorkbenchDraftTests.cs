@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tests;

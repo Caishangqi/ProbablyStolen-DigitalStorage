@@ -12,6 +12,9 @@
     <PackageReference Include="NUnit3TestAdapter" />
   </ItemGroup>
   <Target Name="AddArchitecturePaths" BeforeTargets="GetAssemblyAttributes">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\..\src\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);ArtifactsPath=$(ArtifactsPath)">
+      <Output TaskParameter="TargetOutputs" ItemName="ApiCoreTargetPath" />
+    </MSBuild>
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\..\src\ProbablyStolen.DigitalStorage.Common\ProbablyStolen.DigitalStorage.Common.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);ArtifactsPath=$(ArtifactsPath)">
       <Output TaskParameter="TargetOutputs" ItemName="CommonTargetPath" />
     </MSBuild>
@@ -20,6 +23,7 @@
     </MSBuild>
     <ItemGroup>
       <AssemblyMetadata Include="RepositoryRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..'))" />
+      <AssemblyMetadata Include="Api.CoreTargetPath" Value="@(ApiCoreTargetPath)" />
       <AssemblyMetadata Include="CommonTargetPath" Value="@(CommonTargetPath)" />
       <AssemblyMetadata Include="ClientTargetPath" Value="@(ClientTargetPath)" />
     </ItemGroup>

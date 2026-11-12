@@ -259,15 +259,15 @@ public sealed class TerminalSearchService
         return renderedIndex < insertionIndex + compositionLength ? -1 : renderedIndex - compositionLength;
     }
 
-    /// <summary>JEI-compatible ARGB value for recognized prefix characters.</summary>
+    /// <summary>ARGB value for recognized prefix characters.</summary>
     public const uint PrefixArgb = 0xFF55FFFF;
-    /// <summary>JEI-compatible ARGB value for text selected by a prefix.</summary>
+    /// <summary>ARGB value for text selected by a prefix.</summary>
     public const uint PrefixedArgb = 0xFF55FF55;
-    /// <summary>JEI-compatible ARGB value for query operators.</summary>
+    /// <summary>ARGB value for query operators.</summary>
     public const uint OperatorArgb = 0xFFFFAA00;
-    /// <summary>JEI-compatible ARGB value for ordinary query text.</summary>
+    /// <summary>ARGB value for ordinary query text.</summary>
     public const uint OrdinaryArgb = 0xFFFFFFFF;
-    /// <summary>JEI-compatible ARGB value for a query with no matches.</summary>
+    /// <summary>ARGB value for a query with no matches.</summary>
     public const uint NoMatchArgb = 0xFFFF0000;
     private readonly SearchMatcherRegistry _registry;
     private SearchConfiguration _configuration;

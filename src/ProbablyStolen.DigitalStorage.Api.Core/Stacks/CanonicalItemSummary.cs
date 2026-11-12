@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>
 /// What a canonical identity records about its root item: identifier, types, tags and features. Read from the

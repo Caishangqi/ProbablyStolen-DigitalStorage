@@ -104,6 +104,9 @@
           "Microsoft.TestPlatform.ObjectModel": "18.11.0"
         }
       },
+      "probablystolen.digitalstorage.api.core": {
+        "type": "Project"
+      },
       "probablystolen.digitalstorage.client": {
         "type": "Project",
         "dependencies": {
@@ -111,7 +114,10 @@
         }
       },
       "probablystolen.digitalstorage.common": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "ProbablyStolen.DigitalStorage.Api.Core": "[1.0.0, )"
+        }
       }
     }
   }

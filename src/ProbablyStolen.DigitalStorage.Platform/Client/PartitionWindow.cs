@@ -2,17 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using TMPro;
-using UnityEngine;
-using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 

@@ -93,7 +93,8 @@ internal sealed class NativeNetworkScanner
         return result;
     }
 
-    private static bool IsNetworkMachine(GameItem item) =>
+    /// <summary>Gets whether an item is a terminal, drive or controller.</summary>
+    internal static bool IsNetworkMachine(GameItem item) =>
         item.identifier == ControllerItem.ItemId ||
         item.identifier == DriveItem.ItemId ||
         item.identifier == TerminalItem.ItemId;

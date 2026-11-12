@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/reviewed-inputs.json"
-PROJECTS = ("src/ProbablyStolen.DigitalStorage.Common", "src/ProbablyStolen.DigitalStorage.Client", "src/ProbablyStolen.DigitalStorage.Platform", "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests")
+PROJECTS = ("src/ProbablyStolen.DigitalStorage.Api.Core", "src/ProbablyStolen.DigitalStorage.Api", "src/ProbablyStolen.DigitalStorage.Common", "src/ProbablyStolen.DigitalStorage.Client", "src/ProbablyStolen.DigitalStorage.Platform", "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests")
 CONFIG = ("Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", "global.json",
           "scripts/test.ps1", "scripts/tool.py", "scripts/digital_storage_tools/cli.py",
           "scripts/digital_storage_tools/platform_review.py", "scripts/digital_storage_tools/trx.py")

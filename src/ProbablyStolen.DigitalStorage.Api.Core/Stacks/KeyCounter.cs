@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>Counts immutable item keys without owning physical items.</summary>
 public sealed class KeyCounter

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
@@ -89,6 +91,13 @@ internal sealed class MemoryCellPages : ICellPagesPort
 
     internal void Remove(RootSnapshot root) =>
         _roots.Remove(_roots.First(candidate => (candidate.Page, candidate.X, candidate.Y) == (root.Page, root.X, root.Y)));
+
+    /// <summary>Leaves <paramref name="units"/> of a root in its slot, as a native split does.</summary>
+    internal void KeepUnits(RootSnapshot root, long units)
+    {
+        Remove(root);
+        _roots.Add(new RootSnapshot(root.Page, root.X, root.Y, root.Size, root.Key, units));
+    }
 
     public bool TryAppendStripPage(PageGeometry page)
     {

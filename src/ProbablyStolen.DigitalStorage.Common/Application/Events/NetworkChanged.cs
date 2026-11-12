@@ -22,7 +22,12 @@ public enum NetworkChangeReason
     PowerCycle,
 
     /// <summary>The mod configuration, such as machine power usage, was applied.</summary>
-    ConfigChanged
+    ConfigChanged,
+
+    /// <summary>
+    /// Stored items moved through the public API (another mod or an integration plugin), outside any terminal.
+    /// </summary>
+    ContentsChanged
 }
 
 /// <summary>

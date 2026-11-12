@@ -429,6 +429,8 @@ def check_content(project: Path, output: Path) -> None:
         "config_section_vendors", "upper_engineer_daily_chance_name", "upper_engineer_daily_chance_desc",
         "upper_engineer_name", "upper_engineer_greet_1", "upper_engineer_greet_2", "upper_engineer_wrong_item",
         "upper_engineer_right_item", "upper_engineer_repeat", "upper_engineer_accept",
+        "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
+        "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
     ))
     if (platform / "Diagnostics" / "ItemCommands.cs").exists():
         raise ContentValidationError("Removed custom command source must not be present.")

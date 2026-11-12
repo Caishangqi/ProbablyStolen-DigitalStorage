@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
@@ -30,10 +32,10 @@ public sealed class NetworkStorageTests
 
     private static CellPartition Whitelist(params ItemKey[] keys) => Partitions.Whitelist(keys);
 
-    private static int[] Order(NetworkStorage network, IStorage[] mounted, ItemKey key) =>
+    private static int[] Order(NetworkStorage network, IRootStorage[] mounted, ItemKey key) =>
         network.InsertOrder(key, Player).Select(storage => Array.IndexOf(mounted, storage)).ToArray();
 
-    private static (NetworkStorage Network, IStorage[] Cells) Mount(params (int Priority, IStorage Storage)[] cells)
+    private static (NetworkStorage Network, IRootStorage[] Cells) Mount(params (int Priority, IRootStorage Storage)[] cells)
     {
         var network = new NetworkStorage();
         foreach (var (priority, storage) in cells) network.Mount(priority, storage);
@@ -223,14 +225,14 @@ public sealed class NetworkStorageTests
         Assert.That(Units(cells[0], Apple), Is.Zero);
     }
 
-    private static long Units(IStorage storage, ItemKey key)
+    private static long Units(IRootStorage storage, ItemKey key)
     {
         var counter = new KeyCounter();
         storage.GetAvailableStacks(counter);
         return counter.Get(key);
     }
 
-    private static KeyCounter Stacks(IStorage storage)
+    private static KeyCounter Stacks(IRootStorage storage)
     {
         var counter = new KeyCounter();
         storage.GetAvailableStacks(counter);

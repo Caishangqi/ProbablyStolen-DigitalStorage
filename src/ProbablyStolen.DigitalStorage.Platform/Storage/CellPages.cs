@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
@@ -98,6 +98,29 @@ internal static class CellPages
 
     /// <summary>Gets every item root on every page.</summary>
     internal static IEnumerable<GameItem> Roots(GameItem cell) => Pages(cell).SelectMany(page => page.childItems);
+
+    /// <summary>
+    /// Gets the cell whose page directly holds <paramref name="root"/>, and the page index, or null when the root is
+    /// not on a storage cell page.
+    /// </summary>
+    internal static GameItem? CellOfStored(GameItem? root, out int pageIndex)
+    {
+        pageIndex = -1;
+        if (root?.parentInventory is not GameGridInventory page || !page.overrideLockInsert) return null;
+        var cell = page.GetParentItem();
+        if (!BasicCellHandler.IsCell(cell)) return null;
+        var pages = Pages(cell!);
+        for (var index = 0; index < pages.Count; index++)
+        {
+            if (ReferenceEquals(pages[index], page))
+            {
+                pageIndex = index;
+                return cell;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Appends the recorded pages native decoding has not rebuilt yet. Used only by the decode postfix; it never
@@ -261,9 +284,11 @@ internal static class CellPages
         // callbacks instead of the native lock, because a page locked both ways makes every item tooltip show
         // "locked, machine running" (GameItemElement.GetTooltipBasic). Returning false for the inventory vetoes activation
         // even when the item allows it (GameItem.MayActivateSlotItem). Expel/UncheckedAccept ignore all of these.
+        // Removal is refused unless a public API external access scope is open and the cell is online; even then the
+        // caller moves roots through the API, the callbacks only let another mod's scan see them.
         page.overrideLockInsert = true;
-        page.mayInventoryRemoveItemFunc = (_, _) => false;
-        page.maxSlotRemoveItemFunc = (_, _, _) => 0;
+        page.mayInventoryRemoveItemFunc = (item, _) => ExternalAccessScope.AllowsRemoval(item);
+        page.maxSlotRemoveItemFunc = (item, _, _) => ExternalAccessScope.AllowsRemoval(item) ? item.unitCount : 0;
         page.mayActivateSlotItemFunc = (_, _, _) => false;
         page.canActivateSlotItemFunc = (_, _, _) => false;
         tabs.AddTab((tabs.count + 1).ToString(), MachineHelper.WrapInIntake(page));

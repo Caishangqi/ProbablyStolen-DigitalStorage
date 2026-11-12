@@ -1,8 +1,10 @@
 using System;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
@@ -11,9 +13,9 @@ namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
 /// Wraps one storage when it is mounted in a network: it gates insertion and
 /// extraction and decides whether the storage is preferred for a type.
 /// </summary>
-public sealed class InventoryHandler : IStorage
+public sealed class InventoryHandler : IRootStorage
 {
-    private readonly IStorage _inner;
+    private readonly IRootStorage _inner;
     private readonly CellPartition _partition;
 
     /// <summary>Creates a handler.</summary>
@@ -21,7 +23,7 @@ public sealed class InventoryHandler : IStorage
     /// <param name="partition">The partition of the wrapped storage.</param>
     /// <param name="allowInsertion">False for cells whose migration was refused; they only release items.</param>
     /// <param name="allowExtraction">Whether items may leave.</param>
-    public InventoryHandler(IStorage inner, CellPartition partition, bool allowInsertion = true, bool allowExtraction = true)
+    public InventoryHandler(IRootStorage inner, CellPartition partition, bool allowInsertion = true, bool allowExtraction = true)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _partition = partition ?? throw new ArgumentNullException(nameof(partition));

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>Detached values used only to create an identity, never a physical item.</summary>
-public sealed class CanonicalIdentityInput
+internal sealed class CanonicalIdentityInput
 {
     /// <summary>Creates an immutable item identity projection.</summary>
     public CanonicalIdentityInput(string identifier, IReadOnlyList<string> itemTypes,
@@ -76,7 +76,7 @@ public sealed class CanonicalIdentityInput
 }
 
 /// <summary>Detached tag fields including raw IEEE value bits.</summary>
-public sealed class CanonicalIdentityTag
+internal sealed class CanonicalIdentityTag
 {
     /// <summary>Creates tag fields without applying native tag helpers.</summary>
     public CanonicalIdentityTag(string key, string? identifier = null, string? identifierName = null,
@@ -110,7 +110,7 @@ public sealed class CanonicalIdentityTag
 }
 
 /// <summary>Detached condition fields.</summary>
-public sealed class CanonicalIdentityCondition
+internal sealed class CanonicalIdentityCondition
 {
     /// <summary>Creates a condition with an explicit action identifier.</summary>
     public CanonicalIdentityCondition(string? display = null, string? identifier = null, int modValue = 0,
@@ -144,7 +144,7 @@ public sealed class CanonicalIdentityCondition
 }
 
 /// <summary>Detached feature fields; ownership is the containing input item.</summary>
-public sealed class CanonicalIdentityFeature
+internal sealed class CanonicalIdentityFeature
 {
     /// <summary>Creates an immutable feature projection.</summary>
     public CanonicalIdentityFeature(string identifier, string category, int featureType = 0, int valueStage = 0,
@@ -210,7 +210,7 @@ public sealed class CanonicalIdentityFeature
 }
 
 /// <summary>Detached shape geometry and mask.</summary>
-public sealed class CanonicalIdentityShape
+internal sealed class CanonicalIdentityShape
 {
     private readonly byte[] _mask;
     /// <summary>Creates a detached shape value.</summary>
@@ -241,7 +241,7 @@ public sealed class CanonicalIdentityShape
 }
 
 /// <summary>Detached child identity and placement.</summary>
-public sealed class CanonicalIdentityChild
+internal sealed class CanonicalIdentityChild
 {
     /// <summary>Creates child placement facts.</summary>
     public CanonicalIdentityChild(CanonicalIdentityInput item, int unitCount, CanonicalIdentityShape originalShape,
@@ -262,7 +262,7 @@ public sealed class CanonicalIdentityChild
 }
 
 /// <summary>Detached version 1 graph node.</summary>
-public sealed class CanonicalIdentityNode
+internal sealed class CanonicalIdentityNode
 {
     private CanonicalIdentityNode(byte kind, IReadOnlyList<CanonicalIdentityNode>? nodes = null,
         IReadOnlyList<CanonicalIdentityChild>? items = null, CanonicalIdentityShape? shape = null,

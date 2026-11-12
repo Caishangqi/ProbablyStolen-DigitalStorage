@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
@@ -253,6 +253,10 @@ public sealed class CellView
             throw;
         }
     }
+
+    /// <summary>Records units leaving a root that stays in its slot; only usage changes.</summary>
+    public void RecordUnitsRemoved(ItemKey key, long units, BoundingSize size) =>
+        Usage.Remove(key, units, CellUsage.AreaOf(size, units));
 
     /// <summary>Records a root leaving a page; <paramref name="slot"/> is -1 for anchor and legacy pages.</summary>
     public void RecordRemoved(int page, int slot, ItemKey key, long units, BoundingSize size)

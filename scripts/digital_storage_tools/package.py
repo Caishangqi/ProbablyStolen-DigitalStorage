@@ -17,14 +17,23 @@ from typing import Sequence
 EXPECTED_ID = "digital_storage"
 EXPECTED_NAME = "Digital Storage"
 EXPECTED_AUTHOR = "Caizii"
-# The mods menu compares only the leading digits and dots of Application.version (for example "0.46D"),
-# so "0.46" matches every 0.46 letter release.
+# The mods menu compares only the leading digits and dots of Application.version, ignoring the letter suffix.
 EXPECTED_GAME_VERSION = "0.46"
 CURRENT_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.dll"
-EXPECTED_ASSEMBLIES = (
+CORE_ASSEMBLIES = (
     "ProbablyStolen.DigitalStorage.Common.dll",
     "ProbablyStolen.DigitalStorage.Client.dll",
     CURRENT_PLATFORM_ASSEMBLY,
+    "ProbablyStolen.DigitalStorage.Mod.dll",
+)
+# The public API assemblies must load first, and integration plugins before the entry.
+EXPECTED_ASSEMBLIES = (
+    "ProbablyStolen.DigitalStorage.Api.Core.dll",
+    "ProbablyStolen.DigitalStorage.Api.dll",
+    "ProbablyStolen.DigitalStorage.Common.dll",
+    "ProbablyStolen.DigitalStorage.Client.dll",
+    CURRENT_PLATFORM_ASSEMBLY,
+    "ProbablyStolen.DigitalStorage.Compat.dll",
     "ProbablyStolen.DigitalStorage.Mod.dll",
 )
 # Layouts with 5 or 11 files predate the Platform assembly rename and retain the old DLL name for safe replacement
@@ -64,26 +73,27 @@ RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
     *SEARCH_RESOURCE_FILES,
 )
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
-# The release before the cell workbench shipped the same files without the workbench and module textures.
-PREVIOUS_SEARCH_FILES = tuple(name for name in CURRENT_FILES if name not in WORKBENCH_RESOURCE_FILES)
+PREVIOUS_API_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *RESOURCE_FILES)
+PREVIOUS_SEARCH_FILES = tuple(name for name in PREVIOUS_API_FILES if name not in WORKBENCH_RESOURCE_FILES)
 # An installation made before the Platform assembly rename has the current 13 file layout with the old
 # Platform DLL name. Deployment must still recognize it so upgrade and removal stay safe.
 RENAMED_PLATFORM_ASSEMBLIES = tuple(
     LEGACY_PLATFORM_ASSEMBLY if name == CURRENT_PLATFORM_ASSEMBLY else name
-    for name in EXPECTED_ASSEMBLIES
+    for name in CORE_ASSEMBLIES
 )
 RENAMED_PLATFORM_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
-PREVIOUS_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
+PREVIOUS_CURRENT_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
 TIER_RESOURCE_FILES = tuple(
     f"Textures/Items/{prefix}_{tier}.png"
     for tier in ("4k", "16k", "64k", "256k")
     for prefix in ("item_storage_cell", "cell_component")
 )
-PREVIOUS_TIER_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
+PREVIOUS_TIER_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
 RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
 # Each known installation layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
     ("current", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("previous-api", PREVIOUS_API_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous-search", PREVIOUS_SEARCH_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous21", PREVIOUS_TIER_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous21-renamed", RENAMED_PLATFORM_TIER_FILES, LEGACY_PLATFORM_ASSEMBLY),
@@ -118,9 +128,22 @@ class PackageValidationError(ValueError):
     """Raised when package contents do not match the release allowlist."""
 
 
-def manifest_text(platform_assembly: str) -> str:
-    """Return the approved manifest declaring the given on-disk Platform assembly name."""
-    return SOURCE_MANIFEST_PATH.read_text(encoding="utf-8").replace(
+def manifest_text(platform_assembly: str, assemblies: Sequence[str] | None = None) -> str:
+    """Return the approved manifest declaring the given on-disk Platform assembly name.
+
+    ``assemblies`` lists the DLLs of an older layout in load order; releases before the public API declared only the
+    four core assemblies, so their manifests must not name the API and integration assemblies.
+    """
+    text = SOURCE_MANIFEST_PATH.read_text(encoding="utf-8")
+    if assemblies is not None:
+        # The Platform entry is written under its current name and renamed below, like the current manifest.
+        canonical = (CURRENT_PLATFORM_ASSEMBLY if name == LEGACY_PLATFORM_ASSEMBLY else name for name in assemblies)
+        block = "".join(f"    <Assembly>{name}</Assembly>\n" for name in canonical)
+        text, count = re.subn(r"(<Assemblies>\n)(?:\s*<Assembly>[^<]*</Assembly>\n)+(\s*</Assemblies>)",
+                              lambda match: match.group(1) + block + match.group(2), text)
+        if count != 1:
+            raise PackageValidationError("The source manifest has no assembly list to rewrite.")
+    return text.replace(
         f"<Assembly>{CURRENT_PLATFORM_ASSEMBLY}</Assembly>",
         f"<Assembly>{platform_assembly}</Assembly>",
     )
@@ -207,7 +230,7 @@ def _validate_manifest(
     declared = tuple(_element_text(element, "Assemblies/Assembly") for element in assembly_elements)
     if declared != tuple(expected_assemblies):
         raise PackageValidationError(
-            "Assemblies must list exactly the four product DLLs of the selected file layout in load order: "
+            "Assemblies must list exactly the product DLLs of the selected file layout in load order: "
             f"expected {list(expected_assemblies)!r}, got {list(declared)!r}."
         )
     if any("/" in item or "\\" in item or ":" in item or ".." in item for item in declared):
@@ -288,7 +311,7 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PREVIOUS_API_FILES, PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break

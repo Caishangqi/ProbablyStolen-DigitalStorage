@@ -1,7 +1,7 @@
 using System;
 using System.Text;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 

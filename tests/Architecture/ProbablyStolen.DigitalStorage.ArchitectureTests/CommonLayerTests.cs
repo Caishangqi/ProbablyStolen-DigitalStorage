@@ -69,7 +69,7 @@ public sealed class CommonLayerTests
         // Known edges keep the analyzer honest: a reader that saw nothing would pass the rule above trivially.
         Assert.That(graph[$"{Root}.Application.Storage"], Does.Contain($"{Root}.Domain.Storage"));
         Assert.That(graph[$"{Root}.Domain.Storage"], Does.Contain($"{Root}.Contracts.Storage"),
-            "IStorageCell extends IStorage.");
+            "IStorageCell extends IRootStorage.");
         Assert.That(graph[$"{Root}.Application.Transfers"], Does.Contain($"{Root}.Contracts.Transfers"));
     }
 

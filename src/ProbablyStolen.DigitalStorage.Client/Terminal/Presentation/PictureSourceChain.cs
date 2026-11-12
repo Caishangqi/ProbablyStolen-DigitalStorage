@@ -1,5 +1,5 @@
 using System;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>Identifies an item definition and its persistent state.</summary>
 public sealed class ItemKey : IEquatable<ItemKey>, IComparable<ItemKey>

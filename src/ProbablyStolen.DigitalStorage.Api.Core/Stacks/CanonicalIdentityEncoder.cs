@@ -4,10 +4,10 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace ProbablyStolen.DigitalStorage.Common.Domain.Items;
+namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
 /// <summary>Encodes detached identity facts without creating or modifying physical items.</summary>
-public static class CanonicalIdentityEncoder
+internal static class CanonicalIdentityEncoder
 {
     /// <summary>Builds a validated version 1 identity from one detached, immutable projection.</summary>
     public static ItemKey Encode(CanonicalIdentityInput input)

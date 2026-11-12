@@ -1,13 +1,8 @@
-0.4.3
+0.5.1
 
 [list]
-[*]Terminal and partition grids now have 9 columns, showing more items and rules in each row.
-[*]Terminals remember the sort order, sort direction, and window height across terminals and saves. The partition window remembers its height separately. These options are also available in the mod settings.
-[*]Partition controls move to a toolbar on the left, with tooltips for each button. The rule count and messages appear at the bottom. A new height button cycles through Small, Medium, Tall, and Full.
-[*]The Cell Workbench now shows the cell name, partition mode, rule count, and number of stored item types before you open the editor.
-[*]Redesigned the rule detail page with a card for each condition, keeping its field, operator, and value on one row. The list scrolls when there are more than 4 conditions, and sample attributes expand into a table.
-[*]Partition dropdowns now have arrows and a selected option indicator, and open upward when space below is limited. Field and item type lists support search, including pinyin when enabled.
-[*]Fixed long values widening condition cards, inconsistent input field sizes, and dropdown lists flashing while searching. Long input values show an ellipsis when idle; click to view and edit the full text.
-[*]Terminal and partition windows now remember their positions with the save. Each workbench keeps its own partition window position, even when you change its cell.
-[*]Fixed rule names and other input values appearing blank when the editor first opens and only showing after a click. Long values still show an ellipsis while the field is idle.
+[*] Added support for Customer Stocking 1.6.3. When enabled, one-click stocking can also use items from online digital networks within its scan range.
+[*] Added a Customer Stocking option to the settings. It appears when both mods are enabled and starts enabled for the verified version. Offline networks and cells outside a drive are not used.
+[*] Customer Stocking's "skip machine contents" option also skips items in digital networks because drives count as machines.
+[*] Fixed open terminals failing to update item counts after one-click stocking takes items from the digital network.
 [/list]

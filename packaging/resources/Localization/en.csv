@@ -306,3 +306,9 @@ partition_issue_unknownmode,Unknown mode.
 cell_storage_type_modules,Type limit modules: {0}
 cell_storage_equal_distribution,Equal distribution
 cell_storage_expansion,Module bay expansion {0}/{1}
+integration_customerstocking_section,Customer Stocking
+integration_state_incompatible,Not active: this version of the other mod is not compatible. The game log names the reason.
+integration_state_not_running,Not active: the other mod is not running.
+integration_state_unverified,This version of the other mod has not been tested with Digital Storage. The option starts off; turn it on to try it.
+integration_customerstocking_label,Take goods from the digital network
+integration_customerstocking_tooltip,One-click stocking from Customer Stocking may also take goods from online digital networks in its scan range (store, after-hours area, ship). Offline networks and loose cells are never used. Goods leave and return through the network like a terminal transfer. When Customer Stocking skips machine contents, network goods are skipped too, because drives count as machines.

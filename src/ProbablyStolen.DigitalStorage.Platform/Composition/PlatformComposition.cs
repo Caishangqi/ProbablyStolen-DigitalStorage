@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
@@ -6,10 +8,12 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Initialization;
+using ProbablyStolen.DigitalStorage.Platform.Api;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Events;
+using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -34,6 +38,9 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageVendors _vendors;
     private readonly TerminalSearchComposition _search;
     private readonly ItemTypeBackfill _typeBackfill;
+    private readonly DigitalStorageRuntime _runtime;
+    private IntegrationHost? _integrations;
+    private bool _runtimeExposed;
     private IDisposable? _localeRegistration;
     private readonly PinyinLifecycleCoordinator _pinyinLifecycle;
     private bool _assetsReady;
@@ -44,8 +51,10 @@ public sealed class PlatformComposition : IDisposable
         GridNetworkTooltipPresenter networkTooltipPresenter, BasicCellHandler cellHandler,
         ItemAppearance appearance,
         StorageContentRegistration content, CellHealth health, LegacyMigration migration, StorageEventBus events,
-        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench)
+        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
+        DigitalStorageRuntime runtime)
     {
+        _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _events = events;
         _settings = settings;
         _vendors = vendors;
@@ -64,6 +73,25 @@ public sealed class PlatformComposition : IDisposable
         _pinyinLifecycle = new PinyinLifecycleCoordinator(
             locale => _settings.GetSearchConfiguration(locale, message => _log.Error(message)),
             _search.Update, _search.Service.Configuration.PinyinEnabled);
+    }
+
+    /// <summary>Gets the public API entry; valid until the composition is disposed.</summary>
+    public IDigitalStorageRuntime Runtime => _runtime;
+
+    /// <summary>
+    /// Discovers the integration plugins among <paramref name="pluginTypes"/> and keeps those whose mod is enabled.
+    /// Call once from the mod's Init, before <see cref="Enable"/>, passing <c>typeof(T).Assembly.GetTypes()</c> of the
+    /// plugin assembly.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Integrations were already attached or the composition is enabled.</exception>
+    public void AttachIntegrations(IEnumerable<Type> pluginTypes)
+    {
+        ThrowIfDisposed();
+        if (_integrations != null || _isEnabled) throw new InvalidOperationException("Attach integrations once, before enabling.");
+        var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _log.Warning);
+        _integrations = new IntegrationHost(plugins, new NativeIntegrationEnvironment(),
+            new HarmonyIntegrationPatcher(_modId), _settings, _runtime, message => _log.Log(message));
+        _integrations.Initialize();
     }
 
     /// <summary>Creates the startup composition from the loader manifest.</summary>
@@ -142,7 +170,9 @@ public sealed class PlatformComposition : IDisposable
             modules, contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellHandler, appearance, content, cellHealth, migration, eventBus,
-            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench);
+            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
+            new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))));
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -171,6 +201,13 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
+            ExposeRuntime(_runtime);
+            if (_integrations != null)
+            {
+                ModHook.OnGameLoadedInit += _integrations.OnGameLoaded;
+                _integrations.Enable();
+            }
+
             _log.Log(_statusPresenter.Present(ModuleStartupPhase.Enabled));
         }
         catch
@@ -208,10 +245,32 @@ public sealed class PlatformComposition : IDisposable
         TerminalStorageWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
+        if (_integrations != null)
+        {
+            ModHook.OnGameLoadedInit -= _integrations.OnGameLoaded;
+            _integrations.Dispose();
+        }
+
+        if (_runtimeExposed) ExposeRuntime(null);
         _vendors.Dispose();
         _content.Dispose();
         _events.Dispose();
         _search.Dispose();
+    }
+
+    // Other mods that list this one as a prerequisite look the runtime up under its key; a stopped mod withdraws it.
+    private void ExposeRuntime(IDigitalStorageRuntime? runtime)
+    {
+        try
+        {
+            ModHelper.Expose(_modId, DigitalStorageRuntimeKeys.RuntimeServiceKey, runtime);
+            _runtimeExposed = runtime != null;
+        }
+        catch (Exception error)
+        {
+            _log.Warning($"Digital Storage: the public API could not be {(runtime == null ? "withdrawn" : "exposed")} " +
+                $"({error.GetType().Name}: {error.Message}).");
+        }
     }
 
     private void OnGameLoaded()
@@ -235,6 +294,7 @@ public sealed class PlatformComposition : IDisposable
         {
             if (_assetsReady) _settings.RefreshSectionNames();
             _pinyinLifecycle.OnConfigApplied();
+            _integrations?.OnSettingsApplied();
             _log.Log("Digital Storage: configuration applied; open network views refresh now.");
             _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
         }
@@ -245,6 +305,17 @@ public sealed class PlatformComposition : IDisposable
         if (!_isEnabled || mod == null || mod.Manifest.ID != _modId)
         {
             return;
+        }
+
+        // The loader loads mod assets only after every mod is listed, so other mods' versions are known now. Run it
+        // first: a failure in the work below must not leave the integrations unregistered for the session.
+        try
+        {
+            _integrations?.OnModsLoaded();
+        }
+        catch (Exception error)
+        {
+            _log.Warning($"Digital Storage: mod integrations could not register ({error.GetType().Name}: {error.Message}).");
         }
 
         _assetsReady = true;

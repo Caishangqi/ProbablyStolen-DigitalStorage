@@ -1,38 +1,40 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
 
 /// <summary>
 /// All storage of one network. Each root is offered to priority groups from high to low;
-/// inside a group, preferred storage (<see cref="IStorage.IsPreferredStorageFor"/>) comes first, then the rest, in
+/// inside a group, preferred storage (<see cref="IRootStorage.IsPreferredStorageFor"/>) comes first, then the rest, in
 /// mount order. Extraction walks priority groups from low to high, so drives with higher priority keep items longest.
 /// </summary>
-public sealed class NetworkStorage : IStorage
+public sealed class NetworkStorage : IRootStorage
 {
-    private readonly List<(int Priority, IStorage Storage)> _mounted = new();
+    private readonly List<(int Priority, IRootStorage Storage)> _mounted = new();
 
     /// <summary>Mounts a storage at a priority; mount order breaks ties.</summary>
-    public void Mount(int priority, IStorage inventory)
+    public void Mount(int priority, IRootStorage inventory)
     {
         if (inventory == null) throw new ArgumentNullException(nameof(inventory));
         _mounted.Add((priority, inventory));
     }
 
     /// <summary>Gets the mounted storage in insertion order for one type.</summary>
-    public IReadOnlyList<IStorage> InsertOrder(ItemKey key, IActionSource source)
+    public IReadOnlyList<IRootStorage> InsertOrder(ItemKey key, IActionSource source)
     {
         if (key == null) throw new ArgumentNullException(nameof(key));
-        var result = new List<IStorage>();
+        var result = new List<IRootStorage>();
         foreach (var group in Groups(descending: true))
         {
-            var others = new List<IStorage>();
+            var others = new List<IRootStorage>();
             foreach (var storage in group)
             {
                 if (storage.IsPreferredStorageFor(key, source)) result.Add(storage);
@@ -46,7 +48,7 @@ public sealed class NetworkStorage : IStorage
     }
 
     /// <summary>Gets the mounted storage in extraction order: lowest priority first, mount order within.</summary>
-    public IReadOnlyList<IStorage> ExtractOrder() => Groups(descending: false).SelectMany(group => group).ToArray();
+    public IReadOnlyList<IRootStorage> ExtractOrder() => Groups(descending: false).SelectMany(group => group).ToArray();
 
     /// <inheritdoc />
     public bool IsPreferredStorageFor(ItemKey what, IActionSource source) => false;
@@ -123,7 +125,7 @@ public sealed class NetworkStorage : IStorage
         StoreRejection? rejection = null;
         foreach (var storage in InsertOrder(root.Key, source))
         {
-            var result = storage.Insert(new FirstRootOnly(roots, root), mode, source);
+            var result = storage.Insert(new SingleRootSource(roots, root), mode, source);
             if (result.InsertedUnits > 0) return TransferStep.Moved;
             var step = result.StoppedBy;
             if (step.Outcome is TransferOutcome.Returned or TransferOutcome.Unowned) return step;
@@ -144,34 +146,10 @@ public sealed class NetworkStorage : IStorage
         _ => 3
     };
 
-    private IEnumerable<IEnumerable<IStorage>> Groups(bool descending)
+    private IEnumerable<IEnumerable<IRootStorage>> Groups(bool descending)
     {
         // OrderBy is stable, so mount order survives inside each priority.
         var groups = _mounted.GroupBy(entry => entry.Priority, entry => entry.Storage);
         return descending ? groups.OrderByDescending(group => group.Key) : groups.OrderBy(group => group.Key);
-    }
-
-    /// <summary>Offers only one root of the wrapped source, and only while it is still the first.</summary>
-    private sealed class FirstRootOnly : IRootSource
-    {
-        private readonly IRootSource _roots;
-        private readonly RootSnapshot _root;
-
-        internal FirstRootOnly(IRootSource roots, RootSnapshot root)
-        {
-            _roots = roots;
-            _root = root;
-        }
-
-        public bool TryPeekFirst(out RootSnapshot root)
-        {
-            root = _root;
-            return _roots.Snapshot().Any(candidate => candidate.Equals(_root));
-        }
-
-        public IEnumerable<RootSnapshot> Snapshot()
-        {
-            if (TryPeekFirst(out var root)) yield return root;
-        }
     }
 }

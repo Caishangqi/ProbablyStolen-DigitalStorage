@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Public value types of the Digital Storage API. BCL only, so Common and the Core gate stay game-free. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ProbablyStolen.DigitalStorage.Api.Core</AssemblyName>
+    <RootNamespace>ProbablyStolen.DigitalStorage.Api</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

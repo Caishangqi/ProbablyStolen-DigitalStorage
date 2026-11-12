@@ -1,4 +1,5 @@
 using System;
+using ProbablyStolen.DigitalStorage.Compat;
 using ProbablyStolen.DigitalStorage.Platform.Composition;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Entry;
@@ -19,6 +20,16 @@ public sealed class DigitalStorageMod : IMod
         }
 
         _composition = PlatformComposition.Create(manifest);
+        try
+        {
+            // Literal typeof(...).Assembly.GetTypes(): the mod scanner reads it as reflection on this mod's own types.
+            _composition.AttachIntegrations(typeof(CompatAssembly).Assembly.GetTypes());
+        }
+        catch (Exception error)
+        {
+            // Integrations are optional; Digital Storage itself keeps working without them.
+            UnityEngine.Debug.LogWarning($"Digital Storage: mod integrations are unavailable ({error.GetType().Name}: {error.Message}).");
+        }
     }
 
     /// <summary>Enables the owned startup composition.</summary>

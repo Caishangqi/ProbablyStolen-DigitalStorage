@@ -48,6 +48,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" />
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api\ProbablyStolen.DigitalStorage.Api.csproj" />
     <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Common\ProbablyStolen.DigitalStorage.Common.csproj" />
     <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Client\ProbablyStolen.DigitalStorage.Client.csproj" />
   </ItemGroup>

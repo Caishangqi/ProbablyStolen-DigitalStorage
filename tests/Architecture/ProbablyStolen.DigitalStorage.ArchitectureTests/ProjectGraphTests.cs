@@ -18,17 +18,23 @@ public sealed class ProjectGraphTests
     private static readonly IReadOnlyDictionary<string, HashSet<string>> AllowedReferences =
         new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
         {
-            ["Common"] = new HashSet<string>(StringComparer.Ordinal),
+            ["Api.Core"] = new HashSet<string>(StringComparer.Ordinal),
+            ["Api"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core" },
+            ["Common"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core" },
             ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "Common" },
-            ["Platform"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client" },
-            ["Mod"] = new HashSet<string>(StringComparer.Ordinal) { "Common", "Client", "Platform" }
+            ["Platform"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Api", "Common", "Client" },
+            // Compat reaches Digital Storage only through the public API, so it can move into a bridge mod unchanged.
+            ["Compat"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Api" },
+            // Only the entry assembles Compat; nothing else may depend on integration plugins.
+            ["Mod"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Api", "Common", "Client", "Platform", "Compat" }
         };
 
     private static readonly IReadOnlyDictionary<string, HashSet<string>> AllowedCoreAssemblyReferences =
         new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
         {
-            ["Common"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard" },
-            ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard", "ProbablyStolen.DigitalStorage.Common" }
+            ["Api.Core"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard" },
+            ["Common"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard", "ProbablyStolen.DigitalStorage.Api.Core" },
+            ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard", "ProbablyStolen.DigitalStorage.Api.Core", "ProbablyStolen.DigitalStorage.Common" }
         };
 
     private static string RepositoryRoot => GetBuildMetadata("RepositoryRoot");
@@ -47,11 +53,18 @@ public sealed class ProjectGraphTests
         }
     }
 
+    [TestCase("Api.Core", "Common")]
     [TestCase("Common", "Client")]
     [TestCase("Common", "Platform")]
     [TestCase("Common", "Mod")]
     [TestCase("Client", "Platform")]
     [TestCase("Platform", "Mod")]
+    [TestCase("Platform", "Compat")]
+    [TestCase("Api", "Common")]
+    [TestCase("Api", "Platform")]
+    [TestCase("Compat", "Common")]
+    [TestCase("Compat", "Client")]
+    [TestCase("Compat", "Platform")]
     public void DependencyRule_RejectsForbiddenProjectEdge(string source, string target)
     {
         var references = AllowedReferences[source]
@@ -59,7 +72,7 @@ public sealed class ProjectGraphTests
             .Select(module => new XElement("ProjectReference", new XAttribute("Include", $"../ProbablyStolen.DigitalStorage.{module}/ProbablyStolen.DigitalStorage.{module}.csproj")));
         var document = new XDocument(
             new XElement("Project",
-                new XElement("PropertyGroup", new XElement("RequireProbablyStolenReferences", source is "Platform" or "Mod" ? "true" : "false")),
+                new XElement("PropertyGroup", new XElement("RequireProbablyStolenReferences", RequiresGame(source) ? "true" : "false")),
                 new XElement("ItemGroup", references)));
 
         var error = Assert.Throws<InvalidOperationException>(new Action(() => ValidateProductProject(document, source)));
@@ -78,6 +91,8 @@ public sealed class ProjectGraphTests
     [TestCase("Client", "QFSW.QC.Suggestors")]
     [TestCase("Common", "QFSW.QC.ScanRules")]
     [TestCase("Common", "ProbablyStolen.DigitalStorage.Client")]
+    [TestCase("Api.Core", "ProbablyStolen.DigitalStorage.Common")]
+    [TestCase("Api.Core", "Assembly-CSharp")]
     [TestCase("Client", "Unexpected.Runtime")]
     public void CompiledCoreAssembly_RejectsForbiddenReference(string module, string assemblyName)
     {
@@ -102,6 +117,7 @@ public sealed class ProjectGraphTests
         Assert.That(error!.Message, Does.Contain(typeName));
     }
 
+    [TestCase("Api.Core")]
     [TestCase("Common")]
     [TestCase("Client")]
     public void ProductProject_RejectsCoreConsoleReference(string module)
@@ -127,6 +143,7 @@ public sealed class ProjectGraphTests
         }
     }
 
+    [TestCase("Api.Core")]
     [TestCase("Common")]
     [TestCase("Client")]
     public void CompiledCoreAssembly_ContainsOnlyApprovedReferences(string module)
@@ -150,7 +167,7 @@ public sealed class ProjectGraphTests
             throw new InvalidOperationException($"{module} has an invalid project graph: {string.Join(", ", references.OrderBy(value => value, StringComparer.Ordinal))}.");
         }
 
-        if (module is "Common" or "Client")
+        if (module is "Api.Core" or "Common" or "Client")
         {
             foreach (var reference in document.Descendants("Reference"))
             {
@@ -168,7 +185,7 @@ public sealed class ProjectGraphTests
         }
 
         var requiresGame = document.Descendants("RequireProbablyStolenReferences").SingleOrDefault()?.Value == "true";
-        if (requiresGame != (module is "Platform" or "Mod"))
+        if (requiresGame != RequiresGame(module))
         {
             throw new InvalidOperationException($"{module} has an invalid game reference requirement.");
         }
@@ -218,6 +235,8 @@ public sealed class ProjectGraphTests
         builder.Serialize(image);
         return new MemoryStream(image.ToArray(), writable: false);
     }
+
+    private static bool RequiresGame(string module) => module is "Api" or "Platform" or "Compat" or "Mod";
 
     private static string GetProductProjectPath(string module)
     {

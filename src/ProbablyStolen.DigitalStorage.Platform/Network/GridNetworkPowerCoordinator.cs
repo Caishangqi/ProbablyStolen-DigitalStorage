@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Energy;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Pathing;
@@ -26,6 +26,9 @@ internal sealed class GridNetworkPowerCoordinator
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _storage = new StorageService(scanner, IsPowered, log, migrate);
     }
+
+    /// <summary>Gets the storage operations shared by terminals and the public API.</summary>
+    internal StorageService Storage => _storage;
 
     internal TerminalInventorySnapshot ReadTerminalInventory(GameItem terminal) => _storage.GetCachedInventory(terminal);
 

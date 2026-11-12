@@ -1,4 +1,4 @@
-namespace ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
+namespace ProbablyStolen.DigitalStorage.Api.Config;
 
 /// <summary>Whether a storage call changes anything.</summary>
 public enum Actionable

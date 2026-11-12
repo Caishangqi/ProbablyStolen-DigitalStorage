@@ -104,6 +104,15 @@
           "Microsoft.TestPlatform.ObjectModel": "18.11.0"
         }
       },
+      "probablystolen.digitalstorage.api": {
+        "type": "Project",
+        "dependencies": {
+          "ProbablyStolen.DigitalStorage.Api.Core": "[1.0.0, )"
+        }
+      },
+      "probablystolen.digitalstorage.api.core": {
+        "type": "Project"
+      },
       "probablystolen.digitalstorage.client": {
         "type": "Project",
         "dependencies": {
@@ -111,11 +120,16 @@
         }
       },
       "probablystolen.digitalstorage.common": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "ProbablyStolen.DigitalStorage.Api.Core": "[1.0.0, )"
+        }
       },
       "probablystolen.digitalstorage.platform": {
         "type": "Project",
         "dependencies": {
+          "ProbablyStolen.DigitalStorage.Api": "[1.0.0, )",
+          "ProbablyStolen.DigitalStorage.Api.Core": "[1.0.0, )",
           "ProbablyStolen.DigitalStorage.Client": "[1.0.0, )",
           "ProbablyStolen.DigitalStorage.Common": "[1.0.0, )"
         }

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Public storage, network and integration contracts of the Digital Storage API. Game types only; no implementation. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>ProbablyStolen.DigitalStorage.Api</AssemblyName>
+    <RootNamespace>ProbablyStolen.DigitalStorage.Api</RootNamespace>
+    <RequireProbablyStolenReferences>true</RequireProbablyStolenReferences>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,7 @@
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 
 namespace ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 
@@ -9,10 +11,11 @@ namespace ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 /// Main thread only; callers refuse while a save is decoding.
 /// </summary>
 /// <remarks>
-/// Public only because Common is a separate assembly from Platform. It is not a supported API for other mods;
-/// exposing it needs its own design for versioning, compatibility and notifications.
+/// Internal root-transfer contract (roots are addressed by page position). Public only because Common is a separate
+/// assembly from Platform; it is not a supported API for other mods. The public storage contract is
+/// <c>ProbablyStolen.DigitalStorage.Api.Storage.IStorage</c>.
 /// </remarks>
-public interface IStorage
+public interface IRootStorage
 {
     /// <summary>Gets whether this storage should receive a type before non-preferred storage.</summary>
     bool IsPreferredStorageFor(ItemKey what, IActionSource source);

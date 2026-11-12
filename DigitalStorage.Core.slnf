@@ -2,6 +2,7 @@
   "solution": {
     "path": "DigitalStorage.sln",
     "projects": [
+      "src/ProbablyStolen.DigitalStorage.Api.Core/ProbablyStolen.DigitalStorage.Api.Core.csproj",
       "src/ProbablyStolen.DigitalStorage.Common/ProbablyStolen.DigitalStorage.Common.csproj",
       "src/ProbablyStolen.DigitalStorage.Client/ProbablyStolen.DigitalStorage.Client.csproj",
       "tests/Unit/ProbablyStolen.DigitalStorage.Common.Tests/ProbablyStolen.DigitalStorage.Common.Tests.csproj",

@@ -51,7 +51,7 @@ class PackageValidationTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(f"synthetic {name}".encode("ascii"))
         (self.package_directory / "manifest.xml").write_bytes(
-            manifest_text(platform_assembly).encode("utf-8")
+            manifest_text(platform_assembly, [name for name in names if name.endswith(".dll")]).encode("utf-8")
         )
 
     def _replace_manifest_text(self, old: str, new: str) -> None:

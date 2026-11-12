@@ -1,6 +1,6 @@
 using System;
 using NUnit.Framework;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;

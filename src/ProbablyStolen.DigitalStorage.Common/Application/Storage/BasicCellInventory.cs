@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
@@ -137,6 +139,47 @@ public sealed class BasicCellInventory : IStorageCell
         }
 
         return new ExtractResult(extracted, step, changes);
+    }
+
+    /// <summary>
+    /// Moves the one stored root of <paramref name="what"/> whose top-left corner is at <paramref name="page"/>
+    /// (<paramref name="x"/>, <paramref name="y"/>) into the destination, through the same atomic transfer as
+    /// <see cref="Extract"/>. Page positions are only unique inside one cell, so callers address the cell first.
+    /// </summary>
+    /// <returns>
+    /// <see cref="TransferStep.SourceEmpty"/> when this cell holds no such root. Otherwise the units that actually left:
+    /// <see cref="TransferStep.Moved"/> when the whole root left, <see cref="TransferStep.Returned"/> when part of it
+    /// stays, or the destination's refusal when nothing left.
+    /// </returns>
+    public ExtractResult ExtractRoot(ItemKey what, int page, int x, int y, IRootSink destination, Actionable mode, IActionSource source)
+    {
+        if (what == null) throw new ArgumentNullException(nameof(what));
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var stored = _pages.StoredRoots(what);
+        var changes = new StorageChangeSet();
+        var found = stored.Snapshot().Where(root => root.Page == page && root.X == x && root.Y == y).Take(1).ToArray();
+        if (found.Length == 0) return new ExtractResult(0, TransferStep.SourceEmpty, changes);
+
+        var target = found[0];
+        if (mode == Actionable.Simulate)
+        {
+            var planned = destination.Accept(target, Actionable.Simulate, source);
+            if (planned.IsMoved) changes.Add(target.Key, -target.Units);
+            return new ExtractResult(planned.IsMoved ? target.Units : 0, planned, changes);
+        }
+
+        // A destination may take only part of the root (a caller's unit limit or its room); the rest stays in its slot.
+        // The units that left are read back from the pages instead of trusting the step.
+        var step = RootTransfer.MoveFirst(new SingleRootSource(stored, target), destination, source);
+        var left = stored.Snapshot().Where(root => root.Page == page && root.X == x && root.Y == y).Sum(root => root.Units);
+        var moved = target.Units - left;
+        if (moved <= 0) return new ExtractResult(0, step.IsMoved ? TransferStep.Returned : step, changes);
+        if (left == 0) _view.RecordRemoved(target.Page, _view.SlotAt(target.Page, target.X, target.Y), target.Key, target.Units, target.Size);
+        else _view.RecordUnitsRemoved(target.Key, moved, target.Size);
+        changes.Add(target.Key, -moved);
+        return new ExtractResult(moved, left == 0 ? TransferStep.Moved : TransferStep.Returned, changes);
     }
 
     /// <inheritdoc />

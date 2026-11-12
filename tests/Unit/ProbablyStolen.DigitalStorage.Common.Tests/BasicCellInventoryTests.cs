@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Api.Config;
+using ProbablyStolen.DigitalStorage.Api.Networking.Security;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Items;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
@@ -194,6 +196,116 @@ public sealed class BasicCellInventoryTests
     }
 
     [Test]
+    public void ExtractRoot_MovesOnlyTheAddressedRoot()
+    {
+        var (cell, pages) = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 3).With(OneByOne, "item.a", 5), Actionable.Modulate, Player);
+        var second = pages.Roots.Single(root => root.Units == 5);
+        var bag = new MemoryInventory();
+
+        var result = cell.ExtractRoot(second.Key, second.Page, second.X, second.Y, bag, Actionable.Modulate, Player);
+
+        Assert.That(result.ExtractedUnits, Is.EqualTo(5));
+        Assert.That(result.StoppedBy.IsMoved, Is.True);
+        Assert.That(result.Changes.Get(second.Key), Is.EqualTo(-5));
+        Assert.That(bag.Units("item.a"), Is.EqualTo(5));
+        Assert.That(Stacks(cell).Get(second.Key), Is.EqualTo(3), "The other root of the same type stays.");
+        Assert.That(cell.GetStoredItemCount() + bag.Units("item.a"), Is.EqualTo(8), "No unit appears or disappears.");
+    }
+
+    [Test]
+    public void ExtractRoot_UnknownPositionOrType_ReportsSourceEmpty()
+    {
+        var (cell, pages) = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 2), Actionable.Modulate, Player);
+        var stored = pages.Roots.Single();
+        var bag = new MemoryInventory();
+
+        var elsewhere = cell.ExtractRoot(stored.Key, stored.Page, stored.X + 1, stored.Y, bag, Actionable.Modulate, Player);
+        var otherType = cell.ExtractRoot(new ItemKey("item.b"), stored.Page, stored.X, stored.Y, bag, Actionable.Modulate, Player);
+
+        Assert.That(elsewhere.StoppedBy.Outcome, Is.EqualTo(TransferOutcome.SourceEmpty));
+        Assert.That(otherType.StoppedBy.Outcome, Is.EqualTo(TransferOutcome.SourceEmpty));
+        Assert.That(elsewhere.ExtractedUnits + otherType.ExtractedUnits, Is.Zero);
+        Assert.That(Stacks(cell).Get(stored.Key), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void ExtractRoot_Simulate_ChangesNothing()
+    {
+        var (cell, pages) = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 4), Actionable.Modulate, Player);
+        var stored = pages.Roots.Single();
+        var bag = new MemoryInventory();
+        var movesBefore = pages.MoveCalls;
+
+        var result = cell.ExtractRoot(stored.Key, stored.Page, stored.X, stored.Y, bag, Actionable.Simulate, Player);
+
+        Assert.That(result.ExtractedUnits, Is.EqualTo(4));
+        Assert.That(bag.Units("item.a"), Is.Zero);
+        Assert.That(Stacks(cell).Get(stored.Key), Is.EqualTo(4));
+        Assert.That(pages.MoveCalls, Is.EqualTo(movesBefore));
+        Assert.That(pages.Roots.Single(), Is.EqualTo(stored));
+    }
+
+    [Test]
+    public void ExtractRoot_RefusedByDestination_KeepsTheRoot()
+    {
+        var (cell, pages) = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 4), Actionable.Modulate, Player);
+        var stored = pages.Roots.Single();
+        var full = new MemoryInventory { Capacity = 0 };
+
+        var result = cell.ExtractRoot(stored.Key, stored.Page, stored.X, stored.Y, full, Actionable.Modulate, Player);
+
+        Assert.That(result.ExtractedUnits, Is.Zero);
+        Assert.That(result.StoppedBy.Rejection, Is.EqualTo(StoreRejection.PhysicalLimit));
+        Assert.That(Stacks(cell).Get(stored.Key), Is.EqualTo(4));
+        Assert.That(cell.GetStoredItemCount(), Is.EqualTo(4));
+    }
+
+    [Test]
+    public void ExtractRoot_PartOfARoot_CountsOnlyTheUnitsThatLeft()
+    {
+        var (cell, pages) = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 10), Actionable.Modulate, Player);
+        var stored = pages.Roots.Single();
+        var sink = new SplittingSink(pages, 4);
+
+        var result = cell.ExtractRoot(stored.Key, stored.Page, stored.X, stored.Y, sink, Actionable.Modulate, Player);
+
+        Assert.That(result.ExtractedUnits, Is.EqualTo(4));
+        Assert.That(result.StoppedBy.Outcome, Is.EqualTo(TransferOutcome.Returned), "Part of the root stays.");
+        Assert.That(result.Changes.Get(stored.Key), Is.EqualTo(-4));
+        Assert.That(pages.Roots.Single().Units, Is.EqualTo(6));
+        Assert.That(cell.GetStoredItemCount(), Is.EqualTo(6), "Usage follows the units that left; the slot stays taken.");
+        Assert.That(cell.GetStoredItemCount() + sink.Taken, Is.EqualTo(10));
+    }
+
+    // A destination that takes only part of a root, leaving the rest in its slot like a native split.
+    private sealed class SplittingSink : IRootSink
+    {
+        private readonly MemoryCellPages _pages;
+        private readonly long _units;
+
+        internal SplittingSink(MemoryCellPages pages, long units)
+        {
+            _pages = pages;
+            _units = units;
+        }
+
+        internal long Taken { get; private set; }
+
+        public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
+        {
+            if (mode == Actionable.Simulate) return TransferStep.Moved;
+            _pages.KeepUnits(root, root.Units - _units);
+            Taken += _units;
+            return TransferStep.Moved;
+        }
+    }
+
+    [Test]
     public void EqualShareQuota_AndPreference()
     {
         var keys = new[] { new ItemKey("item.a"), new ItemKey("item.b") };
@@ -206,7 +318,7 @@ public sealed class BasicCellInventoryTests
         Assert.That(cell.IsPreferredStorageFor(keys[1], Player), Is.False);
     }
 
-    private static KeyCounter Stacks(IStorage storage)
+    private static KeyCounter Stacks(IRootStorage storage)
     {
         var counter = new KeyCounter();
         storage.GetAvailableStacks(counter);

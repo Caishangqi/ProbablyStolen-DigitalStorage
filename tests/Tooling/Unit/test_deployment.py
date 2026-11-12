@@ -110,7 +110,7 @@ class DeploymentTests(unittest.TestCase):
             path = self.target / name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == "manifest.xml":
-                data = manifest_text(platform_assembly).encode("utf-8")
+                data = manifest_text(platform_assembly, [n for n in names if n.endswith(".dll")]).encode("utf-8")
             elif name == LEGACY_PLATFORM_ASSEMBLY:
                 data = (self.package / CURRENT_PLATFORM_ASSEMBLY).read_bytes()
             elif name in EXPECTED_ASSEMBLIES or (self.package / name).exists():
@@ -228,7 +228,7 @@ class DeploymentTests(unittest.TestCase):
                     shutil.rmtree(self.target)
                 self._install_layout(names, platform_assembly)
                 manifest = self.target / "manifest.xml"
-                manifest.write_bytes(manifest_text(other_assembly).encode("utf-8"))
+                manifest.write_bytes(manifest_text(other_assembly, [n for n in names if n.endswith(".dll")]).encode("utf-8"))
                 before = self.installed_contents()
                 with self.assertRaisesRegex(DeploymentError, "not safely owned"):
                     plan_deployment(self.package, self.game, self.target)
@@ -365,7 +365,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(validate_package_directory(self.target, False), original)
         real_copy = shutil.copyfile
         def fail_backup(source, destination):
-            if ".DigitalStorage.backup." in str(destination) and str(destination).endswith(EXPECTED_ASSEMBLIES[0]):
+            # Common is in every layout, so the legacy target has a copy to back up.
+            if ".DigitalStorage.backup." in str(destination) and str(destination).endswith("ProbablyStolen.DigitalStorage.Common.dll"):
                 raise PermissionError("injected backup failure")
             return real_copy(source, destination)
         with patch.object(shutil, "copyfile", side_effect=fail_backup), self.assertRaises(DeploymentError):
