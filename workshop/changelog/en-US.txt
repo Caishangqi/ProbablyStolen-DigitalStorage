@@ -1,11 +1,11 @@
-This update keeps storage format v2. Back up your save before upgrading.
+0.4.3
 
 [list]
-[*]Added a 3x3 Cell Workbench that needs no network or power. Partition configuration moves to the workbench; terminals handle storage and search.
-[*]Partitions support whitelists, blacklists, and conditions for item, type, legality, stolen status, heat, and visible features. Empty lists accept everything.
-[*]Drag real items into the rule grid without moving or consuming them. Rules support moving, copying, renaming, and undoing deletion. Valid edits save automatically.
-[*]Added Type Limit and Equal Distribution modules, installed and removed at the workbench. Type limit modules have three qualities and random bonuses, with merchant prices based on quality and values.
-[*]Type overhead is spread across the effective type limit without increasing byte capacity. Rule slots follow that limit; lowering it keeps existing rules.
-[*]Cells accept native Module Bay Expansion Kits up to their tier's expansion limit. Take out stored items, remove modules, and delete rules before removing a cell component.
-[*]Terminals and partition editors can be brought in front of native windows and vice versa.
+[*]Terminal and partition grids now have 9 columns, showing more items and rules in each row.
+[*]Terminals remember the sort order, sort direction, and window height across terminals and saves. The partition window remembers its height separately. These options are also available in the mod settings.
+[*]Partition controls move to a toolbar on the left, with tooltips for each button. The rule count and messages appear at the bottom. A new height button cycles through Small, Medium, Tall, and Full.
+[*]The Cell Workbench now shows the cell name, partition mode, rule count, and number of stored item types before you open the editor.
+[*]Redesigned the rule detail page with a card for each condition, keeping its field, operator, and value on one row. The list scrolls when there are more than 4 conditions, and sample attributes expand into a table.
+[*]Partition dropdowns now have arrows and a selected option indicator, and open upward when space below is limited. Field and item type lists support search, including pinyin when enabled.
+[*]Fixed long values widening condition cards, inconsistent input field sizes, and dropdown lists flashing while searching. Long input values show an ellipsis when idle; click to view and edit the full text.
 [/list]

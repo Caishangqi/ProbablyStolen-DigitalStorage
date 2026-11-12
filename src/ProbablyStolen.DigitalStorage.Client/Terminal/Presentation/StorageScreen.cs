@@ -120,7 +120,8 @@ public sealed class StorageScreenPage
 public sealed class StorageScreen
 {
     /// <summary>Creates a fixed-column screen model.</summary>
-    public StorageScreen(int columns = 7, int rows = 4, int cellPixels = 32, TerminalSearchService? search = null)
+    public StorageScreen(int columns = TerminalWindowMetrics.Columns, int rows = 4, int cellPixels = 32,
+        TerminalSearchService? search = null)
     {
         if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));
         if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));

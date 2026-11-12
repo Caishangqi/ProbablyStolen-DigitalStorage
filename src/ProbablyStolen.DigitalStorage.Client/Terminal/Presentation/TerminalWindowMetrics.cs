@@ -6,7 +6,7 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 public static class TerminalWindowMetrics
 {
     /// <summary>Gets the fixed number of columns.</summary>
-    public const int Columns = 7;
+    public const int Columns = 9;
     /// <summary>Gets the row count used before a viewport is known.</summary>
     public const int Rows = 4;
     /// <summary>Gets the minimum visible rows.</summary>
@@ -26,7 +26,7 @@ public static class TerminalWindowMetrics
     /// <summary>Gets the fixed scrollbar handle height in design units.</summary>
     public const int ScrollbarHandle = 30;
     /// <summary>Gets the outer width in design units: grid, toolbar and scrollbar plus window padding.</summary>
-    public const int Width = 400;
+    public const int Width = 486;
     /// <summary>Gets the outer height that is not grid: title, search row, status row, padding and spacing.</summary>
     public const int Chrome = 169;
     /// <summary>Gets the outer height for <see cref="Rows"/>.</summary>

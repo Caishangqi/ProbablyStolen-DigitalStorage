@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Items;
@@ -18,19 +20,22 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// Edits the workbench cell's partition. Overview changes save immediately; detail edits save when valid.
 /// The rule limit follows module changes while the editor is open.
 /// </summary>
-internal sealed class PartitionWindow
+internal sealed partial class PartitionWindow
 {
     private const string WindowId = "digital_storage_partition";
-    private const int Columns = 8;
-    private const int VisibleRows = 6;
-    private const int Visible = Columns * VisibleRows;
+    private const int Columns = TerminalWindowMetrics.Columns;
     private const float CellPixels = TerminalWindowMetrics.CellPixels;
-    private const float GridWidth = Columns * CellPixels + (Columns - 1) * TerminalWindowMetrics.CellSpacing;
-    // The grid, its scrollbar and gaps, plus 16 units of machinery frame padding on each side.
-    private const float WindowWidth = GridWidth + TerminalWindowMetrics.ScrollbarWidth + 64f;
+    private const float Gap = 4f;
+    private static readonly float GridWidth = TerminalWindowMetrics.GridWidth;
+    private static readonly float BodyWidth = TerminalWindowMetrics.ToolbarButton + Gap + GridWidth + Gap +
+        TerminalWindowMetrics.ScrollbarWidth;
+    private const float WindowWidth = TerminalWindowMetrics.Width;
+    private const float CountWidth = 110f;
     private static PartitionWindow? _current;
     private static int _escapeFrame = -1;
     private readonly ModText _text;
+    private readonly ITerminalViewSettings _view;
+    private readonly TerminalSearchService _search;
     private readonly GameItem _cell;
     private readonly Action<string> _log;
     private readonly PartitionSession _session;
@@ -43,8 +48,8 @@ internal sealed class PartitionWindow
     private readonly List<Image> _ghostLayers = new();
     private CustomUIWindow? _window;
     private RectTransform? _body;
-    private RectTransform? _menuList;
     private CustomUIElement? _status;
+    private CustomUIElement? _count;
     private ItemSlotGrid? _grid;
     private TreeNodeRender? _shield;
     private TerminalScrollbar? _scrollbar;
@@ -56,20 +61,22 @@ internal sealed class PartitionWindow
     private RuleDraft? _detail;
     private ItemAttributeSet? _detailSample;
     private int _scrollRow;
+    private bool _rendering;
+    private int _rows = TerminalWindowMetrics.Rows;
     private PixelWindow? _workbenchWindow;
     private int _selected = -1;
     private int _target = -1;
     private int _dragSource = -1;
-    private bool _menuOpen;
-    private int _menuRow = -1;
-    private string _menuSearch = string.Empty;
     private bool _showSample;
     private string? _messageKey;
     private object[] _messageArgs = Array.Empty<object>();
 
-    private PartitionWindow(ModText text, GameItem cell, Action<string> log)
+    private PartitionWindow(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
+        Action<string> log)
     {
         _text = text;
+        _view = view;
+        _search = search;
         _cell = cell;
         _log = log;
         _session = new PartitionSession(cell);
@@ -83,11 +90,12 @@ internal sealed class PartitionWindow
     }
 
     /// <summary>Opens the editor for a cell, closing any other partition editor first.</summary>
-    internal static void Open(ModText text, GameItem cell, Action<string> log)
+    internal static void Open(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
+        Action<string> log)
     {
         if (CustomUIManager.Instance == null) return;
         CloseCurrent();
-        _current = new PartitionWindow(text, cell, log);
+        _current = new PartitionWindow(text, cell, view, search, log);
         _current.Show();
     }
 
@@ -134,12 +142,20 @@ internal sealed class PartitionWindow
         var builder = CustomUIManager.Instance.CreateWindow(WindowId, _text.Get("partition_title"), "overlay", null,
                 CustomUIManager.Style.Machinery)
             .SetSize(WindowWidth, 320f).SetDraggable(true).SetCloseOnEscape(false).OnClose(OnClosed);
-        builder.AddLabel(string.Empty, "status");
-        builder.BeginColumn(4f);
+        builder.BeginColumn(Gap);
         _body = builder.CurrentContainer;
+        builder.End();
+        builder.BeginRow(Gap);
+        builder.AddLabel(string.Empty, "status");
+        SetWidth(builder.Last, BodyWidth - Gap - CountWidth);
+        builder.AddLabel(string.Empty, "count");
+        SetWidth(builder.Last, CountWidth);
+        if (builder.Last.text != null) builder.Last.text.alignment = TextAlignmentOptions.TopRight;
         builder.End();
         _window = builder.Show();
         _status = _window.Get("status");
+        _count = _window.Get("count");
+        _dropdown = new PopupDropdown(_window, _search.MatchesText);
         // On the native window layer a dragged item's ghost is drawn above this window, as over the terminal.
         // Raised: the editor opens from the workbench window, a focused native window on the raised layer.
         NativeWindowLayer.Attach(_window, "digital_storage_partition_viewport", raised: true);
@@ -161,6 +177,8 @@ internal sealed class PartitionWindow
     private void OnClosed()
     {
         _session.End();
+        _dropdown?.Close();
+        _dropdown = null;
         CellUpgradeInventory.ModulesChanged -= OnModulesChanged;
         _workbenchWindow = null;
         _window = null;
@@ -174,6 +192,7 @@ internal sealed class PartitionWindow
         _ghostIcon = null;
         _ghostLayers.Clear();
         _status = null;
+        _count = null;
         _dropped.Clear();
         if (ReferenceEquals(_current, this)) _current = null;
     }
@@ -181,18 +200,26 @@ internal sealed class PartitionWindow
     private void OnEscape()
     {
         if (!_session.IsActive) return;
-        if (_menuOpen)
-        {
-            _menuOpen = false;
-            Render();
-        }
+        if (_dropdown?.IsOpen == true) _dropdown.Close();
         else if (_detail != null) Back();
         else Close();
     }
 
     private void Render()
     {
+        if (_window == null || _body == null || _rendering) return;
+        _rendering = true;
+        try { RenderBody(); }
+        finally { _rendering = false; }
+    }
+
+    private void RenderBody()
+    {
         if (_window == null || _body == null) return;
+        // The list belongs to a control that the redraw replaces; so do the picture and the summary box.
+        _dropdown?.Close();
+        _detailLayers.Clear();
+        _summaryBox = null;
         EndRuleDrag();
         CustomUIBuilder.ClearContainer(_body);
         _grid = null;
@@ -224,10 +251,35 @@ internal sealed class PartitionWindow
 
     private void RefreshStatus()
     {
-        if (_status == null) return;
-        var parts = new List<string> { _text.Get("partition_status", _draft.Rules.Count, _draft.RuleLimit) };
-        if (_messageKey != null) parts.Add(_text.Get(_messageKey, _messageArgs));
-        _status.SetText(string.Join("  ·  ", parts));
+        _count?.SetText(_text.Get("partition_status", _draft.Rules.Count, _draft.RuleLimit));
+        _status?.SetText(_messageKey != null ? _text.Get(_messageKey, _messageArgs)
+            : _detail == null && _draft.Rules.Count == 0 ? _text.Get("partition_empty_list_note")
+            : string.Empty);
+    }
+
+    private static void SetWidth(CustomUIElement control, float width)
+    {
+        var layout = control.root.GetComponent<LayoutElement>() ?? control.root.AddComponent<LayoutElement>();
+        // Outranks a text's own preferred width (TMP layout priority 1), so long text wraps or is cut instead.
+        layout.layoutPriority = 2;
+        layout.minWidth = layout.preferredWidth = width;
+        layout.flexibleWidth = 0f;
+    }
+
+    private static void AddTool(CustomUIBuilder builder, string label, string tooltip, Action onClick)
+    {
+        builder.AddButton(label, onClick);
+        var button = builder.Last;
+        var layout = button.root.GetComponent<LayoutElement>() ?? button.root.AddComponent<LayoutElement>();
+        layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight =
+            TerminalWindowMetrics.ToolbarButton;
+        layout.flexibleWidth = layout.flexibleHeight = 0f;
+        if (button.text != null)
+        {
+            button.text.fontSize = 14f;
+            button.text.alignment = TextAlignmentOptions.Center;
+        }
+        TerminalTooltipPresenter.SetText(button, tooltip);
     }
 
     private void Message(string key, params object[] args)
@@ -237,24 +289,66 @@ internal sealed class PartitionWindow
         RefreshStatus();
     }
 
+    private int VisibleRows => _rows;
+
+    private int Visible => Columns * _rows;
+
     private int TotalRows => Math.Max(VisibleRows, (_draft.Capacity + Columns - 1) / Columns);
 
     private int MaxScroll => TotalRows - VisibleRows;
 
+    // The grid must remain at least as tall as the toolbar, even at the smallest height setting.
+    private int CountRows()
+    {
+        var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
+        return Math.Max(ToolbarRows, TerminalWindowMetrics.GetRows(_view.PartitionSize, LetterboxManager.GameAreaHeight,
+            canvas == null ? 0f : canvas.scaleFactor));
+    }
+
+    private const int ToolbarButtons = 7;
+
+    private static readonly int ToolbarRows = (int)Math.Ceiling(
+        (ToolbarButtons * TerminalWindowMetrics.ToolbarButton + (ToolbarButtons - 1) * TerminalWindowMetrics.ToolbarSpacing +
+         TerminalWindowMetrics.CellSpacing) / (double)(TerminalWindowMetrics.CellPixels + TerminalWindowMetrics.CellSpacing));
+
+    private void CycleSize()
+    {
+        if (!_session.IsActive) return;
+        var size = _view.PartitionSize;
+        _view.PartitionSize = size == TerminalSize.Full ? TerminalSize.Small : size + 1;
+        _rows = CountRows();
+        ScrollTo(_selected);
+        Render();
+    }
+
     private void BuildOverview(CustomUIBuilder builder)
     {
+        _rows = CountRows();
         _scrollRow = Math.Max(0, Math.Min(MaxScroll, _scrollRow));
-        builder.BeginRow(4f);
-        builder.AddButton(_text.Get("partition_mode_button", _text.Get(ModeKey(_draft.Mode))), () =>
-        {
-            if (!_session.IsActive) return;
-            _draft.ToggleMode();
-            Render();
-        }, "mode");
+        builder.BeginRow(Gap);
+        builder.BeginColumn(TerminalWindowMetrics.ToolbarSpacing);
+        var blacklist = _draft.Mode == PartitionMode.Blacklist;
+        AddTool(builder, _text.Get(blacklist ? "partition_tool_blacklist" : "partition_tool_whitelist"),
+            _text.Get("partition_mode_button", _text.Get(ModeKey(_draft.Mode))), () =>
+            {
+                if (!_session.IsActive) return;
+                _draft.ToggleMode();
+                Render();
+            });
+        AddTool(builder, _text.Get("partition_tool_open"), _text.Get("partition_open"),
+            () => { if (_draft.At(_selected) != null) OpenDetail(_selected); });
+        AddTool(builder, _text.Get("partition_tool_duplicate"), _text.Get("partition_duplicate"),
+            () => Edit(() => AddResult(_draft.Duplicate(_selected)), needsSelection: true));
+        AddTool(builder, _text.Get("partition_tool_remove"), _text.Get("partition_remove"),
+            () => Edit(() => { _draft.Remove(_selected); _selected = -1; }, needsSelection: true));
+        AddTool(builder, _text.Get("partition_tool_clear"), _text.Get("partition_clear"),
+            () => Edit(() => { _draft.Clear(); _selected = -1; }));
+        AddTool(builder, _text.Get("partition_tool_undo"), _text.Get("partition_undo"), () => Edit(() => _draft.Undo()));
+        var size = _view.PartitionSize.ToString().ToLowerInvariant();
+        AddTool(builder, _text.Get("terminal_button_size_" + size),
+            _text.Get("terminal_button_size_tip", _text.Get("terminal_size_" + size)), CycleSize);
         builder.End();
-        if (_draft.Rules.Count == 0) builder.AddLabel(_text.Get("partition_empty_list_note"));
 
-        builder.BeginRow(4f);
         builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
         _grid = new ItemSlotGrid(_pictures, showBadge: false, CellPixels);
         // Presses, drags and releases are read every frame (Tick); a button click alone cannot tell a drag apart.
@@ -273,14 +367,6 @@ internal sealed class PartitionWindow
             });
         builder.End();
         _dropHighlight = _grid.CreateDropHighlight(GridWidth, TerminalWindowMetrics.GetGridHeight(VisibleRows));
-
-        builder.BeginRow(4f);
-        builder.AddButton(_text.Get("partition_open"), () => { if (_draft.At(_selected) != null) OpenDetail(_selected); });
-        builder.AddButton(_text.Get("partition_duplicate"), () => Edit(() => AddResult(_draft.Duplicate(_selected)), needsSelection: true));
-        builder.AddButton(_text.Get("partition_remove"), () => Edit(() => { _draft.Remove(_selected); _selected = -1; }, needsSelection: true));
-        builder.AddButton(_text.Get("partition_clear"), () => Edit(() => { _draft.Clear(); _selected = -1; }));
-        builder.AddButton(_text.Get("partition_undo"), () => Edit(() => _draft.Undo()));
-        builder.End();
         FillGrid();
     }
 
@@ -353,6 +439,7 @@ internal sealed class PartitionWindow
             OnEscape();
         }
 
+        if (_window != null) _dropdown?.CloseOnOutsidePress(CameraOf(_window));
         if (_window == null || !_session.IsActive || _detail != null || _grid == null) return;
         var camera = CameraOf(_window);
         var mouse = (Vector2)Input.mousePosition;
@@ -395,7 +482,6 @@ internal sealed class PartitionWindow
 
     private void TrackSampleDrag(int slot)
     {
-        // The whole grid shows as a drop target, and the slot shows where the sample would land.
         var landing = slot < 0 ? -1 : _draft.LandingSlot(slot);
         SetDrop(slot < 0 ? TerminalDropHighlight.Ready
             : landing < 0 ? TerminalDropHighlight.Rejected
@@ -613,7 +699,6 @@ internal sealed class PartitionWindow
     {
         _detail = null;
         _detailSample = null;
-        _menuOpen = false;
     }
 
     /// <summary>Takes the partition stored on the cell, which changed outside this editor.</summary>
@@ -624,9 +709,6 @@ internal sealed class PartitionWindow
         Message(messageKey);
     }
 
-    /// <summary>
-    /// Updates the rule limit when <see cref="CellUpgradeInventory.ModulesChanged"/> reports a module change.
-    /// </summary>
     private void OnModulesChanged(GameItem cell)
     {
         if (!_session.IsActive || !ReferenceEquals(cell, _cell)) return;
@@ -646,7 +728,6 @@ internal sealed class PartitionWindow
         _selected = slot;
         _detailSample = rule.DisplayKey == null ? null : CanonicalAttributeSource.Instance.Read(rule.DisplayKey);
         _detail = new RuleDraft(rule, _detailSample);
-        _menuOpen = false;
         _showSample = false;
         _messageKey = null;
         Render();
@@ -655,7 +736,6 @@ internal sealed class PartitionWindow
     private void Back()
     {
         _detail = null;
-        _menuOpen = false;
         Render();
     }
 
@@ -671,192 +751,6 @@ internal sealed class PartitionWindow
         if (stored == null) return;
         if (PartitionRuleCodec.Encode(new[] { edited.With(slot: stored.Slot) }) == PartitionRuleCodec.Encode(new[] { stored })) return;
         _draft.Replace(edited);
-    }
-
-    private void BuildDetail(CustomUIBuilder builder)
-    {
-        var rule = _detail!;
-        builder.AddInput(_text.Get("partition_rule_name"), rule.Name ?? string.Empty, value =>
-        {
-            rule.Name = value;
-            SaveDetail();
-            // A failed save leaves the detail page; redraw so later edits never reach a discarded copy.
-            if (_detail == null) Render();
-        }, "rule_name");
-        builder.AddLabel(_text.Get("partition_all_conditions"));
-        builder.BeginScroll(176f);
-        for (var index = 0; index < rule.Rows.Count; index++) BuildRow(builder, rule, index);
-        builder.End();
-        builder.AddButton(_text.Get("partition_add_condition"), () =>
-        {
-            _menuRow = -1;
-            _menuOpen = true;
-            _menuSearch = string.Empty;
-            Render();
-        });
-        if (_menuOpen) BuildMenu(builder);
-
-        var issue = rule.Validate();
-        builder.AddLabel(issue == null
-            ? _text.Get("partition_summary_label", Summary(rule.Complete()))
-            : _text.Get("partition_not_saved", _text.Get("partition_issue_" + issue.Value.ToString().ToLowerInvariant())));
-        foreach (var warning in rule.Lint()) builder.AddLabel(_text.Get("partition_warning_" + warning.Kind.ToString().ToLowerInvariant()));
-
-        builder.AddToggle(_text.Get("partition_sample_attributes"), _showSample, value =>
-        {
-            _showSample = value;
-            Render();
-        });
-        if (_showSample) BuildSample(builder);
-
-        builder.AddButton(_text.Get("partition_back"), Back);
-    }
-
-    private void BuildRow(CustomUIBuilder builder, RuleDraft rule, int index)
-    {
-        var row = rule.Rows[index];
-        builder.BeginRow(4f);
-        builder.AddButton(FieldName(row.Field), () =>
-        {
-            _menuRow = index;
-            _menuOpen = true;
-            _menuSearch = string.Empty;
-            Render();
-        });
-        var operators = row.Field.Operators;
-        var labels = operators.Select(op => _text.Get(row.Field.Kind == PartitionFieldKind.Bool
-            ? (op == PartitionOperator.Is ? "partition_op_yes" : "partition_op_no")
-            : "partition_op_" + op.ToString().ToLowerInvariant())).ToList();
-        builder.AddDropdown(labels, Math.Max(0, IndexOf(operators, row.Operator)), choice =>
-        {
-            rule.SetOperator(index, operators[choice]);
-            SaveDetail();
-            Render();
-        });
-
-        switch (row.Field.Kind)
-        {
-            case PartitionFieldKind.Enum:
-                var values = row.Field.EnumValues!;
-                var options = new List<string> { _text.Get("partition_choose") };
-                options.AddRange(values.Select(value => EnumText(row.Field, value)));
-                var current = row.Target?.Text == null ? 0 : IndexOf(values, row.Target.Text) + 1;
-                builder.AddDropdown(options, Math.Max(0, current), choice =>
-                {
-                    rule.SetTarget(index, choice == 0 ? null : PartitionValue.Of(values[choice - 1]));
-                    SaveDetail();
-                    Render();
-                });
-                break;
-            case PartitionFieldKind.Number:
-                builder.AddInput(_text.Get("partition_value_placeholder"), NumberText(row.Target),
-                    value =>
-                    {
-                        rule.SetTarget(index, ParseNumber(value));
-                        SaveDetail();
-                        Render();
-                    });
-                if (row.Operator == PartitionOperator.Range)
-                    builder.AddInput(_text.Get("partition_upper_placeholder"), NumberText(row.Upper),
-                        value =>
-                        {
-                            rule.SetUpper(index, ParseNumber(value));
-                            SaveDetail();
-                            Render();
-                        });
-                if (row.Field.UnitKey != null) builder.AddLabel(_text.Get(row.Field.UnitKey));
-                break;
-            case PartitionFieldKind.TypeSet:
-                // The game's type list, by localized name; types of the sample or an existing value are added.
-                var types = TypeChoices(row.Target?.Text);
-                var typeOptions = new List<string> { _text.Get("partition_choose") };
-                typeOptions.AddRange(types.Select(TypeName));
-                var currentType = row.Target?.Text == null ? 0 : IndexOf(types, row.Target.Text) + 1;
-                builder.AddDropdown(typeOptions, Math.Max(0, currentType), choice =>
-                {
-                    rule.SetTarget(index, choice == 0 ? null : PartitionValue.Of(types[choice - 1]));
-                    SaveDetail();
-                    Render();
-                });
-                break;
-            case PartitionFieldKind.ItemId:
-                builder.AddInput(_text.Get("partition_value_placeholder"), row.Target?.Text ?? string.Empty, value =>
-                {
-                    rule.SetTarget(index, string.IsNullOrWhiteSpace(value) ? null : PartitionValue.Of(value.Trim()));
-                    SaveDetail();
-                    Render();
-                });
-                break;
-        }
-
-        builder.AddButton(_text.Get("partition_remove_condition"), () =>
-        {
-            rule.Remove(index);
-            SaveDetail();
-            Render();
-        });
-        builder.End();
-    }
-
-    private void BuildMenu(CustomUIBuilder builder)
-    {
-        builder.AddInput(_text.Get("partition_search"), _menuSearch, null, "menu_search", typed =>
-        {
-            _menuSearch = typed ?? string.Empty;
-            RebuildMenuList();
-        });
-        builder.BeginScroll(160f);
-        _menuList = builder.CurrentContainer;
-        builder.End();
-        RebuildMenuList();
-    }
-
-    private void RebuildMenuList()
-    {
-        if (_window == null || _menuList == null || _detail == null) return;
-        RebuildMenuEntries();
-        FitHeight();
-    }
-
-    private void RebuildMenuEntries()
-    {
-        if (_window == null || _menuList == null || _detail == null) return;
-        CustomUIBuilder.ClearContainer(_menuList);
-        var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _menuList);
-        foreach (var field in MenuFields())
-        {
-            var name = FieldName(field);
-            if (_menuSearch.Length > 0 && name.IndexOf(_menuSearch, StringComparison.OrdinalIgnoreCase) < 0) continue;
-            var sample = SampleText(field);
-            var id = field.Id;
-            builder.AddButton(sample.Length == 0 ? name : name + "    <color=#8a8296>" + sample + "</color>", () =>
-            {
-                if (_detail == null) return;
-                if (_menuRow < 0) _detail.AddCondition(id);
-                else _detail.ChangeField(_menuRow, id);
-                SaveDetail();
-                _menuOpen = false;
-                Render();
-            });
-        }
-    }
-
-    private IEnumerable<PartitionField> MenuFields()
-    {
-        foreach (var field in PartitionFieldRegistry.All) yield return field;
-        var summary = _detail == null || _draft.At(_selected)?.DisplayKey is not { } key ? null : key.ReadSummary();
-        if (summary == null) yield break;
-        foreach (var feature in summary.Features.Where(feature => feature.Exposed && !feature.Disabled))
-            yield return PartitionFieldRegistry.Find(PartitionFieldRegistry.FeatureField(feature.Identifier))!;
-    }
-
-    private void BuildSample(CustomUIBuilder builder)
-    {
-        foreach (var field in MenuFields())
-        {
-            var value = SampleText(field);
-            builder.AddLabel(FieldName(field) + ": " + (value.Length == 0 ? _text.Get("partition_unknown_value") : value));
-        }
     }
 
     private string FieldName(PartitionField field) => field.Id.StartsWith(PartitionFieldRegistry.FeaturePrefix, StringComparison.Ordinal)
@@ -962,10 +856,6 @@ internal sealed class PartitionWindow
         return -1;
     }
 
-    /// <summary>
-    /// Calls the editor once per frame: Esc closes a menu or detail page before the window, and the grid reads the
-    /// pointer.
-    /// </summary>
     private sealed class FrameHandler : MonoBehaviour
     {
         private Action? _tick;

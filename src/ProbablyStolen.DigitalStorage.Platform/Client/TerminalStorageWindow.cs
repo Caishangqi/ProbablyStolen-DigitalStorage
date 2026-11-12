@@ -19,11 +19,8 @@ internal sealed class TerminalStorageWindow
     private const string WindowId = "digital_storage_terminal_storage";
     private const int Columns = TerminalWindowMetrics.Columns;
     private const int CellPixels = TerminalWindowMetrics.CellPixels;
-    // View settings shared by every terminal during the session; never saved.
-    private static TerminalSortOrder _sortOrder = TerminalSortOrder.Name;
-    private static TerminalSortDirection _sortDirection = TerminalSortDirection.Ascending;
-    private static TerminalSize _size = TerminalSize.Small;
     private readonly ModText _text;
+    private readonly ITerminalViewSettings _view;
     private readonly Func<TerminalInventorySnapshot> _readSnapshot;
     private readonly Func<TerminalEntry, long, TerminalExtractionResult> _extract;
     private readonly Func<ItemKey, long> _stackLimit;
@@ -73,8 +70,10 @@ internal sealed class TerminalStorageWindow
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
         Func<GameItem, int, bool> canStore, Func<ItemKey, GameItem?> findSample,
         Func<bool> diagnosticsEnabled, Action<string> writeDiagnostic,
-        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search)
+        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search,
+        ITerminalViewSettings view)
     {
+        _view = view ?? throw new ArgumentNullException(nameof(view));
         _subscribeNetwork = subscribeNetwork ?? throw new ArgumentNullException(nameof(subscribeNetwork));
         _findSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -151,9 +150,14 @@ internal sealed class TerminalStorageWindow
         }
 
         _session = PlayerStore.Instance;
-        _menu.SetSort(_sortOrder, _sortDirection);
+        _menu.SetSort(_view.SortOrder, _view.SortDirection);
         _networkSubscription?.Dispose();
-        _networkSubscription = _subscribeNetwork(_ => _inventoryMonitor.MarkDirty());
+        _networkSubscription = _subscribeNetwork(change =>
+        {
+            // The settings panel can change the view while this window is open; a size change applies on reopen.
+            if (change.Reason == NetworkChangeReason.ConfigChanged && IsCurrentSession()) ApplySort();
+            _inventoryMonitor.MarkDirty();
+        });
         _inventoryMonitor.Reset(Time.unscaledTime);
         Refresh(ReadSnapshot());
         _window.Show();
@@ -179,8 +183,6 @@ internal sealed class TerminalStorageWindow
             .SetSize(TerminalWindowMetrics.Width, TerminalWindowMetrics.GetHeight(_rows))
             .OnClose(ClearControls);
 
-        // Layout: the search field sits above the grid, the toolbar runs down its left side and the scrollbar
-        // down its right side.
         builder.BeginRow(spacing: gap);
         builder.AddSpace(TerminalWindowMetrics.ToolbarButton);
         builder.AddInput(_text.Get("terminal_storage_search_placeholder"), _screen.GetPage().SearchText, id: "search",
@@ -242,11 +244,10 @@ internal sealed class TerminalStorageWindow
         _window.root.AddComponent<TerminalInventoryRefreshHandler>().Initialize(PollSnapshot);
     }
 
-    /// <summary>Counts rows for the current size from the native window canvas, falling back to the default.</summary>
-    private static int CountRows()
+    private int CountRows()
     {
         var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
-        return TerminalWindowMetrics.GetRows(_size, LetterboxManager.GameAreaHeight,
+        return TerminalWindowMetrics.GetRows(_view.Size, LetterboxManager.GameAreaHeight,
             canvas == null ? 0f : canvas.scaleFactor);
     }
 
@@ -261,20 +262,19 @@ internal sealed class TerminalStorageWindow
         }
     }
 
-    /// <summary>Shows each toolbar button's current setting as its label and its full meaning as its tooltip.</summary>
     private void UpdateToolbar()
     {
         if (_window == null) return;
         SetToolbar("tool_modules", _text.Get("terminal_button_modules"), _text.Get("terminal_button_modules_tip"));
-        var byAmount = _sortOrder == TerminalSortOrder.Amount;
+        var byAmount = _view.SortOrder == TerminalSortOrder.Amount;
         SetToolbar("tool_sort", _text.Get(byAmount ? "terminal_button_sort_amount" : "terminal_button_sort_name"),
             _text.Get("terminal_button_sort_tip", _text.Get(byAmount ? "terminal_sort_amount" : "terminal_sort_name")));
-        var descending = _sortDirection == TerminalSortDirection.Descending;
+        var descending = _view.SortDirection == TerminalSortDirection.Descending;
         SetToolbar("tool_direction",
             _text.Get(descending ? "terminal_button_direction_desc" : "terminal_button_direction_asc"),
             _text.Get("terminal_button_direction_tip",
                 _text.Get(descending ? "terminal_direction_desc" : "terminal_direction_asc")));
-        var size = _size.ToString().ToLowerInvariant();
+        var size = _view.Size.ToString().ToLowerInvariant();
         SetToolbar("tool_size", _text.Get("terminal_button_size_" + size),
             _text.Get("terminal_button_size_tip", _text.Get("terminal_size_" + size)));
     }
@@ -288,13 +288,15 @@ internal sealed class TerminalStorageWindow
 
     private void CycleSortOrder()
     {
-        _sortOrder = _sortOrder == TerminalSortOrder.Name ? TerminalSortOrder.Amount : TerminalSortOrder.Name;
+        if (!IsCurrentSession()) return;
+        _view.SortOrder = _view.SortOrder == TerminalSortOrder.Name ? TerminalSortOrder.Amount : TerminalSortOrder.Name;
         ApplySort();
     }
 
     private void CycleSortDirection()
     {
-        _sortDirection = _sortDirection == TerminalSortDirection.Ascending
+        if (!IsCurrentSession()) return;
+        _view.SortDirection = _view.SortDirection == TerminalSortDirection.Ascending
             ? TerminalSortDirection.Descending
             : TerminalSortDirection.Ascending;
         ApplySort();
@@ -302,8 +304,7 @@ internal sealed class TerminalStorageWindow
 
     private void ApplySort()
     {
-        if (!IsCurrentSession()) return;
-        _menu.SetSort(_sortOrder, _sortDirection);
+        _menu.SetSort(_view.SortOrder, _view.SortDirection);
         UpdateToolbar();
         ApplyMenuView(preserveView: true);
     }
@@ -312,7 +313,7 @@ internal sealed class TerminalStorageWindow
     private void CycleSize()
     {
         if (!IsCurrentSession() || _window == null) return;
-        _size = _size == TerminalSize.Full ? TerminalSize.Small : _size + 1;
+        _view.Size = _view.Size == TerminalSize.Full ? TerminalSize.Small : _view.Size + 1;
         var position = _window.Rect.anchoredPosition;
         var scroll = _screen.ScrollRow;
         _window.Close();
@@ -375,7 +376,6 @@ internal sealed class TerminalStorageWindow
             $"mode:{(int)canvas.renderMode},order:{canvas.sortingOrder},layer:{canvas.sortingLayerID},override:{canvas.overrideSorting},root_order:{canvas.rootCanvas.sortingOrder},scale:{canvas.scaleFactor:0.##}";
     }
 
-    /// <summary>Renders pictures cached at snapshot time during filtering and scrolling.</summary>
     private void SyncSlotPicture(int index, TerminalEntry? entry)
     {
         _grid.ShowPicture(index, entry == null ? null : _pictures.Get(entry.Key), entry != null);
@@ -609,9 +609,6 @@ internal sealed class TerminalStorageWindow
         {
             _hoverKey = entry.Key;
             _hoverSample = _findSample(entry.Key) as GameItemElement;
-            // Diagnostics for terminal item pictures; uncomment together with the detail block in NativeItemView.Sync.
-            // _writeDiagnostic($"Digital Storage: item_view item={_hoverSample?.identifier ?? "<none>"} " +
-            //     $"{NativeItemView.LastSummary}");
         }
 
         var overlay = OverlayHandler.current;
@@ -662,7 +659,6 @@ internal sealed class TerminalStorageWindow
         return null;
     }
 
-    /// <summary>Lists the slot clicks, shown in a box under the hovered item's tooltip.</summary>
     private RichText BuildHintText() => new RichTextBuilder(60)
         .AddLine(_text.Get("terminal_hint_title"), ignoreEmpty: true, RenderHandler.ColorPalette.White)
         .AddLine(_text.Get("terminal_hint_left"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)

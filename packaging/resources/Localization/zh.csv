@@ -132,6 +132,15 @@ terminal_size_small,小
 terminal_size_medium,中
 terminal_size_tall,高
 terminal_size_full,全屏
+config_section_terminal_view,终端显示
+terminal_view_sort_name,排序方式
+terminal_view_sort_desc,终端物品的排序依据. 也可以用终端左侧的按钮切换, 切换后会记住.
+terminal_view_direction_name,排序方向
+terminal_view_direction_desc,升序或降序. 也可以用终端左侧的按钮切换, 切换后会记住.
+terminal_view_size_name,终端高度
+terminal_view_size_desc,终端窗口占屏幕高度的比例. 也可以用终端左侧的按钮切换, 切换后会记住.
+partition_view_size_name,分区窗口高度
+partition_view_size_desc,元件分区窗口占屏幕高度的比例. 也可以用分区窗口左侧的按钮切换, 切换后会记住.
 terminal_hint_title,操作
 terminal_hint_left,左键: 取出一组 (不可堆叠的物品每次 1 个)
 terminal_hint_right,右键: 取出半组 (已存的堆不会拆分)
@@ -184,6 +193,10 @@ workbench_configure,配置分区
 workbench_status_empty,请放入一个已组装的存储元件。
 workbench_cell_panel,元件
 workbench_actions_panel,分区
+workbench_info_mode,模式
+workbench_info_rules,规则
+workbench_info_types,种类
+workbench_info_count,{0} / {1}
 workbench_reject_not_cell,只能放入已组装的存储元件。
 workbench_reject_migrate,此元件还是旧存储格式。先把它放进通电的网络一次，完成升级。
 workbench_reject_schema,此元件需要先用旧版本模组升级。
@@ -216,6 +229,13 @@ partition_duplicate,复制
 partition_remove,删除
 partition_clear,清空
 partition_undo,撤销
+partition_tool_whitelist,白
+partition_tool_blacklist,黑
+partition_tool_open,开
+partition_tool_duplicate,复
+partition_tool_remove,删
+partition_tool_clear,清
+partition_tool_undo,撤
 partition_warning_nevermatches,这些条件永远不会匹配。
 partition_warning_covered,另一条规则已经覆盖了这条规则的匹配范围。
 partition_duplicate_found,已有相同的规则。
@@ -227,6 +247,9 @@ partition_failed,保存失败，修改已撤回，原分区仍然生效。
 partition_repaired,已移除损坏的分区数据（{0} 条规则）。其余部分照常生效，下一次修改时一并保存。
 partition_rule_name,规则名称（可选）
 partition_all_conditions,满足以下全部条件
+partition_condition_count,{0} 项
+partition_remove_condition_tip,删除此条件
+partition_search_value,搜索…
 partition_add_condition,＋ 添加条件
 partition_remove_condition,×
 partition_summary_label,匹配：{0}

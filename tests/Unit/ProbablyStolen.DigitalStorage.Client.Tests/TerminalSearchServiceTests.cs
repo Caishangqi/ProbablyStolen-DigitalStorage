@@ -309,4 +309,16 @@ public sealed class TerminalSearchServiceTests
         Action duplicateMatcher = () => registry.RegisterMatcher("plain", (_, _) => true);
         Assert.Throws<InvalidOperationException>(duplicateMatcher);
     }
+
+    [Test]
+    public void MatchesText_UsesSubstringAndPinyinWithoutQuerySyntax()
+    {
+        var service = CreateService();
+        Assert.That(service.MatchesText("测试材料", "材料"), Is.True);
+        Assert.That(service.MatchesText("Water Bottle", " bottle "), Is.True, "Case-insensitive and trimmed.");
+        Assert.That(service.MatchesText("测试材料", "cailiao"), Is.True, "Registered matchers such as pinyin apply.");
+        Assert.That(service.MatchesText("测试", "-测试"), Is.False, "A leading minus is text, not a negation.");
+        Assert.That(service.MatchesText("#tag", "#tag"), Is.True, "A prefix character is text, not a field filter.");
+        Assert.That(service.MatchesText("测试", "   "), Is.False);
+    }
 }

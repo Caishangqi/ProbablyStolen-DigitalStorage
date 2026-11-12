@@ -74,7 +74,11 @@ internal sealed class CellPartitionTags : ICellPartitionStore
         {
             reportPresentationFailure($"Digital Storage: partition saved but native presentation refresh failed ({error.GetType().Name}).");
         }
+        Committed?.Invoke(_cell);
     }
+
+    /// <summary>Raised after a partition change is saved on a cell.</summary>
+    internal static event Action<GameItem>? Committed;
 
     private static TagSystem CloneState(TagSystem source)
     {

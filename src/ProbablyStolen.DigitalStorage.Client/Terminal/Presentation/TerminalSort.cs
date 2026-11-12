@@ -1,3 +1,5 @@
+using System;
+
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
 /// <summary>Selects the terminal ordering key.</summary>
@@ -34,4 +36,20 @@ public enum TerminalSize
 
     /// <summary>All rows that fit.</summary>
     Full = 4
+}
+
+/// <summary>Reads stored terminal view choices; a value outside the enum reads as the default.</summary>
+public static class TerminalViewPolicy
+{
+    /// <summary>Returns the order, or <see cref="TerminalSortOrder.Name"/> when it is undefined.</summary>
+    public static TerminalSortOrder Normalize(TerminalSortOrder order) =>
+        Enum.IsDefined(typeof(TerminalSortOrder), order) ? order : TerminalSortOrder.Name;
+
+    /// <summary>Returns the direction, or <see cref="TerminalSortDirection.Ascending"/> when it is undefined.</summary>
+    public static TerminalSortDirection Normalize(TerminalSortDirection direction) =>
+        Enum.IsDefined(typeof(TerminalSortDirection), direction) ? direction : TerminalSortDirection.Ascending;
+
+    /// <summary>Returns the size, or the fallback (<see cref="TerminalSize.Small"/> unless given) when it is undefined.</summary>
+    public static TerminalSize Normalize(TerminalSize size, TerminalSize fallback = TerminalSize.Small) =>
+        Enum.IsDefined(typeof(TerminalSize), size) ? size : fallback;
 }

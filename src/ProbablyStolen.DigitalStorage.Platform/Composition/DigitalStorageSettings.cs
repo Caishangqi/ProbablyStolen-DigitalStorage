@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
+using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -15,9 +17,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 /// without as a text box, so numbers are defined without a range to let players type them,
 /// and every read clamps the stored value. Each section becomes a header in the order entries are defined.
 /// </summary>
-internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
+internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings
 {
     internal const int MaximumPowerUsage = 1000;
+    internal const string SortOrderKey = "terminal_view_sort";
+    internal const string SortDirectionKey = "terminal_view_direction";
+    internal const string SizeKey = "terminal_view_size";
+    internal const string PartitionSizeKey = "partition_view_size";
     // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
@@ -43,6 +49,10 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
     private readonly ConfigEntry<SearchMode> _descriptionSearchMode;
     private readonly ConfigEntry<SearchMode> _identifierSearchMode;
     private readonly ConfigEntry<bool> _searchHighlighting;
+    private readonly ConfigEntry<TerminalSortOrder> _sortOrder;
+    private readonly ConfigEntry<TerminalSortDirection> _sortDirection;
+    private readonly ConfigEntry<TerminalSize> _size;
+    private readonly ConfigEntry<TerminalSize> _partitionSize;
     private bool _invalidPinyinModeLogged;
 
     internal DigitalStorageSettings(string modId, ModText text)
@@ -65,6 +75,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         const string debug = "config_section_debug";
         const string vendors = "config_section_vendors";
         const string search = "config_section_terminal_search";
+        const string view = "config_section_terminal_view";
         _controllerPowerUsage = config.Define("controller_power_usage", 3, power,
             () => text.Get("network_power_controller_name"), tooltip: () => text.Get("network_power_controller_desc"));
         _drivePowerUsage = config.Define("drive_power_usage", 2, power,
@@ -93,6 +104,14 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         _descriptionSearchMode = DefineSearchMode(config, "terminal_search_descriptions", SearchMode.Enabled, search, text, "descriptions");
         _identifierSearchMode = DefineSearchMode(config, "terminal_search_identifiers", SearchMode.Disabled, search, text, "identifiers");
         _searchHighlighting = DefineSearchBool(config, "terminal_search_highlighting", true, search, text, "highlighting");
+        _sortOrder = config.DefineEnum(SortOrderKey, TerminalSortOrder.Name, view,
+            () => text.Get("terminal_view_sort_name"), () => text.Get("terminal_view_sort_desc"));
+        _sortDirection = config.DefineEnum(SortDirectionKey, TerminalSortDirection.Ascending, view,
+            () => text.Get("terminal_view_direction_name"), () => text.Get("terminal_view_direction_desc"));
+        _size = config.DefineEnum(SizeKey, TerminalSize.Small, view,
+            () => text.Get("terminal_view_size_name"), () => text.Get("terminal_view_size_desc"));
+        _partitionSize = config.DefineEnum(PartitionSizeKey, TerminalSize.Medium, view,
+            () => text.Get("partition_view_size_name"), () => text.Get("partition_view_size_desc"));
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
@@ -101,7 +120,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
-            (_identifierSearchMode, search), (_searchHighlighting, search)
+            (_identifierSearchMode, search), (_searchHighlighting, search),
+            (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view)
         })
         {
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
@@ -149,6 +169,30 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort
         () => text.Get("terminal_search_" + suffix + "_desc"));
 
     internal bool GetTerminalDiagnostics() => _terminalDiagnostics.Value;
+
+    public TerminalSortOrder SortOrder
+    {
+        get => TerminalViewPolicy.Normalize(_sortOrder.Value);
+        set => _sortOrder.Set(value);
+    }
+
+    public TerminalSortDirection SortDirection
+    {
+        get => TerminalViewPolicy.Normalize(_sortDirection.Value);
+        set => _sortDirection.Set(value);
+    }
+
+    public TerminalSize Size
+    {
+        get => TerminalViewPolicy.Normalize(_size.Value);
+        set => _size.Set(value);
+    }
+
+    public TerminalSize PartitionSize
+    {
+        get => TerminalViewPolicy.Normalize(_partitionSize.Value, TerminalSize.Medium);
+        set => _partitionSize.Set(value);
+    }
 
     /// <summary>Gets whether double-clicking a storage cell also shows its storage pages.</summary>
     internal bool GetShowCellPages() => _showCellPages.Value;

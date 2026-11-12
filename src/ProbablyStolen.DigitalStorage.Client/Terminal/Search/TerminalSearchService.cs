@@ -332,6 +332,14 @@ public sealed class TerminalSearchService
             : term.Negated ? !TermMatches(document, term, matchText) : TermMatches(document, term, matchText)));
     }
 
+    /// <summary>
+    /// Checks one plain label against typed text as the terminal matches a name: a case-insensitive substring, or a
+    /// registered matcher such as pinyin while it is enabled. The query syntax (prefixes, negation, alternatives) does
+    /// not apply, so short lists such as dropdown choices filter by what was typed.
+    /// </summary>
+    public bool MatchesText(string text, string query) =>
+        MatchText(text ?? string.Empty, (query ?? string.Empty).Trim());
+
     /// <summary>Tokenizes the same query syntax into raw UTF16 color spans.</summary>
     public IReadOnlyList<SearchColorSpan> GetColorSpans(string? query, bool matched)
     {

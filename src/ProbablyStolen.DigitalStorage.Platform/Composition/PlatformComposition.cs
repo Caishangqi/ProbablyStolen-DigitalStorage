@@ -26,6 +26,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly GridNetworkTooltipPresenter _networkTooltipPresenter;
     private readonly BasicCellHandler _cellHandler;
     private readonly StorageContentRegistration _content;
+    private readonly CellWorkbenchItem _workbench;
     private readonly CellHealth _health;
     private readonly LegacyMigration _migration;
     private readonly StorageEventBus _events;
@@ -43,7 +44,7 @@ public sealed class PlatformComposition : IDisposable
         GridNetworkTooltipPresenter networkTooltipPresenter, BasicCellHandler cellHandler,
         ItemAppearance appearance,
         StorageContentRegistration content, CellHealth health, LegacyMigration migration, StorageEventBus events,
-        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search)
+        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench)
     {
         _events = events;
         _settings = settings;
@@ -57,6 +58,7 @@ public sealed class PlatformComposition : IDisposable
         _cellHandler = cellHandler;
         _appearance = appearance;
         _content = content;
+        _workbench = workbench;
         _health = health;
         _migration = migration;
         _pinyinLifecycle = new PinyinLifecycleCoordinator(
@@ -129,15 +131,18 @@ public sealed class PlatformComposition : IDisposable
         var drive = new DriveItem(appearance, windows, inventory, networkEvents, contentSynchronization);
         var controller = new ControllerItem(appearance, windows, contentSynchronization);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization, search.Service);
+            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization, search.Service,
+            networkPowerSettings);
         var workbench = new CellWorkbenchItem(text, appearance, contentSynchronization,
-            target => PartitionWindow.Open(text, target, message => log.Log(message)), PartitionWindow.CloseFor);
+            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message)),
+            PartitionWindow.CloseFor,
+            message => log.Log(message));
         var modules = new CellModuleFactory(appearance, contentSynchronization, text);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
             modules, contentSynchronization, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellHandler, appearance, content, cellHealth, migration, eventBus,
-            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search);
+            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -190,6 +195,7 @@ public sealed class PlatformComposition : IDisposable
 
         _isEnabled = false;
         _isDisposed = true;
+        _workbench.Detach();
         ModHook.OnModAssetsLoaded -= OnAssetsLoaded;
         _localeRegistration?.Dispose();
         _localeRegistration = null;

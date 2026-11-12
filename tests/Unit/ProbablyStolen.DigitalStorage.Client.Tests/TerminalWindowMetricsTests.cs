@@ -55,9 +55,9 @@ public sealed class TerminalWindowMetricsTests
     }
 
     [Test]
-    public void DefaultGrid_KeepsTwentyEightSlotsAndFitsToolbarGridAndScrollbar()
+    public void DefaultGrid_KeepsThirtySixSlotsAndFitsToolbarGridAndScrollbar()
     {
-        Assert.That(TerminalWindowMetrics.Columns * TerminalWindowMetrics.Rows, Is.EqualTo(28));
+        Assert.That(TerminalWindowMetrics.Columns * TerminalWindowMetrics.Rows, Is.EqualTo(36));
         Assert.That(TerminalWindowMetrics.ToolbarButton + 4 + TerminalWindowMetrics.GridWidth + 4 +
             TerminalWindowMetrics.ScrollbarWidth, Is.LessThanOrEqualTo(TerminalWindowMetrics.Width - 32));
         // Search row, grid and status row with the content spacing, below the title and window padding.

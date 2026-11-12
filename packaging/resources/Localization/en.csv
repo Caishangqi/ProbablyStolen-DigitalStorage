@@ -132,6 +132,15 @@ terminal_size_small,Small
 terminal_size_medium,Medium
 terminal_size_tall,Tall
 terminal_size_full,Full
+config_section_terminal_view,Terminal view
+terminal_view_sort_name,Sort by
+terminal_view_sort_desc,How the terminal orders items. The button on the left of the terminal also changes it, and the choice is kept.
+terminal_view_direction_name,Sort direction
+terminal_view_direction_desc,Ascending or descending. The button on the left of the terminal also changes it, and the choice is kept.
+terminal_view_size_name,Terminal height
+terminal_view_size_desc,How much of the screen height the terminal window uses. The button on the left of the terminal also changes it, and the choice is kept.
+partition_view_size_name,Partition window height
+partition_view_size_desc,How much of the screen height the cell partition window uses. The button on the left of the window also changes it, and the choice is kept.
 terminal_hint_title,Controls
 terminal_hint_left,Left click: take one stack (one item if it does not stack)
 terminal_hint_right,Right click: take half a stack (stored stacks are not split)
@@ -184,6 +193,10 @@ workbench_configure,Configure partition
 workbench_status_empty,Place an assembled storage cell here.
 workbench_cell_panel,Cell
 workbench_actions_panel,Partition
+workbench_info_mode,Mode
+workbench_info_rules,Rules
+workbench_info_types,Types
+workbench_info_count,{0} / {1}
 workbench_reject_not_cell,Only assembled storage cells fit here.
 workbench_reject_migrate,This cell uses the old storage format. Put it in a powered network once to update it.
 workbench_reject_schema,This cell needs an older mod version first.
@@ -216,6 +229,13 @@ partition_duplicate,Copy
 partition_remove,Remove
 partition_clear,Clear
 partition_undo,Undo
+partition_tool_whitelist,W
+partition_tool_blacklist,B
+partition_tool_open,O
+partition_tool_duplicate,C
+partition_tool_remove,D
+partition_tool_clear,X
+partition_tool_undo,U
 partition_warning_nevermatches,These conditions never match.
 partition_warning_covered,Another rule already matches everything this rule matches.
 partition_duplicate_found,This rule already exists.
@@ -227,6 +247,9 @@ partition_failed,Saving failed; the change was undone and the previous partition
 partition_repaired,Damaged partition data was removed ({0} rules). The rest stays in force and is saved with your next change.
 partition_rule_name,Rule name (optional)
 partition_all_conditions,Match all of these conditions
+partition_condition_count,{0} items
+partition_remove_condition_tip,Remove this condition
+partition_search_value,Search…
 partition_add_condition,+ Add condition
 partition_remove_condition,×
 partition_summary_label,Matches: {0}
