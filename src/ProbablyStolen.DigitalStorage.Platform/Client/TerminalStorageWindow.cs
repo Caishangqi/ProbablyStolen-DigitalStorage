@@ -258,7 +258,7 @@ internal sealed class TerminalStorageWindow
 
     private static void AddToolbarButton(CustomUIBuilder builder, string id, Action onClick)
     {
-        builder.AddButton(string.Empty, onClick, id);
+        builder.AddPointerButton(string.Empty, onClick, id);
         SetControlSize(builder.Last, TerminalWindowMetrics.ToolbarButton, TerminalWindowMetrics.ToolbarButton);
         if (builder.Last.text != null)
         {

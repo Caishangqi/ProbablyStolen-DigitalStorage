@@ -70,7 +70,7 @@ internal sealed class ItemSlotGrid
             builder.BeginPanel(_cellPixels, _cellPixels, padding: 2f, spacing: 0f, id: $"slot_{index}");
             if (index == 0) Root = builder.Last.Rect.parent as RectTransform;
             ConfigureBorder(builder.Last);
-            builder.AddButton(string.Empty, () => click(slotIndex), $"button_{index}");
+            builder.AddPointerButton(string.Empty, () => click(slotIndex), $"button_{index}");
             if (secondaryClick != null)
                 builder.Last.root.AddComponent<TerminalSlotClick>().Initialize(() => secondaryClick(slotIndex));
             _buttons[index] = builder.Last;

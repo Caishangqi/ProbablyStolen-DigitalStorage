@@ -63,11 +63,11 @@ internal sealed partial class PartitionWindow
         builder.BeginRow(Gap, TextAnchor.MiddleLeft);
         FixWidth(builder.CurrentContainer.gameObject, BodyWidth);
         CustomUIElement? add = null;
-        builder.AddButton(_text.Get("partition_add_condition"), () => OpenFieldPicker(add!, -1));
+        builder.AddPointerButton(_text.Get("partition_add_condition"), () => OpenFieldPicker(add!, -1));
         add = builder.Last;
         SetSize(add, 140f, ControlHeight);
         builder.AddFlexibleSpace();
-        builder.AddButton(_text.Get("partition_sample_attributes"), () =>
+        builder.AddPointerButton(_text.Get("partition_sample_attributes"), () =>
         {
             _showSample = !_showSample;
             Render();
@@ -91,7 +91,7 @@ internal sealed partial class PartitionWindow
     private void BuildHeader(CustomUIBuilder builder, RuleDraft rule)
     {
         builder.BeginRow(6f, TextAnchor.MiddleLeft);
-        builder.AddButton(string.Empty, Back);
+        builder.AddPointerButton(string.Empty, Back);
         var back = builder.Last;
         SetSize(back, ControlHeight, ControlHeight);
         var arrow = PixelArrow.Add(back.root.transform, PixelArrow.Direction.Left, MachineryStyle.BUTTON_TEXT);
@@ -219,7 +219,7 @@ internal sealed partial class PartitionWindow
         }
 
         builder.AddFlexibleSpace();
-        builder.AddButton(_text.Get("partition_remove_condition"), () =>
+        builder.AddPointerButton(_text.Get("partition_remove_condition"), () =>
         {
             rule.Remove(index);
             SaveDetail();

@@ -56,7 +56,7 @@ internal sealed class PopupDropdown
 
     internal static CustomUIElement AddField(CustomUIBuilder builder, string value, float width, Action onClick)
     {
-        builder.AddButton(value, onClick);
+        builder.AddPointerButton(value, onClick);
         var field = builder.Last;
         StyleField(field, width);
         return field;
@@ -200,7 +200,7 @@ internal sealed class PopupDropdown
             var label = option.Detail is { Length: > 0 } detail
                 ? option.Label + "  <color=" + MutedColor + ">" + detail + "</color>"
                 : option.Label;
-            builder.AddButton(label, () => Choose(chosen));
+            builder.AddPointerButton(label, () => Choose(chosen));
             StyleRow(builder.Last, index == _selected);
         }
     }

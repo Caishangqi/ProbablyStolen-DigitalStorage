@@ -272,7 +272,7 @@ internal sealed partial class PartitionWindow
 
     private static void AddTool(CustomUIBuilder builder, string label, string tooltip, Action onClick)
     {
-        builder.AddButton(label, onClick);
+        builder.AddPointerButton(label, onClick);
         var button = builder.Last;
         var layout = button.root.GetComponent<LayoutElement>() ?? button.root.AddComponent<LayoutElement>();
         layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight =
