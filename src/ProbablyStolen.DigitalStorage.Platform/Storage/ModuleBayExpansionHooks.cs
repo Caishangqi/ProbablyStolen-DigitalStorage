@@ -1,4 +1,4 @@
-using System;
+using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
@@ -12,14 +12,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 public static class ModuleBayExpansionHooks
 {
     /// <summary>
-    /// Adds the cell rule to a new kit. The kit's own rule refuses items without the machine tag, and targeting
-    /// delegates of one item combine with OR, so only an added delegate on the kit itself can admit a cell.
+    /// Lets a new kit also target storage cells, keeping its native machine rule.
     /// </summary>
     public static void ExtendKit(GameItem kit)
     {
         if (kit == null) return;
-        kit.mayItemTargetItemFunc += CanExpandCell;
-        kit.canItemTargetItemFunc += CanExpandCell;
+        kit.mayItemTargetItemFunc = TargetRules.OrWith<GameItem, GameItem>(kit.mayItemTargetItemFunc, CanExpandCell);
+        kit.canItemTargetItemFunc = TargetRules.OrWith<GameItem, GameItem>(kit.canItemTargetItemFunc, CanExpandCell);
     }
 
     /// <summary>
