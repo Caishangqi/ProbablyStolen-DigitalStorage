@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -18,6 +20,7 @@ internal static class NativeWindowLayer
     /// </summary>
     /// <param name="window">The window to move.</param>
     /// <param name="viewportName">The viewport object name.</param>
+    /// <param name="back">Handles one back action for this window.</param>
     /// <param name="diagnostics">Records the window size and position, or null.</param>
     /// <param name="raised">
     /// Whether the window joins the raised layer of focused native windows. A native window that gains focus moves to
@@ -26,7 +29,7 @@ internal static class NativeWindowLayer
     /// front, and a click on either brings it forward (the drag handler's <c>moveFrontObjects</c>, PixelWindow.ToFront).
     /// Falls back to <c>windowRoot</c> before the raised layer exists.
     /// </param>
-    internal static RectTransform? Attach(CustomUIWindow window, string viewportName, TerminalDiagnostics? diagnostics = null,
+    internal static RectTransform? Attach(CustomUIWindow window, string viewportName, Action back, TerminalDiagnostics? diagnostics = null,
         bool raised = false)
     {
         var native = RenderHandler.current;
@@ -55,8 +58,13 @@ internal static class NativeWindowLayer
         drag.moveFrontObjects = new List<GameObject> { viewport.gameObject };
         if (window.frame != null) window.frame.dragHandle = drag;
         window.root.AddComponent<NativeWindowSizer>().Initialize(viewport, diagnostics);
-        window.root.AddComponent<RaiseOnPress>().Initialize(viewport);
+        window.root.AddComponent<RaiseOnPress>().Initialize(window, viewport, back);
         return viewport;
+    }
+
+    internal static void Detach(CustomUIWindow? window)
+    {
+        if (window?.root != null) window.root.GetComponent<RaiseOnPress>()?.Release();
     }
 
     private static RectTransform? RaisedRoot() =>
@@ -104,8 +112,23 @@ internal static class NativeWindowLayer
     {
         private readonly List<RaycastResult> _hits = new();
         private RectTransform? _viewport;
+        private WindowBackBridge.WindowRegistration? _registration;
 
-        internal void Initialize(RectTransform viewport) => _viewport = viewport;
+        internal void Initialize(CustomUIWindow window, RectTransform viewport, Action back)
+        {
+            _viewport = viewport;
+            _registration = (WindowBackBridge.WindowRegistration)WindowBackBridge.Register(window, viewport, back);
+        }
+
+        private void OnEnable() => _registration?.Focus();
+
+        internal void Release()
+        {
+            _registration?.Dispose();
+            _registration = null;
+        }
+
+        private void OnDestroy() => Release();
 
         private void Update()
         {
@@ -113,7 +136,7 @@ internal static class NativeWindowLayer
             _hits.Clear();
             EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = Input.mousePosition }, _hits);
             // Only the topmost hit counts: a press on a window lying over this one belongs to that window.
-            if (_hits.Count > 0 && _hits[0].gameObject.transform.IsChildOf(transform)) _viewport.SetAsLastSibling();
+            if (_hits.Count > 0 && _hits[0].gameObject.transform.IsChildOf(transform)) _registration?.Focus();
         }
     }
 

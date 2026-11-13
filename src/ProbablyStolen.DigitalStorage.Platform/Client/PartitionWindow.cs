@@ -32,7 +32,6 @@ internal sealed partial class PartitionWindow
     private const float WindowWidth = TerminalWindowMetrics.Width;
     private const float CountWidth = 110f;
     private static PartitionWindow? _current;
-    private static int _escapeFrame = -1;
     private readonly ModText _text;
     private readonly ITerminalViewSettings _view;
     private readonly TerminalSearchService _search;
@@ -141,14 +140,6 @@ internal sealed partial class PartitionWindow
             current.Close();
     }
 
-    /// <summary>
-    /// Gets whether the back key belongs to the editor this frame: it is open, or it handled the key this frame and
-    /// closed. The native store then must not also close its topmost window (the workbench).
-    /// </summary>
-    internal static bool OwnsEscape() =>
-        _escapeFrame == Time.frameCount ||
-        _current is { _window: { IsAlive: true, IsVisible: true } } current && current._session.IsActive;
-
     private void Show()
     {
         var builder = CustomUIManager.Instance.CreateWindow(WindowId, _text.Get("partition_title"), "overlay", null,
@@ -170,7 +161,7 @@ internal sealed partial class PartitionWindow
         _dropdown = new PopupDropdown(_window, _search.MatchesText);
         // On the native window layer a dragged item's ghost is drawn above this window, as over the terminal.
         // Raised: the editor opens from the workbench window, a focused native window on the raised layer.
-        NativeWindowLayer.Attach(_window, "digital_storage_partition_viewport", raised: true);
+        NativeWindowLayer.Attach(_window, "digital_storage_partition_viewport", OnEscape, raised: true);
         WindowPositionMemory.Restore(_workbench, _window);
         WindowPositionMemory.Track(_workbench, _window);
         _shield = NativeWindowLayer.AttachInputShield(_window, "partition_input_shield");
@@ -190,6 +181,7 @@ internal sealed partial class PartitionWindow
 
     private void OnClosed()
     {
+        NativeWindowLayer.Detach(_window);
         _session.End();
         _dropdown?.Close();
         _dropdown = null;
@@ -213,10 +205,8 @@ internal sealed partial class PartitionWindow
 
     private void OnEscape()
     {
-        if (!_session.IsActive) return;
-        if (_dropdown?.IsOpen == true) _dropdown.Close();
-        else if (_detail != null) Back();
-        else Close();
+        PartitionBackHandler.Handle(_session.IsActive, _dropdown?.IsOpen == true, _gestures.PressSlot >= 0,
+            _detail != null, () => _dropdown?.Close(), EndRuleDrag, Back, Close);
     }
 
     private void Render()
@@ -440,19 +430,10 @@ internal sealed partial class PartitionWindow
     }
 
     /// <summary>
-    /// Reads the pointer and keys every frame, as the native input handlers do: Esc, the wheel, rule dragging and the
-    /// highlights of a native drag. Closing and the rule limit follow events instead.
+    /// Reads pointer input every frame for the wheel, rule dragging and native drag highlights.
     /// </summary>
     private void Tick()
     {
-        // The game's back key (rebindable), as CustomUIManager and the store read it; a focused text field keeps it.
-        // StoreUIManagerEscapePatch stops the store from also closing the workbench (OwnsEscape).
-        if (KeyBindHelper.GetBackDown() && !StoreUIManager.IsTextFieldFocused())
-        {
-            _escapeFrame = Time.frameCount;
-            OnEscape();
-        }
-
         if (_window != null) _dropdown?.CloseOnOutsidePress(CameraOf(_window));
         if (_window == null || !_session.IsActive || _detail != null || _grid == null) return;
         var camera = CameraOf(_window);

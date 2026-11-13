@@ -182,7 +182,7 @@ internal sealed class TerminalStorageWindow
         const float gap = 4f;
         var bodyWidth = TerminalWindowMetrics.ToolbarButton + gap + TerminalWindowMetrics.GridWidth + gap +
             TerminalWindowMetrics.ScrollbarWidth;
-        builder.SetDraggable(true).SetCloseOnEscape()
+        builder.SetDraggable(true).SetCloseOnEscape(false)
             .SetSize(TerminalWindowMetrics.Width, TerminalWindowMetrics.GetHeight(_rows))
             .OnClose(ClearControls);
 
@@ -368,7 +368,7 @@ internal sealed class TerminalStorageWindow
 
         var previousLayer = DescribeCanvas(_window.root);
         // Raised, so the terminal and native windows share one layer and order by focus like native windows do.
-        if (NativeWindowLayer.Attach(_window, "digital_storage_terminal_viewport", _diagnostics, raised: true) == null) return;
+        if (NativeWindowLayer.Attach(_window, "digital_storage_terminal_viewport", () => _window?.Close(), _diagnostics, raised: true) == null) return;
         _diagnostics?.Record("drag_rebound", "native_canvas=true parent=private_viewport clamp=full_window focus=viewport");
         _diagnostics?.Record("window_layer",
             $"previous={previousLayer} window={DescribeCanvas(_window.root)} native_overlay={DescribeCanvas(native.overlayRootObject)} style=machinery slots=flat-dark");
@@ -699,6 +699,7 @@ internal sealed class TerminalStorageWindow
 
     private void ClearControls()
     {
+        NativeWindowLayer.Detach(_window);
         HideHoverTooltip();
         _inputHighlighter?.Dispose();
         _inputHighlighter = null;
