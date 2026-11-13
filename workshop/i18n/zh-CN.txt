@@ -108,7 +108,7 @@
 
 [h3] 支持的模组 [/h3]
 [list]
-[*] [url=steamcommunity.com/sharedfiles/filedetails/?id=3829653222] 「顾客上货助手」 [/url] 一键上货可从助手扫描范围内的在线数字网络选择商品。
+[*] [url=steamcommunity.com/sharedfiles/filedetails/?id=3829653222] 「顾客上货助手」[/url] | 兼容版本 [1.6.4] ：一键上货可从助手扫描范围内的在线数字网络选择商品。
 [/list]
 
 [h2]问题与反馈[/h2]
