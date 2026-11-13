@@ -159,10 +159,23 @@ Second line.</Description>
 
         Image.new("RGB", (64, 64), "white").save(self.preview_path)
         self.vdf_path = self.root / ".secrets" / "workshop.vdf"
-        changelog = patch.object(workshop, "WORKSHOP_CHANGELOG_DIR", self.root / "changelog")
-        changelog.start()
-        self.addCleanup(changelog.stop)
-        self.write_notes("Fix A.", "修复 A。")
+        self.workshop_root = self.root / "workshop"
+        (self.workshop_root / "i18n").mkdir(parents=True)
+        (self.workshop_root / "changelog").mkdir(parents=True)
+        root_patch = patch.object(workshop, "WORKSHOP_ROOT", self.workshop_root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+        locale_paths = {
+            "en-US": self.workshop_root / "i18n" / "en-US.txt",
+            "zh-CN": self.workshop_root / "i18n" / "zh-CN.txt",
+        }
+        locales_patch = patch.dict(workshop.WORKSHOP_LOCALE_PATHS, locale_paths)
+        locales_patch.start()
+        self.addCleanup(locales_patch.stop)
+        changelog_patch = patch.object(workshop, "WORKSHOP_CHANGELOG_PATH", self.workshop_root / "changelog" / "zh-CN.txt")
+        changelog_patch.start()
+        self.addCleanup(changelog_patch.stop)
+        self.write_notes("Fix A.", "0.3.0\n\n增加一项功能。\n\n- 修复 A。")
         self.settings = workshop.WorkshopSettings(
             package_directory=self.package_directory,
             steamcmd_directory=self.steamcmd_directory,
@@ -172,10 +185,10 @@ Second line.</Description>
         )
 
     def write_notes(self, english: str, chinese: str) -> None:
-        directory = self.root / "changelog"
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "en-US.txt").write_bytes(english.encode("utf-8"))
-        (directory / "zh-CN.txt").write_bytes(chinese.encode("utf-8"))
+        (self.workshop_root / "i18n" / "en-US.txt").write_text("English workshop description.", encoding="utf-8")
+        (self.workshop_root / "i18n" / "zh-CN.txt").write_text("中文工坊介绍。", encoding="utf-8")
+        (self.workshop_root / "changelog" / "en-US.txt").write_bytes(english.encode("utf-8"))
+        (self.workshop_root / "changelog" / "zh-CN.txt").write_bytes(chinese.encode("utf-8"))
 
     def test_first_publish_writes_zero_id_and_manifest_metadata(self) -> None:
         with patch.object(workshop, "validate_package_directory"):
@@ -188,10 +201,10 @@ Second line.</Description>
         self.assertEqual(values["title"], 'Digital Storage “Workshop”')
         self.assertEqual(values["description"],
                          _typographic(workshop.WORKSHOP_LOCALE_PATHS["en-US"].read_text(encoding="utf-8").strip()))
-        self.assertEqual(values["changenote"], "[h2]0.3.0[/h2]\nFix A.\n[hr][/hr]\n修复 A。")
+        self.assertEqual(values["changenote"], "[h2]0.3.0[/h2]\n\n增加一项功能。\n\n[list]\n[*]修复 A。\n[/list]")
         self.assertEqual(values["visibility"], "0")
 
-    def test_chinese_locale_uses_checked_in_workshop_description(self) -> None:
+    def test_chinese_description_locale_still_uses_chinese_change_note(self) -> None:
         arguments = SimpleNamespace(
             package_dir=str(self.package_directory), steamcmd_dir=str(self.steamcmd_directory),
             vdf_path=str(self.vdf_path), preview=str(self.preview_path), steam_username="steam user",
@@ -203,19 +216,18 @@ Second line.</Description>
 
         self.assertEqual(prepared.metadata.description,
                          workshop.WORKSHOP_LOCALE_PATHS["zh-CN"].read_text(encoding="utf-8").strip())
-        self.assertEqual(workshop._read_vdf(self.vdf_path)["description"],
-                         _typographic(prepared.metadata.description))
-        self.assertEqual(prepared.metadata.change_note, "[h2]0.3.0[/h2]\n修复 A。\n[hr][/hr]\nFix A.")
+        self.assertEqual(prepared.metadata.change_note,
+                         "[h2]0.3.0[/h2]\n\n增加一项功能。\n\n[list]\n[*]修复 A。\n[/list]")
 
-    def test_missing_or_empty_change_note_is_rejected_before_steamcmd(self) -> None:
-        notes = self.root / "changelog"
-        for name, action, message in (
-            ("zh-CN.txt", lambda path: path.unlink(), r"change note \(zh-CN\) is missing"),
-            ("en-US.txt", lambda path: path.write_text(" \n", encoding="utf-8"), "change note must not be empty"),
+    def test_missing_or_empty_chinese_note_is_rejected_before_steamcmd(self) -> None:
+        note_path = self.workshop_root / "changelog" / "zh-CN.txt"
+        for action, message in (
+            (lambda path: path.unlink(), r"change note \(zh-CN\) is missing"),
+            (lambda path: path.write_text(" \n", encoding="utf-8"), "change note must not be empty"),
         ):
-            with self.subTest(name=name):
-                self.write_notes("Fix A.", "修复 A。")
-                action(notes / name)
+            with self.subTest(message=message):
+                self.write_notes("Fix A.", "0.3.0\n\n增加一项功能。\n\n- 修复 A。")
+                action(note_path)
                 runner = Mock()
                 with patch.object(workshop, "validate_package_directory"), \
                         self.assertRaisesRegex(workshop.WorkshopValidationError, message):
@@ -223,17 +235,58 @@ Second line.</Description>
                 runner.assert_not_called()
                 self.assertFalse(Path(str(self.vdf_path) + ".pending").exists())
 
+    def test_english_note_is_not_read_or_required(self) -> None:
+        english_path = self.workshop_root / "changelog" / "en-US.txt"
+        for english in (None, b"", b"\xff", b"English changes must not be published."):
+            with self.subTest(english=english):
+                if english is None:
+                    english_path.unlink(missing_ok=True)
+                else:
+                    english_path.write_bytes(english)
+                with patch.object(workshop, "validate_package_directory"):
+                    prepared = workshop.prepare_workshop_item(self.settings)
+                self.assertEqual(prepared.metadata.change_note,
+                                 "[h2]0.3.0[/h2]\n\n增加一项功能。\n\n[list]\n[*]修复 A。\n[/list]")
+
+    def test_note_requires_matching_version_summary_and_bullets(self) -> None:
+        for note in (
+            "0.2.9\n\n摘要。\n\n- 修改点",
+            "0.3.0\n\n- 修改点",
+            "0.3.0\n\n摘要\n\n- 修改点",
+            "0.3.0\n\n第一句。第二句。第三句。\n\n- 修改点",
+            "0.3.0\n\n第一句。第二句。第三句\n\n- 修改点",
+            "0.3.0\n\n摘要。)\n\n- 修改点",
+            "0.3.0\n\n摘要。\n\n[list]\n[*]修改点\n[/list]",
+            "0.3.0\n\n摘要。\n\n- ",
+        ):
+            with self.subTest(note=note):
+                self.write_notes("Fix A.", note)
+                runner = Mock()
+                with patch.object(workshop, "validate_package_directory"), \
+                        self.assertRaisesRegex(workshop.WorkshopValidationError, "Workshop change note"):
+                    workshop.publish_workshop(self.settings, runner=runner)
+                runner.assert_not_called()
+                self.assertFalse(Path(str(self.vdf_path) + ".pending").exists())
+
+    def test_two_sentence_summary_and_closing_quote_are_accepted(self) -> None:
+        self.write_notes("Fix A.", "0.3.0\n\n第一句。第二句‘完成。’\n\n- 修改点")
+        with patch.object(workshop, "validate_package_directory"):
+            prepared = workshop.prepare_workshop_item(self.settings)
+        self.assertEqual(prepared.metadata.change_note,
+                         "[h2]0.3.0[/h2]\n\n第一句。第二句‘完成。’\n\n[list]\n[*]修改点\n[/list]")
+
     def test_multiline_vdf_fields_keep_real_line_breaks(self) -> None:
-        english, chinese = '[list]\n[*]Pinyin search\n[/list]', '[list]\n[*]拼音搜索\n[/list]'
-        note = '[h2]0.3.0[/h2]\n' + english + '\n[hr][/hr]\n' + chinese
+        source_note = "0.3.0\n\n更新物品搜索。\n\n- 拼音搜索\n- 保留原有筛选"
+        note = "[h2]0.3.0[/h2]\n\n更新物品搜索。\n\n[list]\n[*]拼音搜索\n[*]保留原有筛选\n[/list]"
+        english = "English change note is maintained separately."
         for separator in ("\n", "\r\n", "\r"):
             with self.subTest(separator=repr(separator)):
-                self.write_notes(english.replace("\n", separator), chinese.replace("\n", separator))
+                self.write_notes(english, source_note.replace("\n", separator))
                 with patch.object(workshop, "validate_package_directory"):
                     workshop.prepare_workshop_item(self.settings)
                 raw = self.vdf_path.read_text(encoding="utf-8")
                 self.assertIn('"changenote"    "' + note + '"', raw)
-                self.assertIn('"description"    "[h1]Digital Storage[/h1]\n\n', raw)
+                self.assertIn('"description"    "English workshop description."', raw)
                 # Only the text fields: quoted paths keep escaped backslashes, e.g. C:\\Users\\runneradmin on CI.
                 text = raw[raw.index('"title"'):]
                 self.assertNotIn(r"\n", text)
@@ -241,29 +294,32 @@ Second line.</Description>
                 self.assertEqual(note, workshop._read_vdf(self.vdf_path)["changenote"])
 
     def test_text_fields_are_written_without_escape_sequences(self) -> None:
-        note = '[*]物品按"数量 × 占地格数"计费，"Pending migration" 提示'
-        self.write_notes("Fix A.", note)
+        source_note = '0.3.0\n\n更新容量显示。\n\n- 物品按"数量 × 占地格数"计费，"Pending migration" 提示'
+        note = '[h2]0.3.0[/h2]\n\n更新容量显示。\n\n[list]\n[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示\n[/list]'
+        self.write_notes("Fix A.", source_note)
         with patch.object(workshop, "validate_package_directory"):
             workshop.prepare_workshop_item(self.settings)
         raw = self.vdf_path.read_text(encoding="utf-8")
         # SteamCMD does not read escapes, so no backslash may appear in any text field.
         self.assertNotIn("\\", raw[raw.index('"title"'):])
-        self.assertIn('[hr][/hr]\n[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示"', raw)
+        self.assertIn('[*]物品按“数量 × 占地格数”计费，“Pending migration” 提示', raw)
         self.assertTrue(workshop._read_vdf(self.vdf_path)["changenote"].endswith(_typographic(note)))
 
     def test_backslash_in_text_is_rejected_before_steamcmd(self) -> None:
-        self.write_notes("Path C:\\Mods", "修复 A。")
+        self.write_notes("Fix A.", "0.3.0\n\n更新路径显示。\n\n- 路径 C:\\Mods")
         with patch.object(workshop, "validate_package_directory"), \
                 self.assertRaisesRegex(workshop.WorkshopValidationError, "changenote must not contain a backslash"):
             workshop.prepare_workshop_item(self.settings)
 
     def test_text_over_steam_byte_limit_is_rejected_before_steamcmd(self) -> None:
-        # The heading (15 bytes), separator (11) and Chinese note (1) leave 7973 bytes for the English note: 2657 CJK
-        # characters and two straight quotes fit as written, but not once the quotes become three-byte typographic
-        # quotes, so the limit must be checked on the rendered UTF-8 text.
-        for english, accepted in (("材" * 2657 + "ab", True), ('"' + "材" * 2657 + '"', False)):
+        prefix = "[h2]0.3.0[/h2]\n\n更新说明。\n\n[list]\n[*]"
+        closing = "\n[/list]"
+        remaining = 8000 - len(prefix.encode("utf-8")) - len(closing.encode("utf-8"))
+        body = "材" * ((remaining - 2) // 3)
+        suffix = "a" * (remaining - len(body.encode("utf-8")))
+        for content, accepted in ((body + suffix, True), ('"' + body + suffix[2:] + '"', False)):
             with self.subTest(accepted=accepted):
-                self.write_notes(english, "x")
+                self.write_notes("Fix A.", "0.3.0\n\n更新说明。\n\n- " + content)
                 runner = Mock(return_value=subprocess.CompletedProcess([], 1))
                 with patch.object(workshop, "validate_package_directory"), \
                         patch.object(workshop, "_localized_description", return_value="Short description."):
@@ -301,6 +357,35 @@ Second line.</Description>
         runner.assert_not_called()
         self.assertFalse(settings.vdf_path.exists())
 
+    def test_vdf_in_manual_workshop_directory_is_rejected_without_changing_files(self) -> None:
+        note_path = self.workshop_root / "changelog" / "zh-CN.txt"
+        before = note_path.read_bytes()
+        settings = workshop.WorkshopSettings(
+            package_directory=self.package_directory,
+            steamcmd_directory=self.steamcmd_directory,
+            vdf_path=note_path,
+            preview_path=self.preview_path,
+            steam_username="steam user",
+        )
+        with self.assertRaisesRegex(workshop.WorkshopValidationError, "manually managed Workshop directory"):
+            workshop.prepare_workshop_item(settings)
+        self.assertEqual(note_path.read_bytes(), before)
+        self.assertFalse(Path(str(note_path) + ".pending").exists())
+
+    def test_package_and_vdf_paths_cannot_point_into_workshop(self) -> None:
+        note_path = self.workshop_root / "changelog" / "zh-CN.txt"
+        before = note_path.read_bytes()
+        package = workshop.WorkshopSettings(
+            package_directory=self.workshop_root,
+            steamcmd_directory=self.steamcmd_directory,
+            vdf_path=self.vdf_path,
+            preview_path=self.preview_path,
+            steam_username="steam user",
+        )
+        with self.assertRaisesRegex(workshop.WorkshopValidationError, "manually managed Workshop directory"):
+            workshop.prepare_workshop_item(package)
+        self.assertEqual(note_path.read_bytes(), before)
+
     def test_pending_marker_inside_contentfolder_is_rejected_before_steamcmd(self) -> None:
         vdf = self.root / "marker.vdf"
         package = Path(str(vdf) + ".pending")
@@ -312,6 +397,21 @@ Second line.</Description>
             workshop.publish_workshop(settings, runner=runner)
         runner.assert_not_called()
         self.assertFalse(vdf.exists())
+
+    def test_preparing_vdf_does_not_change_workshop_inputs(self) -> None:
+        before = {
+            path: path.read_bytes()
+            for path in self.workshop_root.rglob("*")
+            if path.is_file()
+        }
+        with patch.object(workshop, "validate_package_directory"):
+            workshop.prepare_workshop_item(self.settings)
+        after = {
+            path: path.read_bytes()
+            for path in self.workshop_root.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(after, before)
 
     def test_pending_marker_blocks_before_reading_vdf(self) -> None:
         pending = Path(str(self.vdf_path) + ".pending")

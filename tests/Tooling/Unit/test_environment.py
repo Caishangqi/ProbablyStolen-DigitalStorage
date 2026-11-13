@@ -166,6 +166,26 @@ class ResolveEnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentResolutionError, "protected directory"):
             self.resolve(["--artifacts-path", str(self.root / ".reference" / "output")])
 
+    def test_outputs_cannot_target_manual_workshop_files(self):
+        workshop = self.root / "workshop"
+        changelog = workshop / "changelog" / "zh-CN.txt"
+        changelog.parent.mkdir(parents=True)
+        changelog.write_text("manual release notes", encoding="utf-8")
+        for arguments, environment in (
+            (["--artifacts-path", str(workshop / "artifacts")], {}),
+            (["--package-dir", str(workshop / "package")], {}),
+            ([], {"DIGITAL_STORAGE_DEPLOY_DIR": str(workshop / "Mods" / "DigitalStorage")}),
+        ):
+            with self.subTest(arguments=arguments, environment=environment):
+                with self.assertRaisesRegex(EnvironmentResolutionError, "protected directory|manually managed Workshop"):
+                    self.resolve(arguments, environment)
+            self.assertEqual(changelog.read_text(encoding="utf-8"), "manual release notes")
+
+    def test_repository_parent_output_can_contain_managed_workshop_directory(self):
+        result = self.resolve(["--artifacts-path", str(self.root)])
+        self.assertEqual(result.output_directory, self.root)
+        self.assertEqual(result.package_directory, self.root / "package" / "DigitalStorage")
+
     def test_resolution_does_not_write_files(self):
         before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
         self.resolve([])

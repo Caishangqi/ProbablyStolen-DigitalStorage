@@ -116,7 +116,7 @@ def resolve_environment(
         deploy_directory = None
         sources["deploy_directory"] = "unset"
 
-    protected_paths = [root / ".reference"]
+    protected_paths = [root / ".reference", root / "workshop"]
     configured_game = environment.get(GAME_ENV)
     configured_steam = environment.get(STEAM_ENV)
     if configured_game:
@@ -125,6 +125,13 @@ def resolve_environment(
         protected_paths.append(_resolve_path(configured_steam, root, "Steam library directory", restrict_relative=False) / "steamapps" / "common" / "Probably Stolen")
     if game_directory is not None:
         protected_paths.append(game_directory)
+    for label, candidate in (
+        ("output directory", output_directory),
+        ("package directory", package_directory),
+        ("deployment directory", deploy_directory),
+    ):
+        if candidate is not None:
+            _reject_workshop_path(candidate, root, label)
     for label, candidate in (("output directory", output_directory), ("package directory", package_directory)):
         _reject_protected_path(candidate, protected_paths, label)
 
@@ -153,6 +160,7 @@ def _reject_linked_output(value: str, root: Path, label: str) -> None:
     expanded = Path(os.path.expandvars(value)).expanduser()
     candidate = Path(os.path.abspath(str(expanded if expanded.is_absolute() else root / expanded)))
     _reject_protected_path_lexical(candidate, root / '.reference', label)
+    _reject_protected_path_lexical(candidate, root / 'workshop', label)
     for path in (candidate, *candidate.parents):
         try:
             status = path.lstat()
@@ -220,6 +228,13 @@ def _resolve_game(
 
 def _normalized(path: Path) -> str:
     return os.path.normcase(str(path.resolve(strict=False)))
+
+
+def _reject_workshop_path(candidate: Path, repository_root: Path, label: str) -> None:
+    workshop = (repository_root / "workshop").resolve(strict=False)
+    resolved = candidate.resolve(strict=False)
+    if resolved == workshop or resolved.is_relative_to(workshop):
+        raise EnvironmentResolutionError(f"The {label} cannot overlap the manually managed Workshop directory: {candidate}")
 
 
 def _reject_protected_path(candidate: Path, protected_paths: Sequence[Path], label: str) -> None:

@@ -31,12 +31,12 @@ _ENV_WORKSHOP_PREVIEW = "DIGITAL_STORAGE_WORKSHOP_PREVIEW"
 _ENV_WORKSHOP_VISIBILITY = "DIGITAL_STORAGE_WORKSHOP_VISIBILITY"
 _ENV_WORKSHOP_LOCALE = "DIGITAL_STORAGE_WORKSHOP_LOCALE"
 REQUIRED_RELEASE_VERSION = (0, 3, 0)
+WORKSHOP_ROOT = ROOT / "workshop"
 WORKSHOP_LOCALE_PATHS = {
-    "en-US": ROOT / "workshop" / "i18n" / "en-US.txt",
-    "zh-CN": ROOT / "workshop" / "i18n" / "zh-CN.txt",
+    "en-US": WORKSHOP_ROOT / "i18n" / "en-US.txt",
+    "zh-CN": WORKSHOP_ROOT / "i18n" / "zh-CN.txt",
 }
-# The current release's note per locale, e.g. workshop/changelog/en-US.txt; Git keeps earlier releases' notes.
-WORKSHOP_CHANGELOG_DIR = ROOT / "workshop" / "changelog"
+WORKSHOP_CHANGELOG_PATH = WORKSHOP_ROOT / "changelog" / "zh-CN.txt"
 
 
 class WorkshopValidationError(ValueError):
@@ -176,24 +176,37 @@ def _localized_description(locale: str) -> str:
     return descriptions[locale]
 
 
-def _change_note(version: str, locale: str) -> str:
-    """Joins the per-locale notes under one ``version`` heading, the publishing locale first.
+def _change_note(version: str) -> str:
+    """Reads the Chinese release note and validates its player facing structure."""
+    try:
+        note = WORKSHOP_CHANGELOG_PATH.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as error:
+        raise WorkshopValidationError(f"Workshop change note (zh-CN) is missing: {WORKSHOP_CHANGELOG_PATH}") from error
+    except (OSError, UnicodeError) as error:
+        raise WorkshopValidationError(f"Could not read Workshop change note: {WORKSHOP_CHANGELOG_PATH}") from error
+    if not note:
+        raise WorkshopValidationError(f"Workshop change note must not be empty: {WORKSHOP_CHANGELOG_PATH}")
 
-    SteamCMD sets a single change note per upload, so every locale goes into the same note.
-    """
-    notes = []
-    for name in sorted(WORKSHOP_LOCALE_PATHS, key=lambda name: name != locale):
-        path = WORKSHOP_CHANGELOG_DIR / f"{name}.txt"
-        try:
-            note = path.read_text(encoding="utf-8").strip()
-        except FileNotFoundError as error:
-            raise WorkshopValidationError(f"Workshop change note ({name}) is missing: {path}") from error
-        except (OSError, UnicodeError) as error:
-            raise WorkshopValidationError(f"Could not read Workshop change note: {path}") from error
-        if not note:
-            raise WorkshopValidationError(f"Workshop change note must not be empty: {path}")
-        notes.append(note)
-    return f"[h2]{version}[/h2]\n" + "\n[hr][/hr]\n".join(notes)
+    note = note.replace("\r\n", "\n").replace("\r", "\n")
+    sections = re.split(r"\n[ \t]*\n(?:[ \t]*\n)*", note)
+    if len(sections) != 3 or sections[0].strip() != version:
+        raise WorkshopValidationError(
+            "Workshop change note must contain the package version, one summary paragraph, and a bullet list."
+        )
+    summary = sections[1].strip()
+    sentence_count = len(re.findall(r"[。！？!?]+", summary))
+    terminal = summary.rstrip()
+    while terminal and terminal[-1] in {'"', "'", "”", "’", "」", "』"}:
+        terminal = terminal[:-1].rstrip()
+    ends_with_sentence = terminal.endswith(tuple("。！？!?"))
+    changes = sections[2].splitlines()
+    if (not summary or summary.startswith("- ") or not 1 <= sentence_count <= 2 or not ends_with_sentence or not changes
+            or any(not line.startswith("- ") or not line[2:].strip() for line in changes)):
+        raise WorkshopValidationError(
+            "Workshop change note summary must contain one or two sentences, followed by '- ' change points."
+        )
+    bullets = "\n".join("[*]" + line[2:] for line in changes)
+    return f"[h2]{version}[/h2]\n\n{summary}\n\n[list]\n{bullets}\n[/list]"
 
 
 def _canonical_existing_identity(path: Path) -> str:
@@ -237,14 +250,27 @@ def _canonical_existing_identity(path: Path) -> str:
 
 def _validate_output_paths(settings: WorkshopSettings, pending: Path) -> None:
     package = _canonical_existing_identity(settings.package_directory)
-    for path, label in ((settings.vdf_path, "Workshop VDF"), (pending, "Workshop pending marker")):
+    workshop_root = _canonical_existing_identity(WORKSHOP_ROOT)
+    for path, label in (
+        (settings.package_directory, "Workshop package directory"),
+        (settings.steamcmd_directory, "SteamCMD directory"),
+        (settings.vdf_path, "Workshop VDF"),
+        (pending, "Workshop pending marker"),
+    ):
         candidate = _canonical_existing_identity(path)
         try:
-            inside = os.path.commonpath((candidate, package)) == package
+            inside_workshop = os.path.commonpath((candidate, workshop_root)) == workshop_root
         except ValueError:
-            inside = False
-        if inside:
-            raise WorkshopValidationError(f"{label} must be outside the package contentfolder: {candidate}")
+            inside_workshop = False
+        if inside_workshop:
+            raise WorkshopValidationError(f"{label} must be outside the manually managed Workshop directory: {candidate}")
+        if label in ("Workshop VDF", "Workshop pending marker"):
+            try:
+                inside_package = os.path.commonpath((candidate, package)) == package
+            except ValueError:
+                inside_package = False
+            if inside_package:
+                raise WorkshopValidationError(f"{label} must be outside the package contentfolder: {candidate}")
 
 
 def _manifest_metadata(package_directory: Path, locale: str = "en-US") -> WorkshopMetadata:
@@ -265,7 +291,7 @@ def _manifest_metadata(package_directory: Path, locale: str = "en-US") -> Worksh
         minimum = ".".join(map(str, REQUIRED_RELEASE_VERSION))
         raise WorkshopValidationError(f"Package manifest version must be at least {minimum} before publishing.")
     return WorkshopMetadata(
-        version_text, fields["Name"], _localized_description(locale), _change_note(version_text, locale)
+        version_text, fields["Name"], _localized_description(locale), _change_note(version_text)
     )
 
 

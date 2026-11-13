@@ -15,4 +15,4 @@ DIGITAL_STORAGE_TEST_SAVE_DIR = 'C:\path\to\isolated\Probably Stolen\test-save'
 # DIGITAL_STORAGE_WORKSHOP_VDF = '.secrets/workshop.vdf'
 # DIGITAL_STORAGE_WORKSHOP_PREVIEW = 'C:\path\to\workshop-preview.png'
 # DIGITAL_STORAGE_WORKSHOP_VISIBILITY = '0'
-# Change notes are not configured here: edit workshop/changelog/en-US.txt and zh-CN.txt for each release.
+# Edit workshop/changelog/zh-CN.txt before each release; only the Chinese note is uploaded. The English note is manual.
