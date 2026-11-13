@@ -88,14 +88,16 @@ internal sealed class ItemContentSynchronization
         _logError = logError ?? throw new ArgumentNullException(nameof(logError));
     }
 
-    internal void Synchronize(IItemContentState item)
+    internal ItemContentResult Synchronize(IItemContentState item, bool textOnly = false)
     {
         var identifier = item?.Identifier;
         if (identifier == null || !_definitions.TryGetValue(identifier, out var definition))
         {
-            return;
+            return ItemContentResult.Skipped;
         }
 
+        var changed = false;
+        var failed = false;
         string? name = null;
         string? description = null;
         string? flavor = null;
@@ -108,6 +110,7 @@ internal sealed class ItemContentSynchronization
         }
         catch (Exception error)
         {
+            failed = true;
             if (_reportedTextFailures.Add(identifier))
             {
                 try { _logError($"Digital Storage: item text sync failed ({error.GetType().Name})."); }
@@ -117,13 +120,69 @@ internal sealed class ItemContentSynchronization
 
         if (flavor != null)
         {
-            if (!string.Equals(item!.Name, name, StringComparison.Ordinal)) item.Name = name;
-            if (!string.Equals(item.ShortDescription, description, StringComparison.Ordinal)) item.ShortDescription = description;
-            if (!string.Equals(item.FlavorText, flavor, StringComparison.Ordinal)) item.FlavorText = flavor;
+            string? originalName;
+            string? originalDescription;
+            string? originalFlavor;
+            try
+            {
+                originalName = item!.Name;
+                originalDescription = item.ShortDescription;
+                originalFlavor = item.FlavorText;
+            }
+            catch (Exception error)
+            {
+                failed = true;
+                try { _logError($"Digital Storage: item text read failed ({error.GetType().Name})."); }
+                catch { }
+                originalName = originalDescription = originalFlavor = null;
+            }
+
+            if (!failed)
+            {
+                try
+                {
+                    if (!string.Equals(item!.Name, name, StringComparison.Ordinal)) { item.Name = name; changed = true; }
+                    if (!string.Equals(item.ShortDescription, description, StringComparison.Ordinal)) { item.ShortDescription = description; changed = true; }
+                    if (!string.Equals(item.FlavorText, flavor, StringComparison.Ordinal)) { item.FlavorText = flavor; changed = true; }
+                }
+                catch (Exception error)
+                {
+                    failed = true;
+                    changed = false;
+                    TryRestore(() => item!.FlavorText = originalFlavor);
+                    TryRestore(() => item!.ShortDescription = originalDescription);
+                    TryRestore(() => item!.Name = originalName);
+                    try { _logError($"Digital Storage: item text update failed ({error.GetType().Name})."); }
+                    catch { }
+                }
+            }
         }
 
-        var value = _adjustValue?.Invoke(item!, definition.UnitValue) ?? definition.UnitValue;
-        if (item!.UnitValue != value) item.UnitValue = value;
+        if (!textOnly)
+        {
+            try
+            {
+                var value = _adjustValue?.Invoke(item!, definition.UnitValue) ?? definition.UnitValue;
+                if (item!.UnitValue != value) { item.UnitValue = value; changed = true; }
+            }
+            catch (Exception error)
+            {
+                failed = true;
+                try { _logError($"Digital Storage: item value sync failed ({error.GetType().Name})."); }
+                catch { }
+            }
+        }
+        return failed ? ItemContentResult.Failed : changed ? ItemContentResult.Changed : ItemContentResult.Unchanged;
+    }
+
+    private void TryRestore(Action restore)
+    {
+        try { restore(); }
+        catch (Exception error)
+        {
+            try { _logError($"Digital Storage: item text rollback failed ({error.GetType().Name})."); }
+            catch { }
+        }
     }
 
     private string ResolveRequired(string key)
@@ -200,11 +259,14 @@ internal static class ItemValueAdjustment
         if (item.identifier == CellUpgradeInventory.TypeLimitId)
         {
             var roll = ModuleTags.Read(item);
-            return roll != null && TypeLimitRolls.IsValid(roll) ? TypeLimitRolls.Price(roll) : baseValue;
+            return roll != null && TypeLimitRolls.IsValid(roll) ? TypeLimitRolls.Price(roll)
+                : throw new InvalidOperationException("Invalid module roll.");
         }
 
         if (item.identifier == CellUpgradeInventory.EqualDistributionId) return baseValue;
         var stage = CellUpgradeInventory.Stage(item);
-        return stage > 0 ? checked(baseValue + stage * ItemPrices.ExpansionStage) : baseValue;
+        var tier = StorageCellTier.FromCellId(item.identifier);
+        var maxStage = tier == null ? ModuleBayExpansion.MaxNativeStage : ModuleBayExpansion.MaxStage(tier);
+        return ItemContentPriceRules.WithExpansion(baseValue, stage, maxStage, ItemPrices.ExpansionStage);
     }
 }

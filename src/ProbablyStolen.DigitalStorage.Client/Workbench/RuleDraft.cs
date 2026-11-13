@@ -41,7 +41,7 @@ public sealed class ConditionRow
 public sealed class RuleDraft
 {
     private readonly PartitionRule _original;
-    private readonly ItemAttributeSet? _sample;
+    private ItemAttributeSet? _sample;
     private readonly List<ConditionRow> _rows;
 
     /// <summary>Opens a rule; the sample, when known, supplies initial values of added conditions.</summary>
@@ -108,6 +108,9 @@ public sealed class RuleDraft
         Row(index);
         _rows.RemoveAt(index);
     }
+
+    /// <summary>Clears the sample used to seed future rows without changing rows already being edited.</summary>
+    public void ClearSample() => _sample = null;
 
     /// <summary>Gets why the rule cannot be completed, or null: a rule needs at least one complete condition.</summary>
     public PartitionIssue? Validate()

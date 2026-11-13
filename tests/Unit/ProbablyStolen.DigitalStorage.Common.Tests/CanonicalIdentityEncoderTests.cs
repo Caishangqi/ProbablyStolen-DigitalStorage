@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
@@ -79,6 +81,26 @@ public sealed class CanonicalIdentityEncoderTests
         var one = CanonicalIdentityEncoder.Encode(Input("root", content: CanonicalIdentityNode.Grid(Shape(), new[] { first })));
         var two = CanonicalIdentityEncoder.Encode(Input("root", content: CanonicalIdentityNode.Grid(Shape(), new[] { rotated })));
         Assert.That(one, Is.Not.EqualTo(two));
+    }
+
+    [Test]
+    public void Encode_ContentAndPriceChangesProduceNewIdentityWhileIdentifierPartitionStillMatches()
+    {
+        const string itemId = "digital_storage.cell_component_1k";
+        var oldKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "old name", shortDescription: "old", unitValue: 100));
+        var renamedKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "new name", shortDescription: "new", unitValue: 100));
+        var repricedKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "old name", shortDescription: "old", unitValue: 200));
+        Assert.That(renamedKey, Is.Not.EqualTo(oldKey));
+        Assert.That(repricedKey, Is.Not.EqualTo(oldKey));
+
+        var rule = PartitionRule.ForSample("stable-rule", 0, oldKey);
+        var config = new PartitionConfig(PartitionMode.Whitelist, new[] { rule });
+        var partition = CellPartition.From(config, CanonicalAttributeSource.Instance);
+
+        Assert.That(partition.Rejection(renamedKey), Is.Null);
+        Assert.That(partition.Rejection(repricedKey), Is.Null);
+        Assert.That(config.Rules[0].DisplayKey, Is.EqualTo(oldKey), "Synchronizing item content does not rewrite the persisted sample key.");
+        Assert.That(config.Rules[0].Conditions[0].Target!.Text, Is.EqualTo(itemId));
     }
 
     [Test]
@@ -202,9 +224,11 @@ public sealed class CanonicalIdentityEncoderTests
 
     private static CanonicalIdentityInput Input(string id, IReadOnlyList<CanonicalIdentityTag>? tags = null,
         IReadOnlyList<CanonicalIdentityFeature>? features = null, CanonicalIdentityNode? content = null,
-        CanonicalIdentityNode? examine = null, string? name = null) => new(id, Array.Empty<string>(),
+        CanonicalIdentityNode? examine = null, string? name = null, string? shortDescription = null,
+        string? flavorText = null, long unitValue = 0) => new(id, Array.Empty<string>(),
             tags ?? Array.Empty<CanonicalIdentityTag>(), features ?? Array.Empty<CanonicalIdentityFeature>(),
-            name: name, contentWindow: content, examineWindow: examine);
+            name: name, shortDescription: shortDescription, flavorText: flavorText, unitValue: unitValue,
+            contentWindow: content, examineWindow: examine);
     private static CanonicalIdentityShape Shape() => new(0, 0, 1, 1, false, 0, 0, new byte[] { 0 });
     private static CanonicalIdentityChild Child(CanonicalIdentityInput item) => new(item, 1, Shape(), Shape());
 }

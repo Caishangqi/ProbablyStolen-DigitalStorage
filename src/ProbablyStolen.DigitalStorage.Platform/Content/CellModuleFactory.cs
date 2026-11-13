@@ -17,13 +17,13 @@ internal sealed class CellModuleFactory
     internal const int Height = 2;
     private const string EffectTag = "ADDITIONAL_EFFECT_STRING";
     private readonly ItemAppearance _appearance;
-    private readonly ItemContentSynchronization _contentSynchronization;
+    private readonly Action<GameItem> _contentChanged;
     private readonly ModText _text;
 
-    internal CellModuleFactory(ItemAppearance appearance, ItemContentSynchronization contentSynchronization, ModText text)
+    internal CellModuleFactory(ItemAppearance appearance, Action<GameItem> contentChanged, ModText text)
     {
         _appearance = appearance ?? throw new ArgumentNullException(nameof(appearance));
-        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
+        _contentChanged = contentChanged ?? throw new ArgumentNullException(nameof(contentChanged));
         _text = text ?? throw new ArgumentNullException(nameof(text));
     }
 
@@ -38,7 +38,6 @@ internal sealed class CellModuleFactory
         foreach (var quality in new[] { ModuleQuality.Common, ModuleQuality.Rare, ModuleQuality.Epic })
             _appearance.EnsureReady(Sprite(quality));
         var item = Create(CellUpgradeInventory.TypeLimitId, Sprite(ModuleQuality.Common));
-        item.onLoaded += Present;
         if (!SaveManager.IsDecoding)
             Roll(item, TypeLimitRolls.Roll(TypeLimitRolls.RollQuality(NativeRandom.Instance), NativeRandom.Instance));
         return item;
@@ -56,7 +55,7 @@ internal sealed class CellModuleFactory
     {
         if (module.identifier != CellUpgradeInventory.TypeLimitId) throw new ArgumentException("Not a type limit module.", nameof(module));
         ModuleTags.Write(module, roll ?? throw new ArgumentNullException(nameof(roll)));
-        Present(module);
+        _contentChanged(module);
     }
 
     private GameItem Create(string itemId, string spriteKey)
@@ -65,7 +64,6 @@ internal sealed class CellModuleFactory
         try
         {
             _appearance.Apply(item, spriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             ModuleHelper.InitModuleItem(item, CellUpgradeInventory.ModuleType, isShipModule: false);
             // Rolled values make every type limit module distinct; stacking would merge different values.
             item.mayStackItemFunc = (_, _) => false;
@@ -79,20 +77,20 @@ internal sealed class CellModuleFactory
         }
     }
 
-    private void Present(GameItem module)
+    internal bool Present(GameItem module)
     {
         var roll = ModuleTags.Read(module);
-        if (roll == null || !TypeLimitRolls.IsValid(roll))
-        {
-            module.ModifyTag(EffectTag, state => state.Enable().SetString(_text.Get("module_type_limit_invalid")));
-            return;
-        }
+        if (roll == null || !TypeLimitRolls.IsValid(roll)) return false;
 
         _appearance.SetPreparedSprite(module, Sprite(roll.Quality));
         var quality = _text.Get("module_quality_" + ModuleTags.QualityText(roll.Quality));
-        module.ModifyTag(EffectTag, state => state.Enable().SetString(
-            _text.Get("module_type_limit_effect", quality, roll.Add, roll.Percent)));
-        NativeItemContentInitialization.Initialize(module, _contentSynchronization);
+        var effect = _text.Get("module_type_limit_effect", quality, roll.Add, roll.Percent);
+        if (string.IsNullOrWhiteSpace(quality) || string.IsNullOrWhiteSpace(effect) ||
+            quality == "module_quality_" + ModuleTags.QualityText(roll.Quality) || effect == "module_type_limit_effect")
+            throw new InvalidOperationException("Module localization is unavailable.");
+        if (module.IsTag(EffectTag) && module.GetTagReadonly(EffectTag).GetString() == effect) return false;
+        module.ModifyTag(EffectTag, state => state.Enable().SetString(effect));
+        return true;
     }
 
     private static string Sprite(ModuleQuality quality) => TypeLimitSpritePrefix + ModuleTags.QualityText(quality);

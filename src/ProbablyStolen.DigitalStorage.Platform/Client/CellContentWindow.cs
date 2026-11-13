@@ -21,7 +21,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private readonly ItemAppearance _appearance;
     private readonly ModLog _log;
     private readonly ModText _text;
-    private readonly ItemContentSynchronization _contentSynchronization;
+    private readonly Action<GameItem> _contentChanged;
     private readonly CellAssemblyCallbacks _callbacks;
     private bool _reportedInvalid;
 
@@ -29,13 +29,13 @@ internal sealed class CellContentWindow : ICellAssemblyPort
 
     internal CellContentWindow(GameItem host, StorageCellDisassemblyRecipe recipe,
         ItemAppearance appearance, ModText text, ModLog log, Func<bool> showPages,
-        ItemContentSynchronization contentSynchronization)
+        Action<GameItem> contentChanged)
     {
         _host = host;
         _appearance = appearance;
         _log = log;
         _text = text;
-        _contentSynchronization = contentSynchronization;
+        _contentChanged = contentChanged;
         _callbacks = new CellAssemblyCallbacks(recipe, this);
         Slot = new GameSlotInventory(1, 2) { identifier = SlotId };
         Slot.mayInventoryAddItemFunc = (item, _) =>
@@ -113,8 +113,16 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         // that the type filter alone would accept.
         bay.mayInventoryAddItemFunc = (item, _) => CanInstall(bay, item);
         bay.mayInventoryRemoveItemFunc = (item, _) => CanRemoveModule(bay, item);
-        bay.onSlotAddItemEndFunc += (_, _, _) => CellUpgradeInventory.RaiseModulesChanged(_host);
-        bay.onSlotRemoveItemEndFunc += (_, _, _) => CellUpgradeInventory.RaiseModulesChanged(_host);
+        bay.onSlotAddItemEndFunc += (_, _, _) =>
+        {
+            CellUpgradeInventory.RaiseModulesChanged(_host);
+            if (!SaveManager.IsDecoding) _contentChanged(_host);
+        };
+        bay.onSlotRemoveItemEndFunc += (_, _, _) =>
+        {
+            CellUpgradeInventory.RaiseModulesChanged(_host);
+            if (!SaveManager.IsDecoding) _contentChanged(_host);
+        };
     }
 
     private bool CanInstall(GameGridInventory bay, GameItem item)
@@ -145,7 +153,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
 
     void ICellAssemblyPort.FixComponent()
     {
-        ModuleHelper.SetModuleStuck(Slot.childItem);
+        Slot.childItem.EnableTag(ModuleHelper.MODULE_STUCK_TAG);
     }
 
     void ICellAssemblyPort.Present(bool assembled) => Present(assembled);
@@ -201,6 +209,8 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         if (assembled && tier == null) throw new InvalidOperationException("Unknown storage component tier.");
         _host.identifier = assembled ? tier!.CellId : StorageCellDisassemblyRecipe.HousingId;
         PresentInitial(tier);
+        if (!SaveManager.IsDecoding) _contentChanged(_host);
+        SyncTitle();
         if (!assembled)
         {
             CellPages.SwapOf(_host).Request();
@@ -211,7 +221,6 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     private void PresentInitial(StorageCellTier? tier)
     {
         var assembled = tier != null;
-        _contentSynchronization.Synchronize(new NativeItemContentState(_host));
         // A housing is a material customers buy. An assembled cell is not: its value includes the stored items, so
         // selling it to a customer would sell its contents. Item types and their tags are both saved.
         if (assembled) _host.RemoveGameItemType(ItemPrices.MaterialType);
@@ -238,12 +247,15 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         }
     }
 
-    private void SyncTitle()
+    internal static void RefreshTitle(GameItem item)
     {
-        var window = _host.contentWindow;
-        window.SetTitle(_host.GetDisplayName(preferCustomName: true));
+        var window = item.contentWindow;
+        if (window == null) return;
+        window.SetTitle(item.GetDisplayName(preferCustomName: true));
         MachineryTitleFit.Fit(window);
     }
+
+    private void SyncTitle() => RefreshTitle(_host);
 
     private void CheckIntegrity()
     {

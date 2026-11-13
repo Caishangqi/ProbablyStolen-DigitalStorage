@@ -12,12 +12,9 @@ internal sealed class ControllerItem
     internal const string DescriptionKey = "controller_desc";
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
-    private readonly ItemContentSynchronization _contentSynchronization;
 
-    internal ControllerItem(ItemAppearance appearance, MachineContentWindow windows,
-        ItemContentSynchronization contentSynchronization)
+    internal ControllerItem(ItemAppearance appearance, MachineContentWindow windows)
     {
-        _contentSynchronization = contentSynchronization;
         _appearance = appearance;
         _windows = windows;
     }
@@ -29,7 +26,6 @@ internal sealed class ControllerItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             _windows.Attach(item, acceptsBattery: true, consumesNetworkPower: true);
             return item;
         }

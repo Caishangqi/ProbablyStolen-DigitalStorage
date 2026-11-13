@@ -1,13 +1,39 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Content;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;
 
 [TestFixture]
 internal sealed class ItemContentSynchronizationTests
 {
+    [Test]
+    public void Definitions_UseTheApprovedFixedPricesForEveryEconomicItem()
+    {
+        var expected = new Dictionary<string, long>
+        {
+            [TerminalItem.ItemId] = 250,
+            [DriveItem.ItemId] = 350,
+            [ControllerItem.ItemId] = 400,
+            [MaterialItem.ItemId] = 80,
+            [CellWorkbenchItem.ItemId] = 300,
+            [CellUpgradeInventory.EqualDistributionId] = 200,
+            [CellUpgradeInventory.TypeLimitId] = 100
+        };
+        foreach (var tier in StorageCellTier.All)
+        {
+            expected.Add(tier.ComponentId, tier.ComponentValue);
+            expected.Add(tier.CellId, 80);
+        }
+
+        Assert.That(ItemContentDefinitions.All.Keys, Is.EquivalentTo(expected.Keys));
+        foreach (var (itemId, value) in expected)
+            Assert.That(ItemContentDefinitions.All[itemId].UnitValue, Is.EqualTo(value), itemId);
+    }
+
     [TestCase(TerminalItem.ItemId, TerminalItem.NameKey, TerminalItem.DescriptionKey, ItemPrices.Terminal)]
     [TestCase(DriveItem.ItemId, DriveItem.NameKey, DriveItem.DescriptionKey, ItemPrices.Drive)]
     [TestCase(ControllerItem.ItemId, ControllerItem.NameKey, ControllerItem.DescriptionKey, ItemPrices.Controller)]
@@ -179,16 +205,13 @@ internal sealed class ItemContentSynchronizationTests
     }
 
     [Test]
-    public void LoadCallback_ThrowingStateAndSetter_ContainsAndAllowsLaterGoodInvocation()
+    public void LoadCallback_ThrowingState_ContainsAndAllowsLaterGoodInvocation()
     {
         var errors = new List<string>();
         var callback = new ItemContentLoadCallback(CreateSync(key => "value:" + key), errors.Add);
         var state = new State(TerminalItem.ItemId) { ThrowOnRead = true };
         Assert.DoesNotThrow((Action)(() => callback.Invoke(state)));
         state.ThrowOnRead = false;
-        state.ThrowOnWrite = true;
-        Assert.DoesNotThrow((Action)(() => callback.Invoke(state)));
-        state.ThrowOnWrite = false;
         callback.Invoke(state);
         Assert.That(state.Name, Is.EqualTo("value:" + TerminalItem.NameKey));
         Assert.That(state.UnitValue, Is.EqualTo(ItemPrices.Terminal));
@@ -207,6 +230,50 @@ internal sealed class ItemContentSynchronizationTests
         Assert.That(state.Writes, Is.Zero);
     }
 
+    [Test]
+    public void Synchronize_TextOnly_LeavesPriceAndReportsChanged()
+    {
+        var state = new State(TerminalItem.ItemId) { UnitValue = 987 };
+        var result = CreateSync(key => "localized:" + key).Synchronize(state, textOnly: true);
+        Assert.That(result, Is.EqualTo(ItemContentResult.Changed));
+        Assert.That(state.UnitValue, Is.EqualTo(987));
+    }
+
+    [Test]
+    public void Synchronize_TextSetterFailure_RestoresThePreviouslyWrittenFields()
+    {
+        var state = new State(TerminalItem.ItemId)
+        {
+            Name = "old name", ShortDescription = "old desc", FlavorText = "old flavor", UnitValue = 987,
+            ThrowOnDescriptionWriteOnce = true
+        };
+        var sync = CreateSync(key => "localized:" + key);
+
+        Assert.That(sync.Synchronize(state), Is.EqualTo(ItemContentResult.Failed));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(state.Name, Is.EqualTo("old name"));
+            Assert.That(state.ShortDescription, Is.EqualTo("old desc"));
+            Assert.That(state.FlavorText, Is.EqualTo("old flavor"));
+            Assert.That(state.UnitValue, Is.EqualTo(ItemPrices.Terminal), "A text failure does not block the price update.");
+        }));
+    }
+
+    [Test]
+    public void Synchronize_InvalidPrice_KeepsValueAndReportsFailureWhileTextChanges()
+    {
+        var definitions = new Dictionary<string, ItemContentDefinition> { ["known"] = new("known", "name", "desc", 7) };
+        var state = new State("known") { UnitValue = 987 };
+        var errors = new List<string>();
+        var sync = new ItemContentSynchronization(definitions, key => "localized:" + key, errors.Add,
+            (_, _) => throw new InvalidOperationException());
+        Assert.That(sync.Synchronize(state), Is.EqualTo(ItemContentResult.Failed));
+        Assert.That(state.UnitValue, Is.EqualTo(987));
+        Assert.That(state.Name, Is.EqualTo("localized:name"));
+        Assert.That(errors, Has.Count.EqualTo(1));
+    }
+
     private static ItemContentSynchronization CreateSync(Func<string, string> resolve) =>
         new(ItemContentDefinitions.All, resolve, _ => { });
 
@@ -220,10 +287,24 @@ internal sealed class ItemContentSynchronizationTests
         internal State(string id) => _id = id;
         internal bool ThrowOnRead { get; set; }
         internal bool ThrowOnWrite { get; set; }
+        internal bool ThrowOnDescriptionWriteOnce { get; set; }
         internal int Writes { get; private set; }
         public string? Identifier => ThrowOnRead ? throw new InvalidOperationException() : _id;
         public string? Name { get => _name; set { CheckWrite(); _name = value; } }
-        public string? ShortDescription { get => _description; set { CheckWrite(); _description = value; } }
+        public string? ShortDescription
+        {
+            get => _description;
+            set
+            {
+                if (ThrowOnDescriptionWriteOnce)
+                {
+                    ThrowOnDescriptionWriteOnce = false;
+                    throw new InvalidOperationException();
+                }
+                CheckWrite();
+                _description = value;
+            }
+        }
         public string? FlavorText { get => _flavor; set { CheckWrite(); _flavor = value; } }
         public long UnitValue { get => _unitValue; set { CheckWrite(); _unitValue = value; } }
         private void CheckWrite()

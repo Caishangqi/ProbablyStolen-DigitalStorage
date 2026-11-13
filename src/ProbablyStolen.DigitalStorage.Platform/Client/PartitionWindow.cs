@@ -110,6 +110,16 @@ internal sealed partial class PartitionWindow
     /// <summary>Closes any open editor, discarding its draft.</summary>
     internal static void CloseCurrent() => _current?.Close();
 
+    internal static void InvalidateSamples()
+    {
+        if (_current == null) return;
+        // The open RuleDraft may contain invalid or incomplete edits that have not been applied to the cell. Keep those
+        // rows and values, while ensuring any future row uses no stale sample data.
+        _current._detailSample = null;
+        _current._detail?.ClearSample();
+        _current.Render();
+    }
+
     /// <summary>
     /// Closes the editor when its workbench window hides (PixelWindow.Hide, the single path of the close button,
     /// WindowsHandler, a drag of the workbench and Destroy; reported by a Harmony postfix).

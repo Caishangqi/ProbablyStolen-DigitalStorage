@@ -17,15 +17,13 @@ internal sealed class StorageComponentFactory
     private readonly ItemAppearance _appearance;
     private readonly StorageComponent _component;
     private readonly StorageCellDisassemblyRecipe _recipe;
-    private readonly ItemContentSynchronization _contentSynchronization;
 
     internal StorageComponentFactory(ItemAppearance appearance,
-        StorageComponent component, StorageCellDisassemblyRecipe recipe, ItemContentSynchronization contentSynchronization)
+        StorageComponent component, StorageCellDisassemblyRecipe recipe)
     {
         _appearance = appearance;
         _component = component;
         _recipe = recipe;
-        _contentSynchronization = contentSynchronization;
     }
 
     internal GameItem Create(StorageCellTier tier)
@@ -41,7 +39,6 @@ internal sealed class StorageComponentFactory
         try
         {
             _appearance.Apply(item, spriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             // MATERIAL lets engineers and Dr. Jackson buy it. ModuleHelper.InitModuleItem below also makes it a MODULE
             // as well.
             item.SetGameItemType(ItemPrices.MaterialType);

@@ -251,9 +251,9 @@ def check_content(project: Path, output: Path) -> None:
         keys.update((values["NameKey"], values["DescriptionKey"]))
     catalog = plain_path(project / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs").read_text(encoding="utf-8")
     declarations = re.findall(r'new StorageCellTier\("([a-z0-9]+)", (\d+), (\d+), (\d+)\)', catalog)
-    expected_tiers = [("1k", "1", "250", "50"), ("4k", "4", "750", "25"),
-                      ("16k", "16", "2250", "15"), ("64k", "64", "6750", "8"),
-                      ("256k", "256", "20250", "2")]
+    expected_tiers = [("1k", "1", "100", "50"), ("4k", "4", "200", "25"),
+                      ("16k", "16", "400", "15"), ("64k", "64", "800", "8"),
+                      ("256k", "256", "1600", "2")]
     if declarations != expected_tiers:
         raise ContentValidationError("Storage tier catalog contract mismatch")
     for tier in TIERS[1:]:

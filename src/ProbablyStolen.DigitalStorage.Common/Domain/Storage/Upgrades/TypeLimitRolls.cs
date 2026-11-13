@@ -59,9 +59,9 @@ public static class TypeLimitRolls
     /// <summary>Gets the base price a roll's price scales from.</summary>
     public static long BasePrice(ModuleQuality quality) => quality switch
     {
-        ModuleQuality.Common => 300,
-        ModuleQuality.Rare => 1200,
-        ModuleQuality.Epic => 4800,
+        ModuleQuality.Common => 100,
+        ModuleQuality.Rare => 200,
+        ModuleQuality.Epic => 400,
         _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, "Unknown module quality.")
     };
 

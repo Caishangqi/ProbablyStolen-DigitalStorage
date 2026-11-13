@@ -24,14 +24,11 @@ internal sealed class DriveItem
     private readonly MachineContentWindow _windows;
     private readonly DriveCellInventory _inventory;
     private readonly NativeNetworkEvents _events;
-    private readonly ItemContentSynchronization _contentSynchronization;
 
     internal DriveItem(ItemAppearance appearance,
-        MachineContentWindow windows, DriveCellInventory inventory, NativeNetworkEvents events,
-        ItemContentSynchronization contentSynchronization)
+        MachineContentWindow windows, DriveCellInventory inventory, NativeNetworkEvents events)
     {
         _events = events;
-        _contentSynchronization = contentSynchronization;
         _appearance = appearance;
         _windows = windows;
         _inventory = inventory;
@@ -46,7 +43,6 @@ internal sealed class DriveItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             var bays = new GridPixelElement(7, 2);
             var slots = new GameSlotInventory[GetCellCount()];
             var ports = new ICellBayPort[GetCellCount()];

@@ -21,14 +21,14 @@ internal sealed class StorageCellItem
     private readonly StorageCellDisassemblyRecipe _recipe;
     private readonly ModLog _log;
     private readonly Func<bool> _showPages;
-    private readonly ItemContentSynchronization _contentSynchronization;
+    private readonly Action<GameItem> _contentChanged;
 
     internal StorageCellItem(ModText text, ItemAppearance appearance,
         StorageCellDisassemblyRecipe recipe, ModLog log, Func<bool> showPages,
-        ItemContentSynchronization contentSynchronization)
+        Action<GameItem> contentChanged)
     {
         _showPages = showPages ?? throw new ArgumentNullException(nameof(showPages));
-        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
+        _contentChanged = contentChanged ?? throw new ArgumentNullException(nameof(contentChanged));
         _text = text;
         _appearance = appearance;
         _recipe = recipe;
@@ -47,8 +47,7 @@ internal sealed class StorageCellItem
         try
         {
             _appearance.Apply(item, spriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
-            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages, _contentSynchronization);
+            var content = new CellContentWindow(item, _recipe, _appearance, _text, _log, _showPages, _contentChanged);
             // Without the schema tag a new cell reads as schema 1 until the network or a load migrates it, and the
             // workbench refuses it meanwhile.
             CellTags.WriteNew(item);

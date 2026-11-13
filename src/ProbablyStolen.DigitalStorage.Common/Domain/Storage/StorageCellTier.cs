@@ -9,11 +9,11 @@ public sealed class StorageCellTier
 {
     private static readonly ReadOnlyCollection<StorageCellTier> Tiers = Array.AsReadOnly(new[]
     {
-        new StorageCellTier("1k", 1, 250, 50),
-        new StorageCellTier("4k", 4, 750, 25),
-        new StorageCellTier("16k", 16, 2250, 15),
-        new StorageCellTier("64k", 64, 6750, 8),
-        new StorageCellTier("256k", 256, 20250, 2)
+        new StorageCellTier("1k", 1, 100, 50),
+        new StorageCellTier("4k", 4, 200, 25),
+        new StorageCellTier("16k", 16, 400, 15),
+        new StorageCellTier("64k", 64, 800, 8),
+        new StorageCellTier("256k", 256, 1600, 2)
     });
 
     private StorageCellTier(string name, int multiplier, int componentValue, int merchantWeight)

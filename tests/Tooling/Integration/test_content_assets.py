@@ -52,7 +52,7 @@ class ContentContractTests(unittest.TestCase):
 
     def test_tier_catalog_drift_fails(self):
         path = self.root / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs"
-        path.write_text(path.read_text(encoding="utf-8").replace('"256k", 256, 20250, 2', '"256k", 256, 20251, 2'), encoding="utf-8")
+        path.write_text(path.read_text(encoding="utf-8").replace('"256k", 256, 1600, 2', '"256k", 256, 1601, 2'), encoding="utf-8")
         with self.assertRaisesRegex(ContentValidationError, "tier catalog"):
             check_content(self.root, self.output)
 

@@ -25,17 +25,15 @@ internal sealed class TerminalItem
     private readonly Func<bool> _diagnosticsEnabled;
     private readonly ModLog _log;
     private readonly NativeNetworkEvents _events;
-    private readonly ItemContentSynchronization _contentSynchronization;
     private readonly TerminalSearchService _search;
     private readonly ITerminalViewSettings _view;
 
     internal TerminalItem(ModText text, ItemAppearance appearance, MachineContentWindow windows,
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, ModLog log, NativeNetworkEvents events,
-        ItemContentSynchronization contentSynchronization, TerminalSearchService search, ITerminalViewSettings view)
+        TerminalSearchService search, ITerminalViewSettings view)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _events = events ?? throw new System.ArgumentNullException(nameof(events));
-        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
         _search = search ?? throw new ArgumentNullException(nameof(search));
         _text = text;
         _appearance = appearance;
@@ -52,7 +50,6 @@ internal sealed class TerminalItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             _windows.Attach(item);
             var storageWindow = new TerminalStorageWindow(_text,
                 () => _networkPower.ReadTerminalInventory(item),

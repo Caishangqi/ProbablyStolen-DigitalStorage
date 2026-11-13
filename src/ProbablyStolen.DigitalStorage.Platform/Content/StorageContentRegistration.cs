@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
+using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -10,9 +11,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 internal sealed class StorageContentRegistration : IDisposable
 {
     private readonly ModLog _log;
-    private readonly ItemContentLoadCallback _loadCallback;
+    private readonly ItemContentService _service;
     private readonly KeyValuePair<string, Func<GameItem>>[] _factories;
-    private readonly ItemContentSynchronization _contentSynchronization;
     private ModItemDirectory? _directory;
     private bool _enabled;
     private bool _disposed;
@@ -21,11 +21,10 @@ internal sealed class StorageContentRegistration : IDisposable
     internal StorageContentRegistration(TerminalItem terminal, DriveItem drive, StorageCellItem cell,
         ControllerItem controller, StorageComponentFactory component, MaterialItem housing,
         CellWorkbenchItem workbench, CellModuleFactory modules,
-        ItemContentSynchronization contentSynchronization, ModLog log)
+        ItemContentService service, ModLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
-        _loadCallback = new ItemContentLoadCallback(_contentSynchronization, message => _log.Error(message));
+        _service = service ?? throw new ArgumentNullException(nameof(service));
         var factories = new List<KeyValuePair<string, Func<GameItem>>>
         {
             new(TerminalItem.ItemId, () => Create(terminal.Create)),
@@ -48,10 +47,17 @@ internal sealed class StorageContentRegistration : IDisposable
     private GameItem Create(Func<GameItem> factory)
     {
         var item = factory();
+        _service.Initialize(item);
+        item.onItemTargetThisFunc += (source, target) =>
+        {
+            if (source?.identifier == "module_bay_expansion_kit") _service.Changed(target);
+        };
+        if (StorageCellTier.FromCellId(item.identifier) != null || item.identifier == MaterialItem.ItemId)
+            CellContentWindow.RefreshTitle(item);
         item.onLoaded += loaded =>
         {
             if (!_enabled || _disposed) return;
-            _loadCallback.Invoke(new NativeItemContentState(loaded));
+            _service.Loaded(loaded);
         };
         return item;
     }
@@ -152,7 +158,6 @@ internal sealed class StorageContentRegistration : IDisposable
 
         _enabled = false;
         _disposed = true;
-        _loadCallback.Disable();
         ModHook.OnModItemDirectoryInit -= Register;
         // Native types may already be referenced by saved or placed items; keep them registered.
     }

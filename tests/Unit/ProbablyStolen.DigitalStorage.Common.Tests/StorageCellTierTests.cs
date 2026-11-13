@@ -15,7 +15,7 @@ public sealed class StorageCellTierTests
         var tiers = StorageCellTier.All;
         Assert.That(tiers.Select(t => t.Name), Is.EqualTo(new[] { "1k", "4k", "16k", "64k", "256k" }));
         Assert.That(tiers.Select(t => t.Multiplier), Is.EqualTo(new[] { 1, 4, 16, 64, 256 }));
-        Assert.That(tiers.Select(t => t.ComponentValue), Is.EqualTo(new[] { 250, 750, 2250, 6750, 20250 }));
+        Assert.That(tiers.Select(t => t.ComponentValue), Is.EqualTo(new[] { 100, 200, 400, 800, 1600 }));
         Assert.That(tiers.Select(t => t.MerchantWeight), Is.EqualTo(new[] { 50, 25, 15, 8, 2 }));
         Assert.That(tiers.Select(t => t.ComponentId).Distinct().Count(), Is.EqualTo(5));
         Assert.That(tiers.Select(t => t.CellId).Distinct().Count(), Is.EqualTo(5));

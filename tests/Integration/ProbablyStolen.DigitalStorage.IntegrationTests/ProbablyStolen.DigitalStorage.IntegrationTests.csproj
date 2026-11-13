@@ -13,6 +13,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentCoordinator.cs" Link="Content\ItemContentCoordinator.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentPriceRules.cs" Link="Content\ItemContentPriceRules.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentRepairRules.cs" Link="Content\ItemContentRepairRules.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinSearchMode.cs" Link="Composition\PinyinSearchMode.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\DictionaryLoadGate.cs" Link="Composition\DictionaryLoadGate.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\LocaleSelectionRouter.cs" Link="Composition\LocaleSelectionRouter.cs" />

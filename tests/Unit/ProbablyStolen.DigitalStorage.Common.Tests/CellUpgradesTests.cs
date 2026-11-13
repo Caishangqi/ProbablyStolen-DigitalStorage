@@ -97,13 +97,13 @@ public sealed class CellUpgradesTests
         Assert.Throws<ArgumentOutOfRangeException>(new Action(() => TypeLimitRolls.RollQuality(new FixedRandom(), -1, 1, 1)));
     }
 
-    [TestCase(ModuleQuality.Common, 8, 5, 240)]
-    [TestCase(ModuleQuality.Common, 16, 10, 360)]
-    [TestCase(ModuleQuality.Common, 12, 5, 270)]
-    [TestCase(ModuleQuality.Rare, 32, 20, 1440)]
-    [TestCase(ModuleQuality.Epic, 32, 20, 3840)]
-    [TestCase(ModuleQuality.Epic, 64, 30, 5760)]
-    [TestCase(ModuleQuality.Epic, 48, 25, 4800)]
+    [TestCase(ModuleQuality.Common, 8, 5, 80)]
+    [TestCase(ModuleQuality.Common, 16, 10, 120)]
+    [TestCase(ModuleQuality.Common, 12, 5, 90)]
+    [TestCase(ModuleQuality.Rare, 32, 20, 240)]
+    [TestCase(ModuleQuality.Epic, 32, 20, 320)]
+    [TestCase(ModuleQuality.Epic, 64, 30, 480)]
+    [TestCase(ModuleQuality.Epic, 48, 25, 400)]
     public void Price_ScalesFromPointEightToOnePointTwoOfTheBase(ModuleQuality quality, int add, int percent, long expected)
     {
         Assert.That(TypeLimitRolls.Price(new TypeLimitRoll(quality, add, percent)), Is.EqualTo(expected));
@@ -112,8 +112,8 @@ public sealed class CellUpgradesTests
     [Test]
     public void Price_RoundsHalfAwayFromZero()
     {
-        // Common, add 9 (1/8) and percent 5 (0): p = 1/16, 300 * (0.8 + 0.025) = 247.5, rounded to 248.
-        Assert.That(TypeLimitRolls.Price(new TypeLimitRoll(ModuleQuality.Common, 9, 5)), Is.EqualTo(248));
+        // Common, add 9 (1/8) and percent 5 (0): p = 1/16, yielding 82.5 before rounding.
+        Assert.That(TypeLimitRolls.Price(new TypeLimitRoll(ModuleQuality.Common, 9, 5)), Is.EqualTo(83));
         Assert.Throws<ArgumentException>(new Action(() => TypeLimitRolls.Price(new TypeLimitRoll(ModuleQuality.Common, 7, 5))));
     }
 }

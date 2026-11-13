@@ -30,6 +30,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly GridNetworkTooltipPresenter _networkTooltipPresenter;
     private readonly BasicCellHandler _cellHandler;
     private readonly StorageContentRegistration _content;
+    private readonly ItemContentService _itemContent;
     private readonly CellWorkbenchItem _workbench;
     private readonly CellHealth _health;
     private readonly LegacyMigration _migration;
@@ -50,7 +51,7 @@ public sealed class PlatformComposition : IDisposable
     private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
         GridNetworkTooltipPresenter networkTooltipPresenter, BasicCellHandler cellHandler,
         ItemAppearance appearance,
-        StorageContentRegistration content, CellHealth health, LegacyMigration migration, StorageEventBus events,
+        StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
         DigitalStorageRuntime runtime)
     {
@@ -67,6 +68,7 @@ public sealed class PlatformComposition : IDisposable
         _cellHandler = cellHandler;
         _appearance = appearance;
         _content = content;
+        _itemContent = itemContent;
         _workbench = workbench;
         _health = health;
         _migration = migration;
@@ -148,28 +150,33 @@ public sealed class PlatformComposition : IDisposable
         var cellHandler = new BasicCellHandler(text);
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
-        // The value adjustment reads native items, so only the composed mod passes it; the reviewed Platform tests keep
-        // the plain definitions.
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
             message => log.Error(message), ItemValueAdjustment.Adjust);
-        var component = new StorageComponentFactory(appearance, componentDefinition, recipe, contentSynchronization);
+        var itemContent = new ItemContentService(contentSynchronization, () =>
+        {
+            search.Service.UpdateConfiguration(search.Service.Configuration);
+            PartitionWindow.InvalidateSamples();
+            eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged));
+        }, message => log.Error(message));
+        var component = new StorageComponentFactory(appearance, componentDefinition, recipe);
         var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
-            contentSynchronization);
+            itemContent.Changed);
         var housing = new MaterialItem(cell);
-        var drive = new DriveItem(appearance, windows, inventory, networkEvents, contentSynchronization);
-        var controller = new ControllerItem(appearance, windows, contentSynchronization);
+        var drive = new DriveItem(appearance, windows, inventory, networkEvents);
+        var controller = new ControllerItem(appearance, windows);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, contentSynchronization, search.Service,
+            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, search.Service,
             networkPowerSettings);
-        var workbench = new CellWorkbenchItem(text, appearance, contentSynchronization,
+        var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message)),
             PartitionWindow.CloseFor,
             message => log.Log(message));
-        var modules = new CellModuleFactory(appearance, contentSynchronization, text);
+        var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
+        itemContent.SetModulePresenter(modules.Present);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
-            modules, contentSynchronization, log);
+            modules, itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
-            networkTooltipPresenter, cellHandler, appearance, content, cellHealth, migration, eventBus,
+            networkTooltipPresenter, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
                 () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))));
@@ -195,11 +202,14 @@ public sealed class PlatformComposition : IDisposable
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
+            ModHook.OnGameLoadedInit += _itemContent.BeginLoad;
+            ModHook.OnNewGameStarted += _itemContent.NewGame;
             ModHook.OnGameLoadedNormal += OnGameLoaded;
             // Order matters: audit the restored pages, backfill item types, then migrate pending cells.
             ModHook.OnGameLoadedLate += _health.Run;
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
+            ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             ExposeRuntime(_runtime);
             if (_integrations != null)
@@ -237,11 +247,14 @@ public sealed class PlatformComposition : IDisposable
         _localeRegistration?.Dispose();
         _localeRegistration = null;
         ModHook.OnModConfigApplied -= OnConfigApplied;
+        ModHook.OnGameLoadedInit -= _itemContent.BeginLoad;
+        ModHook.OnNewGameStarted -= _itemContent.NewGame;
         ModHook.OnGameLoadedNormal -= OnGameLoaded;
         ModHook.OnGameLoadedLate -= _health.Run;
         _health.Detach();
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
+        ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
         TerminalStorageWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
@@ -254,6 +267,7 @@ public sealed class PlatformComposition : IDisposable
         if (_runtimeExposed) ExposeRuntime(null);
         _vendors.Dispose();
         _content.Dispose();
+        _itemContent.Dispose();
         _events.Dispose();
         _search.Dispose();
     }
@@ -284,6 +298,7 @@ public sealed class PlatformComposition : IDisposable
         if (!_isEnabled || _isDisposed) return;
         _pinyinLifecycle.OnLocaleChanged(locale, settled);
         if (!settled) return;
+        _itemContent.RefreshLocale();
         if (_assetsReady) _settings.RefreshSectionNames();
         _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
     }

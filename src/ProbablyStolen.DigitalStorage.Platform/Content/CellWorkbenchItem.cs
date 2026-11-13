@@ -24,20 +24,18 @@ internal sealed class CellWorkbenchItem
     internal const string DescriptionKey = "workbench_desc";
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
-    private readonly ItemContentSynchronization _contentSynchronization;
     private readonly Action<GameItem> _openPartition;
     private readonly Action<GameItem> _cellLeft;
     private readonly Action<string> _log;
     private bool _summaryFailureLogged;
     private readonly ConditionalWeakTable<GameSlotInventory, Action> _summaries = new();
 
-    internal CellWorkbenchItem(ModText text, ItemAppearance appearance, ItemContentSynchronization contentSynchronization,
+    internal CellWorkbenchItem(ModText text, ItemAppearance appearance,
         Action<GameItem> openPartition, Action<GameItem> cellLeft, Action<string> log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _text = text ?? throw new ArgumentNullException(nameof(text));
         _appearance = appearance ?? throw new ArgumentNullException(nameof(appearance));
-        _contentSynchronization = contentSynchronization ?? throw new ArgumentNullException(nameof(contentSynchronization));
         _openPartition = openPartition ?? throw new ArgumentNullException(nameof(openPartition));
         _cellLeft = cellLeft ?? throw new ArgumentNullException(nameof(cellLeft));
         CellUpgradeInventory.ModulesChanged += RefreshSummary;
@@ -124,7 +122,6 @@ internal sealed class CellWorkbenchItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            NativeItemContentInitialization.Initialize(item, _contentSynchronization);
             var slot = new GameSlotInventory(1, 2) { identifier = CellUpgradeInventory.WorkbenchSlotId };
             var info = new MachineryText(string.Empty, alignment: TMPro.HorizontalAlignmentOptions.Left, uppercase: false);
             // Counting stored types reads every page; a notice during a drag reuses the last count.

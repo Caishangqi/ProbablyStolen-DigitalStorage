@@ -249,6 +249,32 @@ public sealed class WorkbenchDraftTests
     }
 
     [Test]
+    public void RuleDraft_ClearSamplePreservesCurrentRowsAndStopsSeedingNewOnes()
+    {
+        var sample = new ItemAttributeSet(new Dictionary<string, AttributeValue>
+        {
+            ["heat"] = AttributeValue.Of(40L),
+            ["legality"] = AttributeValue.Of("high")
+        }, hasHiddenFeatures: false);
+        var rule = new RuleDraft(PartitionRule.ForSample("r0", 0, Apple), sample) { Name = "unfinished" };
+        var heat = rule.AddCondition("heat");
+        rule.SetTarget(1, PartitionValue.Of(35));
+        var legality = rule.AddCondition("legality");
+
+        rule.ClearSample();
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(rule.Name, Is.EqualTo("unfinished"));
+            Assert.That(rule.Rows[1], Is.SameAs(heat));
+            Assert.That(heat.Target, Is.EqualTo(PartitionValue.Of(35)));
+            Assert.That(legality.Target, Is.EqualTo(PartitionValue.Of("high")));
+            Assert.That(rule.Validate(), Is.Null, "Existing values remain valid.");
+        }));
+        Assert.That(rule.AddCondition("heat").Target, Is.Null, "New rows no longer use the stale sample.");
+    }
+
+    [Test]
     public void RuleDraft_NeverFillsAnUnknownValueWithZero()
     {
         var rule = new RuleDraft(PartitionRule.ForSample("r0", 0, Apple), ItemAttributeSet.Unreadable);
