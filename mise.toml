@@ -29,6 +29,14 @@ run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-core'
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-platform'
 
+[tasks.test-api]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-api'
+
+[tasks.test-api-core]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-api-core'
+
 [tasks.test-common]
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-common'

@@ -45,7 +45,7 @@ def _iter_tests(suite):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from .commands import PUBLIC
-    commands = ("environment", "assets", "internal-deployment", "internal-workshop-upload", "verify-layout", "inventory-tests", "verify-platform-review", "validate-trx") + PUBLIC
+    commands = ("environment", "assets", "internal-deployment", "internal-workshop-upload", "verify-layout", "inventory-tests", "verify-platform-review", "verify-api-review", "validate-trx") + PUBLIC
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command in commands:
         subparsers.add_parser(command, add_help=command in ("verify-layout", "test-tools-unit", "test-tools-integration"))
@@ -57,15 +57,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "validate-trx":
         from .trx import validate
-        from .platform_review import validate as validate_review
+        from .platform_review import validate as validate_review, validate_api
         try:
-            if len(remaining) not in (1, 2) or (len(remaining) == 2 and remaining[1] != '--platform'):
-                raise ValueError('validate-trx requires a report and optional --platform')
-            approved = validate_review()['tests'] if len(remaining) == 2 else None
+            if len(remaining) not in (1, 2) or (len(remaining) == 2 and remaining[1] not in ('--platform', '--api')):
+                raise ValueError('validate-trx requires a report and optional --platform or --api')
+            approved = (validate_review()['tests'] if remaining[1] == '--platform' else validate_api()['tests']) if len(remaining) == 2 else None
             print(validate(Path(remaining[0]), approved))
             return 0
         except (OSError, ValueError, KeyError, __import__('xml.etree.ElementTree', fromlist=['ParseError']).ParseError) as error:
             print(f'Test report error: {error}', file=sys.stderr)
+            return 1
+    if args.command == "verify-api-review":
+        from .platform_review import validate_api
+        try:
+            if remaining:
+                raise ValueError("verify-api-review takes no arguments")
+            validate_api()
+            return 0
+        except (OSError, ValueError, KeyError) as error:
+            print(f"Api review error: {error}", file=sys.stderr)
             return 1
     if args.command == "verify-platform-review":
         from .platform_review import validate

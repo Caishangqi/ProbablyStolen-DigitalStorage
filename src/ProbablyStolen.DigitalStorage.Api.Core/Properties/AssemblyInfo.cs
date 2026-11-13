@@ -5,4 +5,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("ProbablyStolen.DigitalStorage.Common")]
 [assembly: InternalsVisibleTo("ProbablyStolen.DigitalStorage.Platform")]
 [assembly: InternalsVisibleTo("ProbablyStolen.DigitalStorage.Common.Tests")]
+[assembly: InternalsVisibleTo("ProbablyStolen.DigitalStorage.Api.Core.Tests")]
 [assembly: InternalsVisibleTo("ProbablyStolen.DigitalStorage.Platform.Tests")]

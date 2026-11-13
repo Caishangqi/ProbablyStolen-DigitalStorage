@@ -31,13 +31,13 @@ class SdkArtifactsTests(unittest.TestCase):
                                   check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
         projects = {line.strip().replace("\\", "/") for line in solution.stdout.splitlines() if line.strip().endswith(".csproj")}
         selected = set(json.loads((ROOT / "DigitalStorage.Core.slnf").read_text(encoding="utf-8"))["solution"]["projects"])
-        self.assertEqual(len(projects), 12)
-        self.assertEqual(len(selected), 7)
+        self.assertEqual(len(projects), 14)
+        self.assertEqual(len(selected), 8)
         self.assertTrue(selected < projects)
         self.assertEqual({Path(p).stem for p in projects - selected}, {
             "ProbablyStolen.DigitalStorage.Api", "ProbablyStolen.DigitalStorage.Compat",
             "ProbablyStolen.DigitalStorage.Platform", "ProbablyStolen.DigitalStorage.Mod",
-            "ProbablyStolen.DigitalStorage.Platform.Tests"})
+            "ProbablyStolen.DigitalStorage.Platform.Tests", "ProbablyStolen.DigitalStorage.Api.Tests"})
 
     def test_tool_rejects_protected_and_escaping_paths(self):
         tool = ROOT / "scripts/tool.py"

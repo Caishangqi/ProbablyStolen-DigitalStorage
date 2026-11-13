@@ -2,7 +2,7 @@ using System;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 
-namespace ProbablyStolen.DigitalStorage.Common.Tests;
+namespace ProbablyStolen.DigitalStorage.Api.Core.Tests;
 
 [TestFixture]
 public sealed class KeyCounterTests

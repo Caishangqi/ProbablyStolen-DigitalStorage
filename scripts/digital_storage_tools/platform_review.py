@@ -9,9 +9,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/reviewed-inputs.json"
 PROJECTS = ("src/ProbablyStolen.DigitalStorage.Api.Core", "src/ProbablyStolen.DigitalStorage.Api", "src/ProbablyStolen.DigitalStorage.Common", "src/ProbablyStolen.DigitalStorage.Client", "src/ProbablyStolen.DigitalStorage.Platform", "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests")
-CONFIG = ("Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", "global.json",
-          "scripts/test.ps1", "scripts/tool.py", "scripts/digital_storage_tools/cli.py",
-          "scripts/digital_storage_tools/platform_review.py", "scripts/digital_storage_tools/trx.py")
+API_MANIFEST = ROOT / "tests/Unit/ProbablyStolen.DigitalStorage.Api.Tests/reviewed-inputs.json"
+API_PROJECTS = ("src/ProbablyStolen.DigitalStorage.Api.Core", "src/ProbablyStolen.DigitalStorage.Api", "tests/Unit/ProbablyStolen.DigitalStorage.Api.Tests")
+CONFIG = ("DigitalStorage.sln", "DigitalStorage.Core.slnf", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", "global.json",
+          "mise.toml", ".run/Api__Test.run.xml", ".run/Api.Core__Test.run.xml", "scripts/test.ps1", "scripts/tool.py", "scripts/digital_storage_tools/cli.py",
+          "scripts/digital_storage_tools/commands.py", "scripts/digital_storage_tools/platform_review.py", "scripts/digital_storage_tools/trx.py")
 
 
 AUTO_IMPORT_NAMES = {
@@ -20,9 +22,9 @@ AUTO_IMPORT_NAMES = {
 }
 
 
-def input_hashes(root: Path = ROOT) -> dict[str, str]:
+def input_hashes(root: Path = ROOT, projects: tuple[str, ...] = PROJECTS) -> dict[str, str]:
     paths = [root / path for path in CONFIG]
-    for project in PROJECTS:
+    for project in projects:
         project_path = root / project
         for ancestor in (project_path, *project_path.parents):
             if not ancestor.is_relative_to(root):
@@ -56,6 +58,16 @@ def input_hashes(root: Path = ROOT) -> dict[str, str]:
 def _is_test_boundary_input(path: str) -> bool:
     # Platform test sources, their project and every MSBuild auto-import decide which code the test host can run.
     return path.startswith(PROJECTS[-1] + "/") or path.rsplit("/", 1)[-1].casefold() in AUTO_IMPORT_NAMES
+
+
+def validate_api(root: Path = ROOT) -> dict:
+    manifest = json.loads((root / API_MANIFEST.relative_to(ROOT)).read_text(encoding='utf-8'))
+    if manifest['inputs'] != input_hashes(root, API_PROJECTS):
+        raise ValueError('Api reviewed inputs changed; independent review is required')
+    tests = manifest['tests']
+    if not isinstance(tests, list) or not tests or any(not isinstance(test, str) or not test for test in tests):
+        raise ValueError('Api reviewed tests are invalid')
+    return manifest
 
 
 def validate(root: Path = ROOT, tests_only: bool = False) -> dict:

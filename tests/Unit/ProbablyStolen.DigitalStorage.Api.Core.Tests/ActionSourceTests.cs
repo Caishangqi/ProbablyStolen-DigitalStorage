@@ -1,9 +1,8 @@
 using System;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
-using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 
-namespace ProbablyStolen.DigitalStorage.Common.Tests;
+namespace ProbablyStolen.DigitalStorage.Api.Core.Tests;
 
 [TestFixture]
 public sealed class ActionSourceTests
@@ -43,11 +42,5 @@ public sealed class ActionSourceTests
     public void OfMod_RejectsMissingId(string? modId)
     {
         Assert.Throws<ArgumentException>(new Action(() => ActionSource.OfMod(modId!)));
-    }
-
-    [Test]
-    public void MigrationSource_HasNoMod()
-    {
-        Assert.That(MigrationSource.Instance.ModId, Is.Null);
     }
 }

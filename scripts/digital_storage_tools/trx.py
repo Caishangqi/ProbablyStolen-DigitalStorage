@@ -43,5 +43,5 @@ def validate(path: Path, approved: list[str] | None = None) -> int:
         executions.add(execution_id)
         tests.append(defined[test_id][1])
     if approved is not None and sorted(tests) != sorted(approved):
-        raise ValueError('Platform tests differ from reviewed list')
+        raise ValueError('TRX tests differ from reviewed list')
     return values['total']

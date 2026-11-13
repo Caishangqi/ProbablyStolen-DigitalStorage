@@ -18,6 +18,6 @@ class ScriptArtifactsIntegrationTests(unittest.TestCase):
             result = subprocess.run(["dotnet", "test", str(ARCHITECTURE), "--no-build", "--no-restore",
                                      "--configuration", "Debug", f"-p:ArtifactsPath={output}"],
                                     cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            self.assertIn("63", result.stdout)
+            self.assertIn("64", result.stdout)
             self.assertTrue((output / "bin" / "ProbablyStolen.DigitalStorage.Common" / "debug" /
                              "ProbablyStolen.DigitalStorage.Common.dll").is_file())

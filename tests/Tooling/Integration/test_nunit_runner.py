@@ -1,31 +1,53 @@
-import contextlib
-import json
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from digital_storage_tools import platform_review
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@contextlib.contextmanager
-def _review_manifest():
-    """Provides a manifest for the current inputs when none exists, as on CI where it is never checked out.
+def _runner_fixture(root):
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts/test.ps1", scripts / "test.ps1")
+    shutil.copy2(ROOT / "scripts/digital_storage_tools/platform_review.py", scripts / "platform_review.py")
+    python = root / ".venv/Scripts/python.exe"
+    python.parent.mkdir(parents=True)
+    shutil.copy2(sys.executable, python)
+    shutil.copy2(ROOT / ".venv/pyvenv.cfg", root / ".venv/pyvenv.cfg")
+    (root / "DigitalStorage.Core.slnf").write_text('{"solution":{"projects":[]}}', encoding="utf-8")
+    (scripts / "tool.py").write_text('''\
+import json
+import sys
+from pathlib import Path
+from platform_review import validate_api
 
-    The source inventory check runs after the review gate, so it is reachable only once the gate passes.
-    """
-    manifest = platform_review.MANIFEST
-    if manifest.exists():
-        yield
-        return
-    manifest.write_text(json.dumps({"inputs": platform_review.input_hashes()}), encoding="utf-8")
+root = Path(__file__).resolve().parents[1]
+if sys.argv[1] == "environment":
+    print(json.dumps({"game_directory": sys.argv[sys.argv.index("--game-dir") + 1],
+                      "output_directory": str(root / "output")}))
+elif sys.argv[1] == "verify-api-review":
     try:
-        yield
-    finally:
-        manifest.unlink()
+        validate_api(root)
+    except (OSError, ValueError, KeyError) as error:
+        print("Api review error: " + str(error), file=sys.stderr)
+        sys.exit(1)
+elif sys.argv[1] == "verify-platform-review":
+    print("fixture Platform review passed")
+else:
+    sys.exit("unexpected fixture command")
+''', encoding="utf-8")
+    game = root / "game"
+    for relative in ("Probably Stolen.exe", "Probably Stolen_Data/Managed/Assembly-CSharp.dll",
+                     "Probably Stolen_Data/Managed/UnityEngine.dll",
+                     "Probably Stolen_Data/Managed/UnityEngine.CoreModule.dll"):
+        path = game / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fixture")
+    return game
 
 
 class NUnitRunnerTests(unittest.TestCase):
@@ -50,58 +72,43 @@ class NUnitRunnerTests(unittest.TestCase):
         self.assertIn("Environment resolution failed", result.stderr)
         self.assertNotIn("dotnet test", result.stdout)
 
-    def test_unreviewed_platform_source_fails_before_building_or_testing(self):
+    def test_unapproved_api_scope_fails_before_build_without_platform_review(self):
+        with tempfile.TemporaryDirectory(prefix="api runner ") as directory:
+            root = Path(directory)
+            game = _runner_fixture(root)
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                 str(root / "scripts/test.ps1"), "-Target", "Api", "-GameDirectory", str(game)],
+                cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Api review error", result.stderr)
+            self.assertNotIn("Platform review", result.stderr)
+            self.assertNotIn("> dotnet", result.stdout)
+
+    def test_unreviewed_platform_source_fails_before_build(self):
         self._assert_unreviewed_platform_source_rejected(skip_review=False)
 
     def test_skipped_review_still_enforces_platform_source_inventory(self):
         result = self._assert_unreviewed_platform_source_rejected(skip_review=True)
         self.assertIn("[SKIP] Platform review gate disabled", result.stdout)
-        self.assertNotIn("reviewed inputs changed", result.stderr)
 
     def _assert_unreviewed_platform_source_rejected(self, skip_review):
-        with tempfile.TemporaryDirectory(prefix="platform scope ") as directory:
-            temp = Path(directory)
-            game = temp / "game"
-            for relative in (
-                "Probably Stolen.exe",
-                "Probably Stolen_Data/Managed/Assembly-CSharp.dll",
-                "Probably Stolen_Data/Managed/UnityEngine.dll",
-                "Probably Stolen_Data/Managed/UnityEngine.CoreModule.dll",
-            ):
-                target = game / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"fixture")
-            driver = temp / "driver.ps1"
-            driver.write_text(r'''
-$ErrorActionPreference = 'Stop'
-function Get-ChildItem {
-    [CmdletBinding()]
-    param([string]$LiteralPath, [switch]$File, [string]$Filter, [switch]$Recurse)
-    if ($LiteralPath -eq $env:PLATFORM_SOURCE_ROOT) {
-        foreach ($name in @('CanonicalFilterKeyCodecTests.cs', 'NativeItemIdentityReaderTests.cs', 'UnreviewedTests.cs')) {
-            [pscustomobject]@{ FullName = (Join-Path $LiteralPath $name) }
-        }
-        return
-    }
-    Microsoft.PowerShell.Management\Get-ChildItem @PSBoundParameters
-}
-$skip = $env:RUNNER_SKIP_REVIEW -eq '1'
-& (Join-Path $env:RUNNER_ROOT 'scripts/test.ps1') -Target Platform -GameDirectory $env:RUNNER_GAME -ArtifactsPath $env:RUNNER_OUTPUT -SkipPlatformReview:$skip
-exit $LASTEXITCODE
-''', encoding="utf-8")
-            env = os.environ.copy()
-            env.pop("DIGITAL_STORAGE_STEAM_LIBRARY_DIR", None)
-            env.update(
-                RUNNER_ROOT=str(ROOT), RUNNER_GAME=str(game), RUNNER_OUTPUT=str(temp / "output"),
-                PLATFORM_SOURCE_ROOT=str(ROOT / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests"),
-                RUNNER_SKIP_REVIEW="1" if skip_review else "0",
-            )
-            with _review_manifest():
-                result = subprocess.run(
-                    ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
-                    cwd=temp, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                )
+        with tempfile.TemporaryDirectory(prefix="platform runner ") as directory:
+            root = Path(directory)
+            game = _runner_fixture(root)
+            sources = root / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests"
+            sources.mkdir(parents=True)
+            for name in ("CanonicalFilterKeyCodecTests.cs", "ItemContentSynchronizationTests.cs",
+                         "NativeItemIdentityReaderTests.cs", "UnreviewedTests.cs"):
+                (sources / name).write_text("", encoding="utf-8")
+            command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                       str(root / "scripts/test.ps1"), "-Target", "Platform", "-GameDirectory", str(game)]
+            if skip_review:
+                command.append("-SkipPlatformReview")
+            result = subprocess.run(command, cwd=root, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace")
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("fixture Platform review passed", result.stdout)
             self.assertIn("Platform test sources changed", result.stderr)
             self.assertNotIn("> dotnet", result.stdout)
             return result

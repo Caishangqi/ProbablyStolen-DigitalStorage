@@ -44,6 +44,24 @@ public sealed class ProjectGraphTests
         .Single(attribute => attribute.Key == key).Value!;
 
     [Test]
+    public void TestProjects_DeclareOnlyApprovedDirectProductReferences()
+    {
+        AssertTestProjectReferences("Api.Core", "Api.Core");
+        AssertTestProjectReferences("Api", "Api");
+    }
+
+    private static void AssertTestProjectReferences(string testModule, params string[] expected)
+    {
+        var path = Path.Combine(RepositoryRoot, "tests", "Unit", $"ProbablyStolen.DigitalStorage.{testModule}.Tests",
+            $"ProbablyStolen.DigitalStorage.{testModule}.Tests.csproj");
+        var document = XDocument.Load(path);
+        var references = document.Descendants("ProjectReference")
+            .Select(element => GetProjectModuleName((string?)element.Attribute("Include") ?? string.Empty))
+            .ToArray();
+        Assert.That(references, Is.EqualTo(expected), testModule);
+    }
+
+    [Test]
     public void ProductProjects_DeclareOnlyApprovedReferences()
     {
         foreach (var module in AllowedReferences.Keys)

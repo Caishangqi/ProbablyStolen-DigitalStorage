@@ -19,6 +19,12 @@ class TrxTests(unittest.TestCase):
     def test_valid(self):
         self.assertEqual(self.check(), 1)
 
+    def test_approved_identity_list_must_match_actual_report(self):
+        self.root.find('v:TestDefinitions/v:UnitTest/v:TestMethod', NS).set('className', 'Api.Tests')
+        ET.ElementTree(self.root).write(self.path)
+        with self.assertRaisesRegex(ValueError, 'tests differ from reviewed list'):
+            validate(self.path, ['Api.Tests.Other'])
+
     def test_semantically_invalid_reports_fail(self):
         for case in ('missing', 'missing-field', 'negative', 'outcome', 'summary', 'id', 'duplicate', 'duplicate-definition', 'execution'):
             with self.subTest(case=case):

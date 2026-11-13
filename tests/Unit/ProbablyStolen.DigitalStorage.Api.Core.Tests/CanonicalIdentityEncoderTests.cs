@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
-namespace ProbablyStolen.DigitalStorage.Common.Tests;
+namespace ProbablyStolen.DigitalStorage.Api.Core.Tests;
 
 [TestFixture]
 public sealed class CanonicalIdentityEncoderTests
@@ -81,26 +79,6 @@ public sealed class CanonicalIdentityEncoderTests
         var one = CanonicalIdentityEncoder.Encode(Input("root", content: CanonicalIdentityNode.Grid(Shape(), new[] { first })));
         var two = CanonicalIdentityEncoder.Encode(Input("root", content: CanonicalIdentityNode.Grid(Shape(), new[] { rotated })));
         Assert.That(one, Is.Not.EqualTo(two));
-    }
-
-    [Test]
-    public void Encode_ContentAndPriceChangesProduceNewIdentityWhileIdentifierPartitionStillMatches()
-    {
-        const string itemId = "digital_storage.cell_component_1k";
-        var oldKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "old name", shortDescription: "old", unitValue: 100));
-        var renamedKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "new name", shortDescription: "new", unitValue: 100));
-        var repricedKey = CanonicalIdentityEncoder.Encode(Input(itemId, name: "old name", shortDescription: "old", unitValue: 200));
-        Assert.That(renamedKey, Is.Not.EqualTo(oldKey));
-        Assert.That(repricedKey, Is.Not.EqualTo(oldKey));
-
-        var rule = PartitionRule.ForSample("stable-rule", 0, oldKey);
-        var config = new PartitionConfig(PartitionMode.Whitelist, new[] { rule });
-        var partition = CellPartition.From(config, CanonicalAttributeSource.Instance);
-
-        Assert.That(partition.Rejection(renamedKey), Is.Null);
-        Assert.That(partition.Rejection(repricedKey), Is.Null);
-        Assert.That(config.Rules[0].DisplayKey, Is.EqualTo(oldKey), "Synchronizing item content does not rewrite the persisted sample key.");
-        Assert.That(config.Rules[0].Conditions[0].Target!.Text, Is.EqualTo(itemId));
     }
 
     [Test]

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Core', 'Platform', 'Common', 'Client', 'Integration', 'Architecture')]
+    [ValidateSet('All', 'Core', 'Platform', 'ApiCore', 'Api', 'Common', 'Client', 'Integration', 'Architecture')]
     [string]$Target = 'All',
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
@@ -88,7 +88,7 @@ function Protect-TestReport {
 
 Push-Location $repositoryRoot
 try {
-    $gameRequired = $Target -in @('Platform', 'All')
+    $gameRequired = $Target -in @('Platform', 'Api', 'All')
     $resolverArguments = @($toolPath, 'environment', '--target', $(if ($gameRequired) { 'game' } else { 'core' }), '--json')
     if ($ArtifactsPath) { $resolverArguments += @('--artifacts-path', $ArtifactsPath) }
     if ($GameDirectory) { $resolverArguments += @('--game-dir', $GameDirectory) }
@@ -101,7 +101,12 @@ try {
     $core = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'DigitalStorage.Core.slnf') -Raw | ConvertFrom-Json).solution.projects
     $testProjects = @($core | Where-Object { $_ -like 'tests/*' })
     $platform = 'tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/ProbablyStolen.DigitalStorage.Platform.Tests.csproj'
-    if ($gameRequired) {
+    $api = 'tests/Unit/ProbablyStolen.DigitalStorage.Api.Tests/ProbablyStolen.DigitalStorage.Api.Tests.csproj'
+    if ($Target -in @('Api', 'All')) {
+        & $python -B $toolPath verify-api-review
+        if ($LASTEXITCODE -ne 0) { throw 'Api reviewed inputs changed; independent review is required.' }
+    }
+    if ($Target -in @('Platform', 'All')) {
         if ($SkipPlatformReview) {
             Write-Host '[SKIP] Platform review gate disabled by -SkipPlatformReview: product-source hashes and approved Platform tests are not enforced; test boundary inputs remain pinned.'
             & $python -B $toolPath verify-platform-review --tests-only
@@ -123,7 +128,7 @@ try {
     $solutionList = & dotnet.exe sln (Join-Path $repositoryRoot 'DigitalStorage.sln') list
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect solution inventory.' }
     $solutionTests = @($solutionList | Where-Object { $_ -match '^tests[\\/].*\.csproj$' } | ForEach-Object { $_.Replace('\', '/') })
-    $declaredTests = @($testProjects) + @($platform)
+    $declaredTests = @($testProjects) + @($platform, $api)
     $diskTests = @(& $python -B $toolPath inventory-tests)
     if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate test projects safely.' }
     if ($diskTests.Count -ne $declaredTests.Count -or @(Compare-Object $diskTests $declaredTests).Count -ne 0) {
@@ -134,9 +139,11 @@ try {
     }
     $projects = @(switch ($Target) {
         'Core' { $testProjects }
-        'All' { $testProjects; $platform }
+        'All' { $testProjects; $platform; $api }
         'Platform' { $platform }
-        default { @($testProjects | Where-Object { [System.IO.Path]::GetFileName($_) -like "ProbablyStolen.DigitalStorage.$Target*" }) }
+        'Api' { $api }
+        'ApiCore' { @($testProjects | Where-Object { [System.IO.Path]::GetFileName($_) -eq 'ProbablyStolen.DigitalStorage.Api.Core.Tests.csproj' }) }
+        default { @($testProjects | Where-Object { [System.IO.Path]::GetFileName($_) -eq "ProbablyStolen.DigitalStorage.$Target.Tests.csproj" -or [System.IO.Path]::GetFileName($_) -eq "ProbablyStolen.DigitalStorage.${Target}Tests.csproj" }) }
     })
     if (($Target -notin @('Core', 'All')) -and $projects.Count -ne 1) { throw "Invalid test inventory for $Target." }
     if ($Target -eq 'All') {
@@ -163,8 +170,10 @@ try {
         }
     }
     if ($Target -eq 'All') {
-        Invoke-DotNet @('restore', $platform, '--locked-mode')
-        Invoke-DotNet @('build', $platform, '--configuration', $Configuration, '--no-restore')
+        foreach ($project in @($platform, $api)) {
+            Invoke-DotNet @('restore', $project, '--locked-mode')
+            Invoke-DotNet @('build', $project, '--configuration', $Configuration, '--no-restore')
+        }
     }
 
     $resultsDirectory = Join-Path $environment.output_directory "test-results/$Configuration"
@@ -205,6 +214,7 @@ try {
             throw "Test result file was not created: $trxPath"
         }
         $validationArgs = @($toolPath, 'validate-trx', $trxPath)
+        if ($project -eq $api) { $validationArgs += '--api' }
         if ($project -eq $platform -and -not $SkipPlatformReview) { $validationArgs += '--platform' }
         $projectTotal = & $python -B @validationArgs
         if ($LASTEXITCODE -ne 0) { throw "$projectName has an invalid or unsuccessful test report." }

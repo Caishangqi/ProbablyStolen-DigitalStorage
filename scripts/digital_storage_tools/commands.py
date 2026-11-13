@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ENV = {"DIGITAL_STORAGE_GAME_DIR", "DIGITAL_STORAGE_STEAM_LIBRARY_DIR", "DIGITAL_STORAGE_ILSPYCMD", "DIGITAL_STORAGE_ASSET_RIPPER_EXE", "DIGITAL_STORAGE_PACKAGE_DIR", "DIGITAL_STORAGE_DEPLOY_DIR", "DIGITAL_STORAGE_STEAMCMD_DIR", "DIGITAL_STORAGE_STEAM_USERNAME", "DIGITAL_STORAGE_WORKSHOP_VDF", "DIGITAL_STORAGE_WORKSHOP_PREVIEW", "DIGITAL_STORAGE_WORKSHOP_VISIBILITY", "DIGITAL_STORAGE_WORKSHOP_LOCALE", "ArtifactsPath"}
 SCRIPTS = {
     "build-core": ("build.ps1", "-Target", "Core"), "build-game": ("build.ps1", "-Target", "Game"),
+    "test-api-core": ("test.ps1", "-Target", "ApiCore"), "test-api": ("test.ps1", "-Target", "Api"),
     **{f"test-{name.lower()}": ("test.ps1", "-Target", name) for name in ("Core", "Platform", "Common", "Client", "Integration", "Architecture", "All")},
     "package": ("package.ps1",), "deploy": ("deploy.ps1", "-Action", "Deploy"),
     "remove": ("deploy.ps1", "-Action", "Remove"), "launch": ("start-game.ps1",),

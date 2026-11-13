@@ -29,7 +29,8 @@
 !.env.example
 *.local.json
 .secrets/
-# Platform review manifest: kept on each machine for the local test gate, never published.
+# Game-reference review manifests stay local to each machine's test gate.
+/tests/Unit/ProbablyStolen.DigitalStorage.Api.Tests/reviewed-inputs.json
 /tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/reviewed-inputs.json
 
 # Build and test output.
