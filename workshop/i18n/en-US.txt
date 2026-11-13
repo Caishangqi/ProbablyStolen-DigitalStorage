@@ -1,11 +1,10 @@
 [h1]Digital Storage[/h1]
 
-Put storage cells in drives, then use a terminal to search, store, and take items across the network.
+Put storage cells in drives, then use a terminal to search, store, and retrieve items across the network.
 
-This mod is inspired by [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url], adapted to Probably Stolen's inventory rules.
+The digital storage and network terminal design is inspired by [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] and redesigned around Probably Stolen's items, machines, and inventory rules.
 
 [h2]Machines and setup[/h2]
-
 [list]
 [*]Controller: put a battery in its power slot to power connected machines. Each network needs exactly one controller.
 [*]Drive: holds 14 individual storage cells and connects to other drives, terminals, and controllers.
@@ -13,14 +12,13 @@ This mod is inspired by [url=https://github.com/AppliedEnergistics/Applied-Energ
 [*]Cell Workbench: a 3x3 machine for partitions and cell modules. It needs no network connection or power.
 [/list]
 
-Insert a component into an Item Cell Housing, then put the assembled cell in a drive. Connect it to a powered controller and terminal.
+Insert a storage component into an Item Cell Housing to assemble a cell of the same tier, then put it in a drive. Connect the controller, drive, and terminal and supply power to access the inventory.
 
-Take the cell to the workbench to configure it. Its contents leave the network while there. The workbench accepts usable, assembled cells you own in the supported storage format.
+To configure a cell, remove it from the drive and put it in the workbench. Cells in the workbench do not participate in network storage, and their contents do not appear in terminals. The workbench accepts only usable, assembled cells you own in a valid storage format.
 
-[h2]Cell capacity[/h2]
+[h2]Capacity and storage cells[/h2]
 
-Components and cells come in five tiers:
-
+Components and cells come in five tiers, with capacity measured in bytes:
 [list]
 [*]1k: 1,024 bytes
 [*]4k: 4,096 bytes
@@ -28,40 +26,34 @@ Components and cells come in five tiers:
 [*]64k: 65,536 bytes
 [*]256k: 262,144 bytes
 [/list]
-
 Every tier starts with a limit of 128 item types. Type overhead uses half the capacity when the effective type limit is reached. Type limit modules spread that overhead over more types without changing total byte capacity.
 
-Items also use bytes for their count times their bounding footprint: 8 grid squares per byte, rounded up across all items. For example, ten identical 2x2 items in a 1k cell without modules use 5 item bytes plus 4 type bytes, for 9 bytes in total.
+Item usage is based on quantity and bounding footprint, at one byte per eight grid squares in total, rounded up. For example, ten identical 2x2 items in a 1k cell without modules use 5 bytes for the items plus 4 bytes of type overhead, for 9 bytes in total.
 
 Items go onto internal pages by size, and empty pages are removed automatically. Items wider or taller than 12 squares do not fit. Storage pages are locked; items move through terminals.
 
-Hover to see usage, partition, modules, and format. Before removing the component, empty the cell and remove all modules and rules. The housing returns to one empty page, keeping its mode and expansion level.
+Hover over a cell to see its capacity, partition, and modules. Before removing the component, empty the cell and remove all modules and rules. The housing returns to one empty page, keeping its partition mode and expansion level.
 
 Merchants can stock components and assembled cells. Higher tiers are rarer.
 
 [h2]Cell modules[/h2]
-
 Install and remove cell modules in the workbench's Modules panel. They occupy 2x2 squares and cannot be installed in a drive or terminal's native module bay.
-
 [list]
 [*]Type Limit Module: Common, Rare, and Epic qualities, each with random +N and +P% bonuses. Add all flat bonuses, then all percentages. The limit is (128 + total flat bonus) x (1 + total percentage), rounded down. Multiple modules fit if the bay has room.
 [*]Equal Distribution Module: one per cell. Divides item space by the effective type limit to cap each type's usage, regardless of partition rule count.
 [/list]
-
 If removing a type limit module would exceed the remaining type or byte capacity, take some stored items out first.
 
 Native Module Bay Expansion Kits work on cells: 1k and 4k allow no expansion, 16k and 64k allow one level, and 256k allows two. Each level adds 100 to the item's value. An expanded housing cannot accept a component whose expansion limit is lower.
 
-Dr. Jackson and the Upper-Level Engineer stock workbenches and cell modules. Jackson sells Common type limit modules; the engineer sells all qualities. Prices depend on quality and bonuses.
+Dr. Jackson and the Upper-Level Engineer may sell workbenches and both types of cell module. Jackson sells only Common Type Limit Modules; the engineer sells all three qualities. Prices depend on quality and bonuses.
 
 [h2]Partition rules[/h2]
-
-Configure partitions at the workbench. Insert a cell, open Configure Partition, and drag a real inventory item onto the rule grid to create a sample rule. The item stays where it was and is not consumed.
+Partitions can only be edited at the workbench. Insert a cell, click Configure Partition, and drag a real inventory item onto the rule grid to create a rule using it as a sample. The item is not moved or consumed.
 
 New cells use Whitelist mode. Click the mode button to switch to Blacklist. A whitelist accepts matching items; a blacklist excludes them. An empty list accepts everything in either mode.
 
 Double-click a rule to edit conditions for item, type, legality, stolen status, heat, or visible features. Every condition within a rule must match; any matching rule satisfies the list. Changes affect future insertion. Stored items can still be taken out.
-
 [list]
 [*]Drag rules to move or swap them. Position does not affect matching or storage priority.
 [*]Copy, rename, or delete rules, and undo deletion or clearing.
@@ -69,49 +61,47 @@ Double-click a rule to edit conditions for item, type, legality, stolen status, 
 [*]Overview edits save immediately. Valid detail edits save automatically; invalid input shows Not saved. Closing the window keeps saved changes.
 [*]The back key closes the attribute menu, returns to the overview, then closes the editor. Picking up the cell or closing the workbench also closes the editor.
 [/list]
-
 [h2]Networks and priority[/h2]
-
 Machines connect along occupied edges in the same native inventory grid. Corner contact does not connect them. Networks can form chains and branches.
 
-Status shows Online, Offline (unpowered), No controller, or Controller conflict. Restore power to bring an offline network back online. Separate multiple connected controllers into different networks.
+Status shows Online, Offline (unpowered), No controller, or Controller conflict. Connections remain intact while a network is offline; restore power to bring it back online. Separate multiple connected controllers into different networks.
 
 Nightly power usage defaults to 3 for a controller, 2 per drive, and 1 per terminal. Change these values in the mod settings.
 
 Storage tries higher-priority drives first; extraction starts with lower-priority drives. Within a priority group, cells with a matching whitelist rule are preferred. Blacklist admission adds no preference.
 
 [h2]Finding items[/h2]
-
 Search part of a name or description, or use a prefix:
-
 [list]
-[*][b]#[/b] enabled tags, including translated type names when the corresponding tag is present.
+[*][b]#[/b] enabled tags. If a tag shares its name with an item type, the search also includes that type's translated name.
 [*][b]@[/b] item types and their translations.
 [*][b]$[/b] descriptions and lore.
 [*][b]&[/b] item IDs; enable identifier search in settings first.
 [/list]
+Spaces require all terms, [b]|[/b] matches either group, and [b]-[/b] excludes a term. Double quotes keep phrases together. The search box turns red when nothing matches. Search scope and colors can be adjusted in settings.
 
-Spaces require all terms, [b]|[/b] matches either group, and [b]-[/b] excludes a term. Double quotes keep phrases together. Colors distinguish prefixes and operators; no matches turns the search red. Field search modes and colors are configurable.
-
-Pinyin supports full spelling, initials, and mixed input: [b]cailiao[/b], [b]cl[/b], and [b]cai料[/b] find 材料. Nine layouts and optional fuzzy spelling are available. Prefix searches support pinyin for Chinese text.
+Pinyin supports full spelling, initials, and mixed Chinese and English input: [b]cailiao[/b], [b]cl[/b], and [b]cai料[/b] all find 材料. Nine keyboard layouts and fuzzy pinyin settings are available. Prefix searches also support pinyin.
 
 Pinyin defaults to Auto, enabled for Chinese and disabled for other game languages. On and Off keep your preference regardless of language.
 
 [h2]Terminal controls[/h2]
-
 [list]
 [*]Use the toolbar for sorting and window size; scroll to browse. Tooltips work while the search box has focus.
 [*]Left-click takes one stack, or one non-stackable item. Right-click takes half a stack; stored stacks are not split. Shift + left-click takes the full available amount.
 [*]Drag a whole stack onto the terminal grid or a displayed item to store it. Items that do not transfer stay in place.
 [*]Insertion may be refused for insufficient bytes, type limits, oversized items, partition mismatch, or an offline network.
 [/list]
-
-Native module properties currently do not change digital capacity, throughput, or network power usage.
+Terminals and drives can open the native module panel. Native module properties currently do not change digital storage capacity, throughput, or network power usage.
 
 [h2]Upgrades and compatibility[/h2]
-
-This workbench update keeps storage format v2. Back up your save before upgrading from a version that uses v2.
-
-Version 0.4.0 introduced v2. Older cells attempt conversion on load. If a cell shows Pending migration, take some items out, save, and reload to try again. Future format changes convert only the previous format. If you skip a required version, the cell is locked and its tooltip names the version to install first.
-
 Downgrading is unsupported. If a Do not save warning appears, quit and restore your backup from before the upgrade.
+
+[h3]Supported mods[/h3]
+[list]
+[*][url=steamcommunity.com/sharedfiles/filedetails/?id=3829653222]Customer Stocking[/url]: one-click stocking can select goods from online digital networks within the mod's scan range.
+[/list]
+
+[h2]Issues and feedback[/h2]
+[list]
+[*]QQ group: 1058183851
+[/list]
