@@ -10,15 +10,18 @@ using UnityEngine;
 namespace ProbablyStolen.DigitalStorage.Compat.CustomerStocking;
 
 /// <summary>
-/// The Customer Stocking side of the public API. While one-click stocking runs, an external access scope is open, so
-/// Customer Stocking's own scan and filters see roots of online networks. Its two moves are redirected here:
+/// The Customer Stocking side of the public API. A stocking run (one coroutine, several frames) is one external access
+/// batch, so cell pages are compacted only when the run completes. Its synchronous candidate scan runs inside an
+/// external access scope, so Customer Stocking's own scan and filters see roots of online networks. Its two moves are
+/// redirected here while the run is active:
 /// <list type="bullet">
 /// <item>a root that sits on a cell page moves to the back counter through <see cref="IStorage.ExtractRoot"/>;</item>
 /// <item>a budget rollback back to a cell page stores the item through <see cref="IStorage.Insert"/>.</item>
 /// </list>
 /// Every other call goes to <see cref="GraphUtils.TryAcceptAll"/> unchanged.
 /// </summary>
-/// <remarks>Main thread only, like the stocking button and hotkey that run it.</remarks>
+/// <remarks>Main thread only, like the stocking button and hotkey that run it. Runs do not overlap: Customer Stocking
+/// refuses a new run while one is active.</remarks>
 public static class StockingBridge
 {
     private static readonly IActionSource Source = ActionSource.OfMod(StockingTargets.ModId);
@@ -26,40 +29,93 @@ public static class StockingBridge
     // Pages roots left during this session, and their network; a rollback to one of these pages returns to that network.
     private static readonly Dictionary<GameInventory, IGridNode> SourcePages = new();
     private static IDigitalStorageRuntime? _runtime;
+    private static IDisposable? _batch;
+    private static bool _running;
+    private static bool _scanned;
 
-    /// <summary>Sets the runtime the bridge uses; null detaches it.</summary>
+    /// <summary>Gets whether a stocking run is active.</summary>
+    internal static bool IsRunning => _running;
+
+    /// <summary>Sets the runtime the bridge uses; null detaches it and ends a run.</summary>
     internal static void Attach(IDigitalStorageRuntime? runtime)
     {
+        EndRun();
         _runtime = runtime;
-        SourcePages.Clear();
     }
 
-    /// <summary>Opens the session scope; returns null when no runtime is attached or the scope cannot open.</summary>
-    internal static IDisposable? OpenSession()
+    /// <summary>
+    /// Starts a run and returns the completion callback to hand to the coroutine: it ends the run, then calls the
+    /// original callback. While a run is active the coroutine refuses to start again (<c>AutoStocker.RunAsync</c> exits
+    /// at once and never completes), so a second start keeps the active run and its callback unchanged. A run ends when
+    /// it completes or when a game loads. A started coroutine scans in its first frame, so an active run that never
+    /// scanned belongs to a coroutine that never started (for example <c>StartCoroutine</c> failed); it is ended first.
+    /// </summary>
+    internal static Action<string>? StartRun(Action<string>? completed)
     {
-        SourcePages.Clear();
+        if (_running && !_scanned) EndRun();
+        if (_running || _runtime == null) return completed;
         try
         {
-            return _runtime?.ExternalAccess.Open(Source);
+            _batch = _runtime.ExternalAccess.Batch(Source);
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking session could not start ({error.GetType().Name}).");
+            Debug.LogWarning($"Digital Storage: Customer Stocking run could not start ({error.GetType().Name}).");
+            return completed;
+        }
+
+        _running = true;
+        return message =>
+        {
+            EndRun();
+            completed?.Invoke(message);
+        };
+    }
+
+    /// <summary>Ends the run: forgets source pages and ends the batch, which compacts the cells that changed.</summary>
+    internal static void EndRun()
+    {
+        _running = false;
+        _scanned = false;
+        SourcePages.Clear();
+        var batch = _batch;
+        _batch = null;
+        try
+        {
+            batch?.Dispose();
+        }
+        catch (Exception error)
+        {
+            Debug.LogWarning($"Digital Storage: Customer Stocking run did not end cleanly ({error.GetType().Name}).");
+        }
+    }
+
+    /// <summary>Opens the scan scope of a run; returns null outside a run or when the scope cannot open.</summary>
+    internal static IDisposable? OpenScan()
+    {
+        if (!_running || _runtime == null) return null;
+        _scanned = true;
+        try
+        {
+            return _runtime.ExternalAccess.Open(Source);
+        }
+        catch (Exception error)
+        {
+            Debug.LogWarning($"Digital Storage: Customer Stocking scan could not see the network ({error.GetType().Name}).");
             return null;
         }
     }
 
-    /// <summary>Closes the session scope; the scope compacts the cells that changed.</summary>
-    internal static void CloseSession(IDisposable? session)
+    /// <summary>Closes the scan scope.</summary>
+    internal static void CloseScan(IDisposable? scan)
     {
-        SourcePages.Clear();
         try
         {
-            session?.Dispose();
+            scan?.Dispose();
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking session did not close cleanly ({error.GetType().Name}).");
+            Debug.LogWarning($"Digital Storage: Customer Stocking scan did not close cleanly ({error.GetType().Name}).");
         }
     }
 
@@ -71,7 +127,7 @@ public static class StockingBridge
     public static int TryAcceptAll(GraphNodeStorage currentNode, GameItem item, int amount)
     {
         var runtime = _runtime;
-        if (runtime == null || item == null || currentNode == null || !runtime.ExternalAccess.IsOpen)
+        if (runtime == null || item == null || currentNode == null || !_running)
             return GraphUtils.TryAcceptAll(currentNode, item, amount);
 
         var requested = amount < 0 ? item.unitCount : amount;

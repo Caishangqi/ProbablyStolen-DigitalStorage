@@ -9,7 +9,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 /// The scoped external access of the public API. Cell page removal callbacks (<see cref="CellPages"/>) ask
 /// <see cref="AllowsRemoval"/>; it answers true only while a scope is open and only for roots of cells in online
 /// networks, so another mod's scan that respects <c>GameItem.MayRemove</c>/<c>MaxNumRemove</c> finds them. Moving the
-/// roots stays with <see cref="IStorage.ExtractRoot"/>. Cells changed during a scope are compacted when it closes.
+/// roots stays with <see cref="IStorage.ExtractRoot"/>. Cells changed during a scope are compacted when it closes, or
+/// when the running batch ends; outside both they are compacted at once.
 /// </summary>
 /// <remarks>
 /// Page callbacks are plain delegates on each page, so the open scope is held in a static field. Scopes are main
@@ -32,6 +33,9 @@ internal sealed class ExternalAccessScope : IExternalAccess
     private int _depth;
     private int _openedFrame;
     private int _generation;
+    private bool _batching;
+    private int _batchGeneration;
+    private IActionSource? _batchSource;
 
     /// <summary>Creates the scope service.</summary>
     /// <param name="cellOfStored">The cell whose page holds a root, or null when the root is not on a cell page.</param>
@@ -54,6 +58,28 @@ internal sealed class ExternalAccessScope : IExternalAccess
     /// <inheritdoc />
     public bool IsOpen => _depth > 0;
 
+    /// <inheritdoc />
+    public bool IsBatching => _batching;
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">The caller is not on the main thread.</exception>
+    public IDisposable Batch(IActionSource source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (!_isMainThread()) throw new InvalidOperationException("External access batches are main thread only.");
+        if (_batching)
+        {
+            // Batches do not nest, so a running one was never ended (for example its caller's coroutine stopped).
+            _log($"Digital Storage: an external access batch of {Describe(_batchSource)} was never ended; ending it.");
+            EndBatch(_batchGeneration);
+        }
+
+        _batching = true;
+        _batchSource = source;
+        _batchGeneration++;
+        return new Handle(this, _batchGeneration, batch: true);
+    }
+
     /// <summary>Gets the source of the outermost open scope, or null.</summary>
     internal IActionSource? Source { get; private set; }
 
@@ -72,7 +98,7 @@ internal sealed class ExternalAccessScope : IExternalAccess
 
         if (_depth == 0)
         {
-            CompactPending();
+            if (!_batching) CompactPending();
             _online.Clear();
             _touched.Clear();
             _openedFrame = _frame();
@@ -81,7 +107,7 @@ internal sealed class ExternalAccessScope : IExternalAccess
         }
 
         _depth++;
-        return new Scope(this, _generation);
+        return new Handle(this, _generation, batch: false);
     }
 
     /// <summary>
@@ -91,21 +117,27 @@ internal sealed class ExternalAccessScope : IExternalAccess
     internal static bool AllowsRemoval(GameItem item) => _active is { } scope && scope.Allows(item);
 
     /// <summary>
-    /// Records a cell changed by an API call. Inside a scope its compaction waits for the scope to close; outside it
-    /// runs now.
+    /// Records a cell changed by an API call. Inside a scope its compaction waits for the scope to close, inside a
+    /// batch for the batch to end; outside both it runs now.
     /// </summary>
     internal void Touched(GameItem cell)
     {
         if (cell == null) throw new ArgumentNullException(nameof(cell));
-        if (!IsOpen)
+        if (IsOpen)
         {
-            _compact(cell);
+            if (!_touched.Contains(cell)) _touched.Add(cell);
+            // A cell that changed may have left or joined a page; ask again for the next root.
+            _online.Remove(cell);
             return;
         }
 
-        if (!_touched.Contains(cell)) _touched.Add(cell);
-        // A cell that changed may have left or joined a page; ask again for the next root.
-        _online.Remove(cell);
+        if (_batching)
+        {
+            if (!_pendingCompaction.Contains(cell)) _pendingCompaction.Add(cell);
+            return;
+        }
+
+        _compact(cell);
     }
 
     private bool Allows(GameItem item)
@@ -162,7 +194,27 @@ internal sealed class ExternalAccessScope : IExternalAccess
             if (!_pendingCompaction.Contains(cell)) _pendingCompaction.Add(cell);
         }
 
-        if (compact) CompactPending();
+        if (compact && !_batching) CompactPending();
+    }
+
+    /// <summary>
+    /// Forgets cells waiting for compaction; called when a game loads, because those cells belong to the previous game.
+    /// Open scopes and the running batch are left to their callers.
+    /// </summary>
+    internal void DiscardPending()
+    {
+        _pendingCompaction.Clear();
+        _touched.Clear();
+        _online.Clear();
+    }
+
+    private void EndBatch(int generation)
+    {
+        // A handle of a batch that a newer batch already ended must not end the newer one.
+        if (generation != _batchGeneration || !_batching) return;
+        _batching = false;
+        _batchSource = null;
+        if (!IsOpen) CompactPending();
     }
 
     private void CompactPending()
@@ -185,23 +237,27 @@ internal sealed class ExternalAccessScope : IExternalAccess
     private static string Describe(IActionSource? source) =>
         source?.ModId ?? source?.MachineId ?? source?.PlayerName ?? "an unknown caller";
 
-    private sealed class Scope : IDisposable
+    private sealed class Handle : IDisposable
     {
         private readonly int _generation;
+        private readonly bool _batch;
         private ExternalAccessScope? _owner;
 
-        internal Scope(ExternalAccessScope owner, int generation)
+        internal Handle(ExternalAccessScope owner, int generation, bool batch)
         {
             _owner = owner;
             _generation = generation;
+            _batch = batch;
         }
 
         public void Dispose()
         {
-            // A second Dispose of the same handle must not close an outer scope.
+            // A second Dispose of the same handle must not close an outer scope or a later batch.
             var owner = _owner;
             _owner = null;
-            owner?.Release(_generation);
+            if (owner == null) return;
+            if (_batch) owner.EndBatch(_generation);
+            else owner.Release(_generation);
         }
     }
 }

@@ -21,4 +21,15 @@ public interface IExternalAccess
 
     /// <summary>Opens a scope for the given source. Dispose the result to close it.</summary>
     IDisposable Open(IActionSource source);
+
+    /// <summary>Gets whether a batch is running.</summary>
+    bool IsBatching { get; }
+
+    /// <summary>
+    /// Starts a batch of API moves that may span several frames, for example a caller that defers inventory callbacks
+    /// while it places items. A batch grants no removal permission; it only postpones the reclaiming of empty cell pages
+    /// until the batch ends, so pages are not replaced while the caller's own deferred work still refers to them.
+    /// Batches do not nest: starting one while another runs ends the earlier one. Dispose the result to end it.
+    /// </summary>
+    IDisposable Batch(IActionSource source);
 }

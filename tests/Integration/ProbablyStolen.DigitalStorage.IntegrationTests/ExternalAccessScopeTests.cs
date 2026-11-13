@@ -171,6 +171,74 @@ public sealed class ExternalAccessScopeTests
     }
 
     [Test]
+    public void Batch_DefersCompactionAcrossFrames_WithoutGrantingRemoval()
+    {
+        var scope = NewScope();
+        var batch = scope.Batch(Source);
+        _frame++;
+
+        scope.Touched(_onlineCell);
+        _frame++;
+        scope.Touched(_offlineCell);
+
+        Assert.That(scope.IsBatching, Is.True);
+        Assert.That(ExternalAccessScope.AllowsRemoval(_onlineRoot), Is.False, "A batch is not a scope.");
+        Assert.That(_compacted, Is.Empty);
+
+        batch.Dispose();
+        batch.Dispose();
+        Assert.That(scope.IsBatching, Is.False);
+        Assert.That(_compacted, Is.EqualTo(new[] { _onlineCell, _offlineCell }));
+    }
+
+    [Test]
+    public void ScopeInsideABatch_LeavesCompactionToTheBatch()
+    {
+        var scope = NewScope();
+        var batch = scope.Batch(Source);
+        using (scope.Open(Source))
+        {
+            Assert.That(ExternalAccessScope.AllowsRemoval(_onlineRoot), Is.True);
+            scope.Touched(_onlineCell);
+        }
+
+        Assert.That(_compacted, Is.Empty, "The scope closed while the batch still runs.");
+        batch.Dispose();
+        Assert.That(_compacted, Is.EqualTo(new[] { _onlineCell }));
+    }
+
+    [Test]
+    public void NewBatch_EndsALeakedOne_AndTheOldHandleCannotEndTheNewOne()
+    {
+        var scope = NewScope();
+        var leaked = scope.Batch(Source);
+        scope.Touched(_onlineCell);
+
+        var fresh = scope.Batch(Source);
+        Assert.That(_compacted, Is.EqualTo(new[] { _onlineCell }), "Ending the leaked batch compacts its cells.");
+        Assert.That(_logs, Has.Some.Contains("never ended"));
+
+        leaked.Dispose();
+        Assert.That(scope.IsBatching, Is.True);
+        fresh.Dispose();
+        Assert.That(scope.IsBatching, Is.False);
+    }
+
+    [Test]
+    public void DiscardPending_ForgetsCellsOfThePreviousGame()
+    {
+        var scope = NewScope();
+        var batch = scope.Batch(Source);
+        scope.Touched(_onlineCell);
+
+        scope.DiscardPending();
+        batch.Dispose();
+
+        Assert.That(_compacted, Is.Empty);
+        Assert.That(scope.IsBatching, Is.False);
+    }
+
+    [Test]
     public void FailingOnlineCheck_DeniesAndLogs()
     {
         var scope = new ExternalAccessScope(_ => _onlineCell, _ => throw new InvalidOperationException("boom"),

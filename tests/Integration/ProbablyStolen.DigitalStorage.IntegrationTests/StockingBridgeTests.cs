@@ -52,7 +52,7 @@ public sealed class StockingBridgeTests
     private long Units => _network.Stored.Sum(item => item.unitCount) + _counter.childItems.Sum(item => item.unitCount);
 
     [Test]
-    public void WithoutASession_EveryCallStaysNative()
+    public void OutsideARun_EveryCallStaysNative()
     {
         var item = Stored("item.apple", 3);
         GraphUtils.NativeRemaining = 3;
@@ -70,17 +70,17 @@ public sealed class StockingBridgeTests
         var item = Stored("item.apple", 3);
         var before = Units;
 
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         var remaining = StockingBridge.TryAcceptAll(_counter, item, -1);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.Zero, "TryAcceptAll returns the units that did not move.");
         Assert.That(_network.Calls, Is.EqualTo(new[] { "extract item.apple x3" }));
         Assert.That(GraphUtils.NativeTransfers, Is.Empty, "A stored root never moves natively.");
         Assert.That(item.parentInventory, Is.SameAs(_counter));
         Assert.That(Units, Is.EqualTo(before));
-        Assert.That(_runtime.Access.Opened, Is.EqualTo(1));
-        Assert.That(_runtime.Access.IsOpen, Is.False);
+        Assert.That(_runtime.Access.Batches, Is.EqualTo(1));
+        Assert.That(_runtime.Access.IsBatching, Is.False);
     }
 
     [Test]
@@ -88,11 +88,11 @@ public sealed class StockingBridgeTests
     {
         var item = Stored("item.apple", 4);
         var before = Units;
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         StockingBridge.TryAcceptAll(_counter, item, 4);
 
         var remaining = StockingBridge.TryAcceptAll(_page, item, 4);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.Zero);
         Assert.That(_network.Calls.Last(), Is.EqualTo("insert item.apple x4"));
@@ -104,11 +104,11 @@ public sealed class StockingBridgeTests
     public void PartialRollback_LeavesTheItemOnTheCounter()
     {
         var item = Stored("item.apple", 4);
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         StockingBridge.TryAcceptAll(_counter, item, 4);
 
         var remaining = StockingBridge.TryAcceptAll(_page, item, 2);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.EqualTo(2), "Nothing moved, so Customer Stocking reports that it could not roll back.");
         Assert.That(item.parentInventory, Is.SameAs(_counter));
@@ -119,12 +119,12 @@ public sealed class StockingBridgeTests
     public void RefusedReturn_LeavesTheItemOnTheCounter()
     {
         var item = Stored("item.apple", 4);
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         StockingBridge.TryAcceptAll(_counter, item, 4);
         _network.RefuseInsert = true;
 
         var remaining = StockingBridge.TryAcceptAll(_page, item, 4);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.EqualTo(4));
         Assert.That(item.parentInventory, Is.SameAs(_counter));
@@ -138,9 +138,9 @@ public sealed class StockingBridgeTests
         new GameGridInventory().Place(loose);
         GraphUtils.NativeRemaining = 0;
 
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         var remaining = StockingBridge.TryAcceptAll(_counter, loose, 2);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.Zero);
         Assert.That(GraphUtils.NativeTransfers, Has.Count.EqualTo(1));
@@ -153,9 +153,9 @@ public sealed class StockingBridgeTests
         var item = Stored("item.apple", 3);
         _network.Offline = true;
 
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         var remaining = StockingBridge.TryAcceptAll(_counter, item, 3);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.EqualTo(3));
         Assert.That(item.parentInventory, Is.SameAs(_page));
@@ -168,31 +168,120 @@ public sealed class StockingBridgeTests
         var item = Stored("item.apple", 3);
         _network.Throw = true;
 
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         var remaining = StockingBridge.TryAcceptAll(_counter, item, 3);
-        StockingBridge.CloseSession(session);
+        session!("done");
 
         Assert.That(remaining, Is.EqualTo(3));
         Assert.That(item.parentInventory, Is.SameAs(_page));
         Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("failed"));
-        Assert.That(_runtime.Access.IsOpen, Is.False);
+        Assert.That(_runtime.Access.IsBatching, Is.False);
     }
 
     [Test]
     public void RollbackPages_DoNotOutliveTheSession()
     {
         var item = Stored("item.apple", 4);
-        var session = StockingBridge.OpenSession();
+        var session = StockingBridge.StartRun(null);
         StockingBridge.TryAcceptAll(_counter, item, 4);
-        StockingBridge.CloseSession(session);
+        session!("done");
         GraphUtils.NativeRemaining = 4;
 
-        var next = StockingBridge.OpenSession();
+        var next = StockingBridge.StartRun(null);
         var remaining = StockingBridge.TryAcceptAll(_page, item, 4);
-        StockingBridge.CloseSession(next);
+        next!("done");
 
         Assert.That(remaining, Is.EqualTo(4));
         Assert.That(GraphUtils.NativeTransfers, Has.Count.EqualTo(1), "A page from an earlier session is not ours to return to.");
+    }
+
+    [Test]
+    public void ARun_IsOneBatch_EndedByTheCompletionCallback_ThenTheOriginalCallback()
+    {
+        string? shown = null;
+
+        var complete = StockingBridge.StartRun(message => shown = message);
+        Assert.That(StockingBridge.IsRunning, Is.True);
+        Assert.That(_runtime.Access.IsBatching, Is.True);
+
+        complete!("stocked 3");
+
+        Assert.That(StockingBridge.IsRunning, Is.False);
+        Assert.That(_runtime.Access.IsBatching, Is.False);
+        Assert.That(shown, Is.EqualTo("stocked 3"));
+    }
+
+    [Test]
+    public void TheScan_SeesTheNetworkOnlyDuringARun()
+    {
+        Assert.That(StockingBridge.OpenScan(), Is.Null, "Outside a run the scan sees nothing extra.");
+
+        var complete = StockingBridge.StartRun(null);
+        var scan = StockingBridge.OpenScan();
+        Assert.That(_runtime.Access.IsOpen, Is.True);
+        StockingBridge.CloseScan(scan);
+        Assert.That(_runtime.Access.IsOpen, Is.False);
+        Assert.That(_runtime.Access.IsBatching, Is.True, "Placement on later frames still belongs to the run.");
+
+        complete!("done");
+    }
+
+    [Test]
+    public void MovesOnLaterFrames_StillGoThroughTheApi()
+    {
+        var item = Stored("item.apple", 2);
+        var complete = StockingBridge.StartRun(null);
+        StockingBridge.CloseScan(StockingBridge.OpenScan());
+
+        var remaining = StockingBridge.TryAcceptAll(_counter, item, 2);
+        complete!("done");
+
+        Assert.That(remaining, Is.Zero);
+        Assert.That(_network.Calls, Is.EqualTo(new[] { "extract item.apple x2" }));
+        Assert.That(GraphUtils.NativeTransfers, Is.Empty);
+    }
+
+    [Test]
+    public void ASecondStartDuringARun_KeepsTheActiveRun()
+    {
+        var item = Stored("item.apple", 4);
+        var complete = StockingBridge.StartRun(null);
+        StockingBridge.CloseScan(StockingBridge.OpenScan());
+        StockingBridge.TryAcceptAll(_counter, item, 4);
+        Action<string> second = _ => { };
+
+        Assert.That(StockingBridge.StartRun(second), Is.SameAs(second), "The refused coroutine keeps its own callback.");
+        Assert.That(_runtime.Access.Batches, Is.EqualTo(1));
+
+        var remaining = StockingBridge.TryAcceptAll(_page, item, 4);
+        Assert.That(remaining, Is.Zero, "The active run still knows where its goods came from.");
+        complete!("done");
+        Assert.That(_runtime.Access.IsBatching, Is.False);
+    }
+
+    [Test]
+    public void ARunWhoseCoroutineNeverStarted_IsEndedByTheNextStart()
+    {
+        StockingBridge.StartRun(null);
+
+        var complete = StockingBridge.StartRun(null);
+
+        Assert.That(_runtime.Access.Batches, Is.EqualTo(2), "The run that never scanned ended and a new one started.");
+        StockingBridge.CloseScan(StockingBridge.OpenScan());
+        Action<string> refused = _ => { };
+        Assert.That(StockingBridge.StartRun(refused), Is.SameAs(refused), "A run that scanned is still running.");
+        complete!("done");
+        Assert.That(_runtime.Access.IsBatching, Is.False);
+    }
+
+    [Test]
+    public void WithoutARuntime_TheOriginalCallbackIsKept()
+    {
+        StockingBridge.Attach(null);
+        Action<string> original = _ => { };
+
+        Assert.That(StockingBridge.StartRun(original), Is.SameAs(original));
+        Assert.That(StockingBridge.IsRunning, Is.False);
     }
 
     private sealed class FakeNetwork : IStorage, IStorageService, IGrid, IGridNode
@@ -289,6 +378,18 @@ public sealed class StockingBridgeTests
             _depth++;
             Opened++;
             return new Closer(() => _depth--);
+        }
+
+        internal int Batches { get; private set; }
+
+        public bool IsBatching { get; private set; }
+
+        public IDisposable Batch(IActionSource source)
+        {
+            Assert.That(source.ModId, Is.EqualTo("customerstocking"));
+            Batches++;
+            IsBatching = true;
+            return new Closer(() => IsBatching = false);
         }
 
         private sealed class Closer : IDisposable

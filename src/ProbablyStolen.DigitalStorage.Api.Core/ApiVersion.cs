@@ -9,5 +9,5 @@ public static class ApiVersion
     public const int Major = 1;
 
     /// <summary>Gets the minor version; it changes when public members are added.</summary>
-    public const int Minor = 0;
+    public const int Minor = 1;
 }

@@ -16,13 +16,19 @@ public static class StockingPatches
     private static readonly MethodInfo Replacement = AccessTools.Method(typeof(StockingBridge), nameof(StockingBridge.TryAcceptAll));
     private static readonly Dictionary<MethodBase, int> Rewritten = new();
 
-    /// <summary>Opens the session before one-click stocking runs.</summary>
-    public static void SessionPrefix(out IDisposable? __state) => __state = StockingBridge.OpenSession();
+    /// <summary>
+    /// Starts a run when the stocking coroutine is created, and makes its completion callback end the run. The
+    /// coroutine calls that callback after its own deferred inventory callbacks were flushed.
+    /// </summary>
+    public static void RunPrefix(ref Action<string>? completed) => completed = StockingBridge.StartRun(completed);
 
-    /// <summary>Closes the session whether stocking returned or threw, and keeps Customer Stocking's own exception.</summary>
-    public static Exception? SessionFinalizer(Exception? __exception, IDisposable? __state)
+    /// <summary>Lets the candidate scan see online network goods, for this synchronous call only.</summary>
+    public static void ScanPrefix(out IDisposable? __state) => __state = StockingBridge.OpenScan();
+
+    /// <summary>Closes the scan scope whether the scan returned or threw, and keeps Customer Stocking's own exception.</summary>
+    public static Exception? ScanFinalizer(Exception? __exception, IDisposable? __state)
     {
-        StockingBridge.CloseSession(__state);
+        StockingBridge.CloseScan(__state);
         return __exception;
     }
 
@@ -48,9 +54,11 @@ public static class StockingPatches
     internal static int RewrittenIn(MethodBase method) => Rewritten.TryGetValue(method, out var count) ? count : 0;
 
     // Literal type and member names at every lookup, so the mod scanner reads them as reflection on own types.
-    internal static MethodInfo SessionPrefixMethod => AccessTools.Method(typeof(StockingPatches), nameof(SessionPrefix));
+    internal static MethodInfo RunPrefixMethod => AccessTools.Method(typeof(StockingPatches), nameof(RunPrefix));
 
-    internal static MethodInfo SessionFinalizerMethod => AccessTools.Method(typeof(StockingPatches), nameof(SessionFinalizer));
+    internal static MethodInfo ScanPrefixMethod => AccessTools.Method(typeof(StockingPatches), nameof(ScanPrefix));
+
+    internal static MethodInfo ScanFinalizerMethod => AccessTools.Method(typeof(StockingPatches), nameof(ScanFinalizer));
 
     internal static MethodInfo RedirectTransfersMethod => AccessTools.Method(typeof(StockingPatches), nameof(RedirectTransfers));
 }

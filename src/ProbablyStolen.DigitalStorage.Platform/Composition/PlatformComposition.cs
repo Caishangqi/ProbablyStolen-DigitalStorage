@@ -212,6 +212,8 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             ExposeRuntime(_runtime);
+            // Subscribed before the integrations, so a plugin ending a stopped run finds no cells of the previous game.
+            ModHook.OnGameLoadedInit += _runtime.OnGameLoading;
             if (_integrations != null)
             {
                 ModHook.OnGameLoadedInit += _integrations.OnGameLoaded;
@@ -258,6 +260,7 @@ public sealed class PlatformComposition : IDisposable
         TerminalStorageWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
+        ModHook.OnGameLoadedInit -= _runtime.OnGameLoading;
         if (_integrations != null)
         {
             ModHook.OnGameLoadedInit -= _integrations.OnGameLoaded;

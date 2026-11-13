@@ -33,19 +33,23 @@ public sealed class CustomerStockingPlugin : IntegrationPlugin
     /// <inheritdoc />
     public override void Register(IIntegrationRegistration registration)
     {
-        var run = StockingTargets.Run();
+        var place = StockingTargets.ExecutePlanBody();
         var restore = StockingTargets.RestoreBackCountDelta();
-        registration.Patch(run, prefix: StockingPatches.SessionPrefixMethod,
-            finalizer: StockingPatches.SessionFinalizerMethod,
-            transpiler: StockingPatches.RedirectTransfersMethod);
+        registration.Patch(StockingTargets.RunAsync(), prefix: StockingPatches.RunPrefixMethod);
+        registration.Patch(StockingTargets.BuildPlan(), prefix: StockingPatches.ScanPrefixMethod,
+            finalizer: StockingPatches.ScanFinalizerMethod);
+        registration.Patch(place, transpiler: StockingPatches.RedirectTransfersMethod);
         registration.Patch(restore, transpiler: StockingPatches.RedirectTransfersMethod);
         // Without a rewritten transfer the scan would see network goods that Customer Stocking then moves natively.
-        registration.Verify(() => run != null && StockingPatches.RewrittenIn(run) == 0
+        registration.Verify(() => place != null && StockingPatches.RewrittenIn(place) == 0
             ? "the stocking transfer call was not found" : null);
         registration.Verify(() => restore != null && StockingPatches.RewrittenIn(restore) == 0
             ? "the budget rollback transfer call was not found" : null);
         StockingBridge.Attach(registration.Runtime);
     }
+
+    /// <inheritdoc />
+    public override void OnRuntimeUnavailable() => StockingBridge.EndRun();
 
     /// <inheritdoc />
     public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime) => StockingBridge.Attach(runtime);

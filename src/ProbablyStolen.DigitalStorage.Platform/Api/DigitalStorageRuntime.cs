@@ -39,6 +39,9 @@ internal sealed class DigitalStorageRuntime : IDigitalStorageRuntime
     /// <inheritdoc />
     public IExternalAccess ExternalAccess => _access;
 
+    /// <summary>Forgets work left from the previous game; call before integrations see the new one.</summary>
+    internal void OnGameLoading() => _access.DiscardPending();
+
     // A cell is reachable when it sits in a drive bay of an online network and its pages can be read.
     private bool IsCellOnline(GameItem cell)
     {
