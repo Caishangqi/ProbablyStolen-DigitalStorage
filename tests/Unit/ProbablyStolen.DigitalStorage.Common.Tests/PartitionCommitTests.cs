@@ -173,6 +173,37 @@ public sealed class PartitionCommitTests
         Assert.That(store.Stored.Interpret().Config!.Mode, Is.EqualTo(PartitionMode.Blacklist));
     }
 
+    [TestCase(PartitionMode.Whitelist)]
+    [TestCase(PartitionMode.Blacklist)]
+    public void Apply_EmptyRulesClearsThePartitionAndPreservesMode(PartitionMode mode)
+    {
+        var previous = new PartitionSnapshot(mode.ToString().ToLowerInvariant(),
+            PartitionRuleCodec.Encode(new[] { PartitionRule.ForSample("old", 7, Apple) }), 4, false);
+        var store = new FakeStore { Stored = previous };
+
+        var result = PartitionCommit.Apply(store, new PartitionConfig(mode, Array.Empty<PartitionRule>()), 4);
+
+        Assert.That(result.Status, Is.EqualTo(PartitionCommitStatus.Applied));
+        Assert.That(store.Stored.Interpret().Config.Rules, Is.Empty);
+        Assert.That(store.Stored.Interpret().Config.Mode, Is.EqualTo(mode));
+        Assert.That(store.Stored.Interpret().Config.Revision, Is.EqualTo(5));
+        Assert.That(store.Writes, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Apply_FailedClearPreservesThePreviousPartition()
+    {
+        var previous = new PartitionSnapshot("blacklist",
+            PartitionRuleCodec.Encode(new[] { PartitionRule.ForSample("old", 7, Apple) }), 4, false);
+        var store = new FakeStore { Stored = previous, FailWrites = 1 };
+
+        var result = PartitionCommit.Apply(store,
+            new PartitionConfig(PartitionMode.Blacklist, Array.Empty<PartitionRule>()), 4);
+
+        Assert.That(result.Status, Is.EqualTo(PartitionCommitStatus.Failed));
+        Assert.That(store.Stored, Is.EqualTo(previous));
+    }
+
     [Test]
     public void Apply_RefusesAStaleRevisionWithoutWriting()
     {

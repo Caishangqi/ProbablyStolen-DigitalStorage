@@ -11,10 +11,10 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Diagno
 /// </summary>
 internal sealed class DiagnosticTerminalView : ITerminalView
 {
-    private readonly TerminalWindow _window;
+    private readonly TerminalWindowHost _window;
     private RectTransform? _container;
 
-    internal DiagnosticTerminalView(TerminalWindow window) =>
+    internal DiagnosticTerminalView(TerminalWindowHost window) =>
         _window = window ?? throw new ArgumentNullException(nameof(window));
 
     /// <inheritdoc />
@@ -69,7 +69,7 @@ internal sealed class DiagnosticTerminalView : ITerminalView
 /// <summary>The placeholder page opened by the diagnostic picker button.</summary>
 internal sealed class DiagnosticScreen : SubScreen
 {
-    internal DiagnosticScreen(TerminalWindow window) : base(window)
+    internal DiagnosticScreen(TerminalWindowHost window) : base(window)
     {
     }
 

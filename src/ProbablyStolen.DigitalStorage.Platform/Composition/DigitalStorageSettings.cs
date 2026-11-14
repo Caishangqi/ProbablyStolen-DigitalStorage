@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using ProbablyStolen.DigitalStorage.Api.Integration;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -31,7 +32,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     internal const string SortOrderKey = StorageTerminalFeature.SortByName;
     internal const string SortDirectionKey = StorageTerminalFeature.SortDirectionName;
     internal const string SizeKey = TerminalStyleFeature.SettingName;
-    internal const string PartitionSizeKey = "partition_view_size";
+    internal const string PartitionSizeKey = PartitionTerminalFeature.SizeSettingName;
     // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
@@ -342,6 +343,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         SortOrderKey when SortOrder is T value => value,
         SortDirectionKey when SortDirection is T value => value,
         SizeKey when Size is T value => value,
+        PartitionTerminalFeature.SizeSettingName when PartitionSize is T value => value,
         _ => throw UnknownSetting(setting?.Name)
     };
 
@@ -359,6 +361,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
                 break;
             case SizeKey when value is TerminalSize size:
                 Size = size;
+                break;
+            case PartitionTerminalFeature.SizeSettingName when value is TerminalSize partitionSize:
+                PartitionSize = partitionSize;
                 break;
             default:
                 throw UnknownSetting(setting?.Name);

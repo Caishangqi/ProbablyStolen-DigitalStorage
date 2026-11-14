@@ -60,6 +60,19 @@ public sealed class TerminalRegistryTests
     }
 
     [Test]
+    public void Freeze_RequiresConfiguredDefaultAndClosesRegistration()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add, "partition");
+        registry.AddTerminal(Storage());
+        Assert.Throws<InvalidOperationException>(new Action(registry.Freeze));
+        registry.AddTerminal(View("partition"));
+        registry.Freeze();
+
+        Assert.That(registry.DefaultTerminal.TerminalName, Is.EqualTo("partition"));
+        Assert.Throws<InvalidOperationException>(new Action(() => { _ = registry.AddTerminal(View("late")); }));
+    }
+
+    [Test]
     public void AddSetting_WrapsTheSettingInAToggleWithItsNameAsId()
     {
         var registry = New();

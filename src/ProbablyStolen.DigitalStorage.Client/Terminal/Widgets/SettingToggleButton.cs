@@ -4,9 +4,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
-/// <summary>
-/// Cycles an enum setting on each press, backwards when the press asks for it.
-/// </summary>
+/// <summary>Cycles an enum setting on each press, backwards when the press asks for it.</summary>
 /// <typeparam name="T">The setting value type.</typeparam>
 public sealed class SettingToggleButton<T> : TerminalButton where T : struct, Enum
 {

@@ -2,13 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Diagnostics;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Modules;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
+using ProbablyStolen.DigitalStorage.Client.Workbench;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 using static ProbablyStolen.DigitalStorage.Client.Tests.Terminal.TerminalFixtures;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tests.Terminal;
@@ -31,6 +35,89 @@ public sealed class TerminalFeatureTests
         DiagnosticsFeature.Register(_registry, _ => "diagnostics-view", _ => "diagnostics-screen", _log.Add);
         _registry.Freeze();
         _bar = new VerticalButtonBar(_registry, new UniversalTerminalHandler(_registry, new MemoryStore(), _log.Add), _log.Add);
+    }
+
+    [Test]
+    public void PartitionFeature_RegistersModeSizeAndItsOwnClearButton()
+    {
+        var registry = PartitionTerminalFeature.CreateRegistry(new MemoryConfig(), _log.Add, _ => "partition-view",
+            _ => PartitionMode.Whitelist, _ => { }, _ => { });
+        var bar = new VerticalButtonBar(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+
+        Assert.That(registry.Terminals.Select(item => item.TerminalName), Is.EqualTo(new[] { "partition" }));
+        Assert.That(bar.GetButtons(Context("partition")).Select(item => item.Id), Is.EqualTo(new[]
+        {
+            PartitionTerminalFeature.ModeActionName, PartitionTerminalFeature.SizeSettingName, PartitionTerminalFeature.ClearActionName
+        }));
+        Assert.That(registry.Buttons.Select(item => item.TerminalId),
+            Is.EqualTo(new string?[] { null, null, PartitionTerminalFeature.TerminalName }));
+        Assert.That(_bar.GetButtons(Context()).Select(item => item.Id), Does.Not.Contain(PartitionTerminalFeature.ClearActionName));
+    }
+
+    [Test]
+    public void PartitionModeAction_UsesTheCurrentWindowDraft()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add, PartitionTerminalFeature.TerminalName);
+        var modes = new Dictionary<object, Common.Domain.Storage.Partition.PartitionMode>();
+        PartitionTerminalFeature.Register(registry, _ => "partition-view",
+            context => modes[(object)context.Window], context =>
+            {
+                var window = (object)context.Window;
+                modes[window] = modes[window] == Common.Domain.Storage.Partition.PartitionMode.Whitelist
+                    ? Common.Domain.Storage.Partition.PartitionMode.Blacklist
+                    : Common.Domain.Storage.Partition.PartitionMode.Whitelist;
+            }, _ => { });
+        registry.Freeze();
+        var firstWindow = new object();
+        var secondWindow = new object();
+        modes[firstWindow] = Common.Domain.Storage.Partition.PartitionMode.Whitelist;
+        modes[secondWindow] = Common.Domain.Storage.Partition.PartitionMode.Blacklist;
+        var action = ((ActionButton)registry.Buttons[0].Button).Action;
+        var commands = new RecordingCommands();
+        var first = new TerminalContext(Array.Empty<string>(), false, "partition", commands, firstWindow);
+        var second = new TerminalContext(Array.Empty<string>(), false, "partition", commands, secondWindow);
+
+        action.OnPress(first);
+
+        Assert.That(modes[firstWindow], Is.EqualTo(Common.Domain.Storage.Partition.PartitionMode.Blacklist));
+        Assert.That(modes[secondWindow], Is.EqualTo(Common.Domain.Storage.Partition.PartitionMode.Blacklist));
+    }
+
+    [TestCase(PartitionMode.Whitelist)]
+    [TestCase(PartitionMode.Blacklist)]
+    public void PartitionClearAction_ClearsOnlyTheCurrentWindowAndPreservesItsMode(PartitionMode mode)
+    {
+        var firstWindow = new object();
+        var secondWindow = new object();
+        var firstDraft = new PartitionDraft(new PartitionConfig(mode, Array.Empty<PartitionRule>()), 8, 4,
+            () => Guid.NewGuid().ToString("N"));
+        var secondDraft = new PartitionDraft(new PartitionConfig(mode, Array.Empty<PartitionRule>()), 8, 4,
+            () => Guid.NewGuid().ToString("N"));
+        firstDraft.AddSample(new ItemKey("item.apple"), 0);
+        firstDraft.AddSample(new ItemKey("item.pear"), 7);
+        secondDraft.AddSample(new ItemKey("item.plum"), 0);
+        var firstChanges = 0;
+        var secondChanges = 0;
+        firstDraft.Changed += () => firstChanges++;
+        secondDraft.Changed += () => secondChanges++;
+        var drafts = new Dictionary<object, PartitionDraft> { [firstWindow] = firstDraft, [secondWindow] = secondDraft };
+        var registry = PartitionTerminalFeature.CreateRegistry(new MemoryConfig(), _log.Add, _ => "partition-view",
+            context => drafts[(object)context.Window].Mode,
+            context => drafts[(object)context.Window].ToggleMode(),
+            context => drafts[(object)context.Window].Clear());
+        var bar = new VerticalButtonBar(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+        var context = new TerminalContext(Array.Empty<string>(), false, "partition", new RecordingCommands(), firstWindow);
+
+        bar.Press(context, PartitionTerminalFeature.ClearActionName, false);
+        bar.Press(context, PartitionTerminalFeature.ClearActionName, false);
+
+        Assert.That(firstDraft.Rules, Is.Empty);
+        Assert.That(firstDraft.Mode, Is.EqualTo(mode));
+        Assert.That(firstChanges, Is.EqualTo(1), "Clearing an empty partition does not notify another save.");
+        Assert.That(secondDraft.Rules, Has.Count.EqualTo(1));
+        Assert.That(secondDraft.Mode, Is.EqualTo(mode));
+        Assert.That(secondChanges, Is.Zero);
+        Assert.That(_log, Is.Empty);
     }
 
     [Test]

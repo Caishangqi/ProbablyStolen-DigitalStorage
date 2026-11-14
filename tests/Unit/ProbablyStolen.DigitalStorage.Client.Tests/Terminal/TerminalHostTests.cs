@@ -33,6 +33,27 @@ public sealed class TerminalHostTests
     }
 
     [Test]
+    public void ConfiguredDefault_IsUsedForMissingAndFailedViews()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add, "partition");
+        registry.AddTerminal(View("partition"));
+        registry.AddTerminal(View("other"));
+        registry.Freeze();
+        var handler = new UniversalTerminalHandler(registry, _store, _log.Add);
+        var bar = new VerticalButtonBar(registry, handler, _log.Add);
+        var host = new TerminalHost(registry, handler, bar, _view, Array.Empty<string>, () => false, _log.Add, Window);
+
+        _store.Value = "missing";
+        host.Open();
+        Assert.That(host.CurrentTerminal, Is.EqualTo("partition"));
+        _view.FailingViews.Add("other");
+        host.Switch("other");
+        Assert.That(host.CurrentTerminal, Is.EqualTo("partition"));
+        Assert.That(_view.Calls, Has.Member("show:partition"));
+        Assert.That(_store.Written, Is.Empty);
+    }
+
+    [Test]
     public void Open_ShowsTheStoredViewWithoutWriting()
     {
         _store.Value = "test";

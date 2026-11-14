@@ -33,7 +33,7 @@ public sealed class TerminalHost : ITerminalCommands
         _installedModules = installedModules ?? throw new ArgumentNullException(nameof(installedModules));
         _testViewEnabled = testViewEnabled ?? throw new ArgumentNullException(nameof(testViewEnabled));
         _diagnostic = diagnostic ?? throw new ArgumentNullException(nameof(diagnostic));
-        CurrentTerminal = TerminalRegistry.StorageTerminalName;
+        CurrentTerminal = _registry.DefaultTerminalName;
     }
 
     /// <summary>Gets the rail of this window.</summary>
@@ -51,7 +51,7 @@ public sealed class TerminalHost : ITerminalCommands
     /// <summary>Gets a fresh context for evaluating buttons and views.</summary>
     public TerminalContext Context => new(_installedModules(), _testViewEnabled(), CurrentTerminal, this, _window);
 
-    /// <summary>Shows the stored view, or the storage view when it cannot show.</summary>
+    /// <summary>Shows the stored view, or the default view when it cannot show.</summary>
     public void Open()
     {
         _states.Clear();
@@ -93,7 +93,7 @@ public sealed class TerminalHost : ITerminalCommands
 
     /// <summary>
     /// Closes the sub-screen and resumes the view under it. If that view became unavailable meanwhile,
-    /// the storage view shows instead.
+    /// the default view shows instead.
     /// </summary>
     public void ReturnToParent()
     {
@@ -104,7 +104,7 @@ public sealed class TerminalHost : ITerminalCommands
         if (_fallbackOnReturn)
         {
             _fallbackOnReturn = false;
-            Show(_registry.StorageTerminal, null);
+            Show(_registry.DefaultTerminal, null);
         }
 
         _view.RefreshButtons();
@@ -119,23 +119,23 @@ public sealed class TerminalHost : ITerminalCommands
     }
 
     /// <summary>
-    /// Re-evaluates after modules or settings change: an unavailable view falls back to the storage view without writing
+    /// Re-evaluates after modules or settings change: an unavailable view falls back to the default view without writing
     /// the stored view, so it comes back once available again. Under an open sub-screen the fallback waits for its
     /// return, so pulling a module in the modules page does not close the page.
     /// </summary>
     public void Invalidate()
     {
-        if (CurrentTerminal != TerminalRegistry.StorageTerminalName && !_handler.HasTerminal(Context, CurrentTerminal))
+        if (CurrentTerminal != _registry.DefaultTerminalName && !_handler.HasTerminal(Context, CurrentTerminal))
         {
             _states.Remove(CurrentTerminal);
             if (InSubScreen)
             {
                 _fallbackOnReturn = true;
-                CurrentTerminal = TerminalRegistry.StorageTerminalName;
+                CurrentTerminal = _registry.DefaultTerminalName;
             }
             else
             {
-                Show(_registry.StorageTerminal, null);
+                Show(_registry.DefaultTerminal, null);
             }
         }
 
@@ -169,12 +169,12 @@ public sealed class TerminalHost : ITerminalCommands
         }
 
         _diagnostic($"terminal_view build=failed name={terminal.TerminalName}");
-        if (terminal.TerminalName == TerminalRegistry.StorageTerminalName) return;
+        if (terminal.TerminalName == _registry.DefaultTerminalName) return;
         // Fall back without writing the stored view, so the player's choice survives a broken view.
         _states.Remove(terminal.TerminalName);
-        if (_view.ShowTerminal(_registry.StorageTerminal, null))
-            CurrentTerminal = TerminalRegistry.StorageTerminalName;
+        if (_view.ShowTerminal(_registry.DefaultTerminal, null))
+            CurrentTerminal = _registry.DefaultTerminalName;
         else
-            _diagnostic($"terminal_view build=failed name={TerminalRegistry.StorageTerminalName}");
+            _diagnostic($"terminal_view build=failed name={_registry.DefaultTerminalName}");
     }
 }

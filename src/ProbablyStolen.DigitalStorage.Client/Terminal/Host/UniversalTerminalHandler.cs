@@ -32,7 +32,7 @@ public sealed class UniversalTerminalHandler
         _registry.Find(terminalName) is { } terminal && IsAvailable(terminal, context);
 
     /// <summary>
-    /// Gets the stored view when it is registered and available, otherwise the storage view. Never writes the store.
+    /// Gets the stored view when it is registered and available, otherwise the default view. Never writes the store.
     /// </summary>
     public TerminalDefinition GetCurrentTerminal(TerminalContext context)
     {
@@ -44,12 +44,12 @@ public sealed class UniversalTerminalHandler
         catch (Exception error)
         {
             _diagnostic($"current_terminal read=failed error={error.GetType().Name}");
-            return _registry.StorageTerminal;
+            return _registry.DefaultTerminal;
         }
 
-        if (string.IsNullOrEmpty(stored)) return _registry.StorageTerminal;
+        if (string.IsNullOrEmpty(stored)) return _registry.DefaultTerminal;
         var terminal = _registry.Find(stored!);
-        return terminal != null && IsAvailable(terminal, context) ? terminal : _registry.StorageTerminal;
+        return terminal != null && IsAvailable(terminal, context) ? terminal : _registry.DefaultTerminal;
     }
 
     /// <summary>Stores a view the player chose. Only the name is written.</summary>

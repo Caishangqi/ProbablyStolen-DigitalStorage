@@ -3,11 +3,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using TMPro;
@@ -20,19 +24,16 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// Edits the workbench cell's partition. Overview changes save immediately; detail edits save when valid.
 /// The rule limit follows module changes while the editor is open.
 /// </summary>
-internal sealed partial class PartitionWindow
+internal sealed partial class PartitionWindow : TerminalWindowHost
 {
-    private const string WindowId = "digital_storage_partition";
+    private new const string WindowId = "digital_storage_partition";
     private const int Columns = TerminalWindowMetrics.Columns;
     private const float CellPixels = TerminalWindowMetrics.CellPixels;
-    private const float Gap = 4f;
-    // The partition editor has its own layout: a left button column inside a 486-wide window.
-    private const int ToolbarButton = 28;
-    private const int ToolbarSpacing = 4;
+    private const float Gap = 3f;
     private static readonly float GridWidth = TerminalWindowMetrics.GridWidth;
-    private static readonly float BodyWidth = ToolbarButton + Gap + GridWidth + Gap +
+    private static readonly float BodyWidth = GridWidth + TerminalWindowMetrics.ScrollbarGap +
         TerminalWindowMetrics.ScrollbarWidth;
-    private const float WindowWidth = 486f;
+    private const float WindowWidth = TerminalWindowMetrics.Width;
     private const float CountWidth = 110f;
     private static PartitionWindow? _current;
     private readonly ModText _text;
@@ -47,13 +48,17 @@ internal sealed partial class PartitionWindow
     private readonly Dictionary<ItemKey, ItemPicture> _pictureCache = new();
     private readonly Dictionary<ItemKey, GameItem> _dropped = new();
     private readonly GridGestureArbiter _gestures = new();
+    private readonly PartitionPointerArbiter _pointer = new();
+    private readonly PartitionPointerBackCoordinator _pointerBack;
+    private readonly PartitionHoverHintCoordinator _hoverHint;
+    private readonly PartitionRuleTooltip _ruleTooltip = new();
+    private readonly Dictionary<int, RichText> _ruleHints = new();
     private readonly List<Image> _ghostLayers = new();
     private CustomUIWindow? _window;
     private RectTransform? _body;
     private CustomUIElement? _status;
     private CustomUIElement? _count;
     private ItemSlotGrid? _grid;
-    private TreeNodeRender? _shield;
     private TerminalScrollbar? _scrollbar;
     private Image? _dropHighlight;
     private TerminalDropHighlight _dropState = TerminalDropHighlight.Hidden;
@@ -70,12 +75,13 @@ internal sealed partial class PartitionWindow
     private int _selected = -1;
     private int _target = -1;
     private int _dragSource = -1;
+    private int _generation;
     private bool _showSample;
     private string? _messageKey;
     private object[] _messageArgs = Array.Empty<object>();
 
-    private PartitionWindow(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
-        Action<string> log)
+    private PartitionWindow(TerminalRegistry registry, ModText text, GameItem cell, ITerminalViewSettings view,
+        TerminalSearchService search, Action<string> log) : base(registry, text, view, () => false, () => false, log, null)
     {
         _text = text;
         _view = view;
@@ -88,6 +94,8 @@ internal sealed partial class PartitionWindow
             () => Guid.NewGuid().ToString("N"));
         _pictures = new ItemPictureCapture(new PictureSourceChain<GameItem>(
             key => _dropped.TryGetValue(key, out var item) ? item : null, FindInCell), log, "partition");
+        _pointerBack = new PartitionPointerBackCoordinator(_gestures, _pointer);
+        _hoverHint = new PartitionHoverHintCoordinator(ShowRuleHint, HideRuleHint);
         _draft.Changed += Save;
         _workbench = cell.parentInventory?.GetParentItem();
         _workbenchWindow = _workbench?.contentWindow;
@@ -99,8 +107,14 @@ internal sealed partial class PartitionWindow
     {
         if (CustomUIManager.Instance == null) return;
         CloseCurrent();
-        _current = new PartitionWindow(text, cell, view, search, log);
-        _current.Show();
+        var registry = PartitionTerminalFeature.CreateRegistry((IConfigManager)view, log,
+            owner => new PartitionTerminalView((PartitionWindow)owner),
+            context => ((PartitionWindow)context.Window).DraftMode,
+            context => ((PartitionWindow)context.Window).ToggleMode(),
+            context => ((PartitionWindow)context.Window).ClearPartitions());
+        var window = new PartitionWindow(registry, text, cell, view, search, log);
+        _current = window;
+        window.Open();
     }
 
     /// <summary>Closes the editor when it edits this cell, discarding its draft; used when the cell leaves the workbench.</summary>
@@ -110,7 +124,7 @@ internal sealed partial class PartitionWindow
     }
 
     /// <summary>Closes any open editor, discarding its draft.</summary>
-    internal static void CloseCurrent() => _current?.Close();
+    internal static new void CloseCurrent() => _current?.Close();
 
     internal static void InvalidateSamples()
     {
@@ -143,79 +157,29 @@ internal sealed partial class PartitionWindow
             current.Close();
     }
 
-    private void Show()
-    {
-        var builder = CustomUIManager.Instance.CreateWindow(WindowId, _text.Get("partition_title"), "overlay", null,
-                CustomUIManager.Style.Machinery)
-            .SetSize(WindowWidth, 320f).SetDraggable(true).SetCloseOnEscape(false).OnClose(OnClosed);
-        builder.BeginColumn(Gap);
-        _body = builder.CurrentContainer;
-        builder.End();
-        builder.BeginRow(Gap);
-        builder.AddLabel(string.Empty, "status");
-        SetWidth(builder.Last, BodyWidth - Gap - CountWidth);
-        builder.AddLabel(string.Empty, "count");
-        SetWidth(builder.Last, CountWidth);
-        if (builder.Last.text != null) builder.Last.text.alignment = TextAlignmentOptions.TopRight;
-        builder.End();
-        _window = builder.Show();
-        _status = _window.Get("status");
-        _count = _window.Get("count");
-        _dropdown = new PopupDropdown(_window, _search.MatchesText);
-        // On the native window layer a dragged item's ghost is drawn above this window, as over the terminal.
-        // Raised: the editor opens from the workbench window, a focused native window on the raised layer.
-        NativeWindowLayer.Attach(_window, "digital_storage_partition_viewport", OnEscape, raised: true);
-        WindowPositionMemory.Restore(_workbench, _window);
-        WindowPositionMemory.Track(_workbench, _window);
-        _shield = NativeWindowLayer.AttachInputShield(_window, "partition_input_shield");
-        _window.root.AddComponent<SampleDropHandler>().Initialize(_window, _shield, OnSample, IsGridSampleTarget, OwnsWheel);
-        _window.root.AddComponent<FrameHandler>().Initialize(Tick);
-        CellUpgradeInventory.ModulesChanged += OnModulesChanged;
-        CreateGhost(_window.Rect);
-        if (_opened.Repaired) Message("partition_repaired", _opened.DroppedRules);
-        Render();
-    }
-
     private void Close()
     {
         if (_window != null && _window.IsAlive) _window.Close();
-        else OnClosed();
-    }
-
-    private void OnClosed()
-    {
-        NativeWindowLayer.Detach(_window);
-        _session.End();
-        _dropdown?.Close();
-        _dropdown = null;
-        CellUpgradeInventory.ModulesChanged -= OnModulesChanged;
-        _workbenchWindow = null;
-        _window = null;
-        _body = null;
-        _grid = null;
-        _shield = null;
-        _scrollbar = null;
-        _dropHighlight = null;
-        _ghost = null;
-        _ghostView = null;
-        _ghostIcon = null;
-        _ghostLayers.Clear();
-        _status = null;
-        _count = null;
-        _dropped.Clear();
-        if (ReferenceEquals(_current, this)) _current = null;
-    }
-
-    private void OnEscape()
-    {
-        PartitionBackHandler.Handle(_session.IsActive, _dropdown?.IsOpen == true, _gestures.PressSlot >= 0,
-            _detail != null, () => _dropdown?.Close(), EndRuleDrag, Back, Close);
+        else if (_session.IsActive)
+        {
+            _session.End();
+            if (ReferenceEquals(_current, this)) _current = null;
+        }
     }
 
     private void Render()
     {
-        if (_window == null || _body == null || _rendering) return;
+        if (_window == null || _rendering) return;
+        PartitionViewRefreshCoordinator.Refresh(_detail != null, HasSubScreen,
+            RenderOverview, RefreshDetailScreen);
+    }
+
+    private void RenderOverview()
+    {
+        if (_window == null || _rendering) return;
         _rendering = true;
+        _generation++;
+        _pointer.Cancel();
         try { RenderBody(); }
         finally { _rendering = false; }
     }
@@ -234,18 +198,10 @@ internal sealed partial class PartitionWindow
         _dropHighlight = null;
         _dropState = TerminalDropHighlight.Hidden;
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _body);
-        if (_detail == null) BuildOverview(builder);
-        else BuildDetail(builder);
+        BuildOverview(builder);
         RefreshStatus();
-        FitHeight();
     }
 
-    /// <summary>
-    /// Sizes the window to its content: the frame has no automatic size (CustomUIWindow.SetSize only sets
-    /// <c>sizeDelta</c>), so the content's preferred height is measured and the frame's own height (header, rule
-    /// and padding, measured from the live window) is added. The width stays the grid's design width; long status
-    /// or summary text wraps instead of widening the window.
-    /// </summary>
     private void FitHeight()
     {
         var content = _window?.ContentRoot;
@@ -253,7 +209,7 @@ internal sealed partial class PartitionWindow
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
         var frame = _window.Rect.rect.height - content.rect.height;
         var height = Mathf.Ceil(LayoutUtility.GetPreferredHeight(content) + frame);
-        if (height > 0f) _window.SetSize(WindowWidth, height);
+        if (height > 0f) _window.SetSize(TerminalWindowMetrics.Width, height);
     }
 
     private void RefreshStatus()
@@ -273,22 +229,6 @@ internal sealed partial class PartitionWindow
         layout.flexibleWidth = 0f;
     }
 
-    private static void AddTool(CustomUIBuilder builder, string label, string tooltip, Action onClick)
-    {
-        builder.AddPointerButton(label, onClick);
-        var button = builder.Last;
-        var layout = button.root.GetComponent<LayoutElement>() ?? button.root.AddComponent<LayoutElement>();
-        layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight =
-            ToolbarButton;
-        layout.flexibleWidth = layout.flexibleHeight = 0f;
-        if (button.text != null)
-        {
-            button.text.fontSize = 14f;
-            button.text.alignment = TextAlignmentOptions.Center;
-        }
-        TerminalTooltipPresenter.SetText(button, tooltip);
-    }
-
     private void Message(string key, params object[] args)
     {
         _messageKey = key;
@@ -304,28 +244,12 @@ internal sealed partial class PartitionWindow
 
     private int MaxScroll => TotalRows - VisibleRows;
 
-    // The grid must remain at least as tall as the toolbar, even at the smallest height setting.
+    // Rows follow the independent partition size setting; the dock sits outside the main frame.
     private int CountRows()
     {
         var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
-        return Math.Max(ToolbarRows, TerminalWindowMetrics.GetRows(_view.PartitionSize, LetterboxManager.GameAreaHeight,
-            canvas == null ? 0f : canvas.scaleFactor));
-    }
-
-    private const int ToolbarButtons = 7;
-
-    private static readonly int ToolbarRows = (int)Math.Ceiling(
-        (ToolbarButtons * ToolbarButton + (ToolbarButtons - 1) * ToolbarSpacing +
-         TerminalWindowMetrics.CellSpacing) / (double)(TerminalWindowMetrics.CellPixels + TerminalWindowMetrics.CellSpacing));
-
-    private void CycleSize()
-    {
-        if (!_session.IsActive) return;
-        var size = _view.PartitionSize;
-        _view.PartitionSize = size == TerminalSize.Full ? TerminalSize.Small : size + 1;
-        _rows = CountRows();
-        ScrollTo(_selected);
-        Render();
+        return TerminalWindowMetrics.GetRows(_view.PartitionSize, LetterboxManager.GameAreaHeight,
+            canvas == null ? 0f : canvas.scaleFactor);
     }
 
     private void BuildOverview(CustomUIBuilder builder)
@@ -333,28 +257,6 @@ internal sealed partial class PartitionWindow
         _rows = CountRows();
         _scrollRow = Math.Max(0, Math.Min(MaxScroll, _scrollRow));
         builder.BeginRow(Gap);
-        builder.BeginColumn(ToolbarSpacing);
-        var blacklist = _draft.Mode == PartitionMode.Blacklist;
-        AddTool(builder, _text.Get(blacklist ? "partition_tool_blacklist" : "partition_tool_whitelist"),
-            _text.Get("partition_mode_button", _text.Get(ModeKey(_draft.Mode))), () =>
-            {
-                if (!_session.IsActive) return;
-                _draft.ToggleMode();
-                Render();
-            });
-        AddTool(builder, _text.Get("partition_tool_open"), _text.Get("partition_open"),
-            () => { if (_draft.At(_selected) != null) OpenDetail(_selected); });
-        AddTool(builder, _text.Get("partition_tool_duplicate"), _text.Get("partition_duplicate"),
-            () => Edit(() => AddResult(_draft.Duplicate(_selected)), needsSelection: true));
-        AddTool(builder, _text.Get("partition_tool_remove"), _text.Get("partition_remove"),
-            () => Edit(() => { _draft.Remove(_selected); _selected = -1; }, needsSelection: true));
-        AddTool(builder, _text.Get("partition_tool_clear"), _text.Get("partition_clear"),
-            () => Edit(() => { _draft.Clear(); _selected = -1; }));
-        AddTool(builder, _text.Get("partition_tool_undo"), _text.Get("partition_undo"), () => Edit(() => _draft.Undo()));
-        var size = _view.PartitionSize.ToString().ToLowerInvariant();
-        AddTool(builder, _text.Get("terminal_button_size_" + size),
-            _text.Get("terminal_button_size_tip", _text.Get("terminal_size_" + size)), CycleSize);
-        builder.End();
 
         builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
         _grid = new ItemSlotGrid(_pictures, showBadge: false, CellPixels);
@@ -369,6 +271,8 @@ internal sealed partial class PartitionWindow
         _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
             TerminalWindowMetrics.GetGridHeight(VisibleRows), TerminalWindowMetrics.ScrollbarHandle, row =>
             {
+                _pointer.Cancel();
+                EndRuleDrag();
                 _scrollRow = row;
                 FillGrid();
             });
@@ -377,12 +281,11 @@ internal sealed partial class PartitionWindow
         FillGrid();
     }
 
-    private static string ModeKey(PartitionMode mode) =>
-        mode == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist";
-
     private void FillGrid()
     {
         if (_grid == null) return;
+        _hoverHint.Hide();
+        _ruleHints.Clear();
         _scrollbar?.SetRange(MaxScroll, VisibleRows, _scrollRow);
         var warnings = PartitionLint.Check(_draft.Rules).ToLookup(warning => warning.RuleId);
         for (var index = 0; index < Visible; index++)
@@ -397,10 +300,17 @@ internal sealed partial class PartitionWindow
             {
                 var picture = Picture(rule.DisplayKey);
                 _grid.SetEntry(index, picture, showPicture: picture != null, interactable: true, badgeText: null);
-                var tip = rule.Name ?? Summary(rule);
+                var tip = new RichTextBuilder(40)
+                    .AddLine(rule.Name ?? Summary(rule), ignoreEmpty: true, RenderHandler.ColorPalette.White, bold: true);
                 foreach (var warning in warnings[rule.RuleId])
-                    tip += "\n" + _text.Get("partition_warning_" + warning.Kind.ToString().ToLowerInvariant());
-                _grid.SetTooltip(index, tip);
+                    tip.AddLine(_text.Get("partition_warning_" + warning.Kind.ToString().ToLowerInvariant()),
+                        ignoreEmpty: true, RenderHandler.ColorPalette.Red);
+                tip.AddLine(_text.Get("partition_hint_title"), ignoreEmpty: true, RenderHandler.ColorPalette.Gray)
+                    .AddLine(" " + _text.Get("partition_hint_left"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+                if (_draft.CanAdd)
+                    tip.AddLine(" " + _text.Get("partition_hint_middle"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+                tip.AddLine(" " + _text.Get("partition_hint_right"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+                _ruleHints[index] = tip.Build();
             }
         }
 
@@ -438,7 +348,12 @@ internal sealed partial class PartitionWindow
     private void Tick()
     {
         if (_window != null) _dropdown?.CloseOnOutsidePress(CameraOf(_window));
-        if (_window == null || !_session.IsActive || _detail != null || _grid == null) return;
+        if (_window == null || !_window.IsVisible || !_session.IsActive || _detail != null || _grid == null)
+        {
+            _hoverHint.Hide();
+            _pointer.Cancel();
+            return;
+        }
         var camera = CameraOf(_window);
         var mouse = (Vector2)Input.mousePosition;
         // Geometry alone is not enough: a focused native window, such as the workbench, can lie over the editor on the
@@ -457,13 +372,22 @@ internal sealed partial class PartitionWindow
 
         if (nativeDrag)
         {
+            _pointer.Cancel();
             EndRuleDrag();
             TrackSampleDrag(slot);
             return;
         }
 
+        if (!overWindow)
+        {
+            _pointer.Cancel();
+            EndRuleDrag();
+            return;
+        }
+
         SetDrop(TerminalDropHighlight.Hidden);
         TrackRuleDrag(slot, mouse, camera);
+        RefreshRuleHint(overWindow);
     }
 
     /// <summary>Gets whether a native drag's wheel scrolls the grid: the pointer is over the highlighted grid range.</summary>
@@ -476,7 +400,7 @@ internal sealed partial class PartitionWindow
     }
 
     /// <summary>Gets whether the topmost thing under the pointer, past a dragged item's ghost, is this window.</summary>
-    private bool IsTopmost() => _window != null && _shield != null && SampleDropHandler.IsPointerOverWindow(_window, _shield);
+    private bool IsTopmost() => _window != null && SampleDropHandler.IsPointerOverWindow(_window, InputShield);
 
     private void TrackSampleDrag(int slot)
     {
@@ -489,55 +413,133 @@ internal sealed partial class PartitionWindow
 
     private void TrackRuleDrag(int slot, Vector2 mouse, Camera? camera)
     {
-        if (Input.GetMouseButtonDown(0) && slot >= 0)
+        var down = new[] { Input.GetMouseButtonDown(0), Input.GetMouseButtonDown(1), Input.GetMouseButtonDown(2) };
+        var downCount = down.Count(value => value);
+        if (downCount > 1 || (_pointer.IsPressed &&
+            (Input.GetMouseButton(0) && _pointer.Button != PartitionPointerButton.Left ||
+             Input.GetMouseButton(1) && _pointer.Button != PartitionPointerButton.Right ||
+             Input.GetMouseButton(2) && _pointer.Button != PartitionPointerButton.Middle)))
         {
-            _gestures.Press(slot);
-            _dragSource = _draft.At(slot) != null ? slot : -1;
+            _pointer.Cancel();
+            EndRuleDrag();
+            return;
         }
 
-        if (_gestures.PressSlot < 0) return;
-        if (Input.GetMouseButton(0))
+        if (downCount == 1)
         {
+            var buttonIndex = Array.FindIndex(down, value => value);
+            var button = buttonIndex switch
+            {
+                0 => PartitionPointerButton.Left,
+                1 => PartitionPointerButton.Right,
+                _ => PartitionPointerButton.Middle
+            };
+            var rule = slot < 0 ? null : _draft.At(slot);
+            var accepted = _pointer.Press(button, slot, rule?.RuleId, _generation, IsTopmost(),
+                _session.IsActive, false, false);
+            if (accepted && button == PartitionPointerButton.Left)
+            {
+                _gestures.Press(slot);
+                _dragSource = slot;
+            }
+        }
+
+        if (!_pointer.IsPressed) return;
+        var pointerButtonIndex = (int)_pointer.Button;
+        var held = Input.GetMouseButton(pointerButtonIndex);
+        if (_pointer.Button == PartitionPointerButton.Left && held)
+        {
+            _pointer.Move(slot);
             if (slot >= 0) _gestures.Move(slot);
-            if (_gestures.IsDragging && _dragSource >= 0)
+            if (_pointer.IsDragging && _dragSource >= 0)
             {
                 ShowGhost(mouse, camera);
                 SetTarget(slot >= 0 && slot < _draft.Capacity && slot != _dragSource ? slot : -1, force: true);
             }
-
             return;
         }
 
-        // Released: one gesture per release (GridGestureArbiter); a drag never also counts as a click.
-        var source = _dragSource;
-        var gesture = _gestures.Release(slot, Time.unscaledTime);
+        if (!Input.GetMouseButtonUp(pointerButtonIndex)) return;
+        var source = _pointer.SourceSlot;
+        var pointerButton = _pointer.Button;
+        var pointerDragging = _pointer.IsDragging;
+        var dragIdentity = pointerButton == PartitionPointerButton.Left && pointerDragging;
+        var currentSlot = dragIdentity ? source : slot;
+        var currentRule = currentSlot < 0 ? null : _draft.At(currentSlot);
+        var gesture = _pointer.Release(pointerButton, slot, currentRule?.RuleId, _generation,
+            IsTopmost(), _session.IsActive,
+            ItemMouseDragHandler.current?.IsDraggingItem == true || ItemMultiSelectHandler.current?.IsGroupDragging == true,
+            Input.GetMouseButton(0) && pointerButton != PartitionPointerButton.Left ||
+            Input.GetMouseButton(1) && pointerButton != PartitionPointerButton.Right ||
+            Input.GetMouseButton(2) && pointerButton != PartitionPointerButton.Middle);
+        var legacy = pointerButton == PartitionPointerButton.Left ? _gestures.Release(slot, Time.unscaledTime) : GridGesture.None;
         EndRuleDrag();
         switch (gesture)
         {
-            case GridGesture.Drop when source >= 0 && slot >= 0:
-                // Cleared first, so a message from a failed save of the move stays visible.
-                _messageKey = null;
-                if (!_draft.Move(source, slot)) break;
-                _selected = -1;
-                FillGrid();
-                RefreshStatus();
-                break;
-            case GridGesture.DoubleClick when _draft.At(slot) != null:
+            case PartitionPointerGesture.Configure when !dragIdentity && currentRule != null:
                 OpenDetail(slot);
                 break;
-            case GridGesture.Click:
-                _selected = _draft.At(slot) != null ? slot : -1;
-                ApplyTones();
+            case PartitionPointerGesture.Delete when currentRule != null:
+                _messageKey = null;
+                if (_draft.Remove(slot))
+                {
+                    _selected = -1;
+                    Render();
+                }
+                break;
+            case PartitionPointerGesture.Duplicate when currentRule != null:
+                _messageKey = null;
+                AddResult(_draft.Duplicate(slot));
+                Render();
+                break;
+            case PartitionPointerGesture.Move when legacy == GridGesture.Drop && source >= 0 && slot >= 0 &&
+                                                   slot < _draft.Capacity && source != slot:
+                _messageKey = null;
+                if (_draft.Move(source, slot))
+                {
+                    _selected = -1;
+                    FillGrid();
+                    RefreshStatus();
+                }
                 break;
         }
     }
 
+    private void RefreshRuleHint(bool overWindow)
+    {
+        var canShow = overWindow && CustomUIManager.Instance != null && _window != null && _window.IsVisible &&
+            _session.IsActive && _detail == null && !HasSubScreen && _body != null && _body.gameObject.activeInHierarchy &&
+            _grid != null && !_pointer.IsPressed && !_gestures.IsDragging &&
+            !Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButton(2) &&
+            ItemMouseDragHandler.current?.IsDraggingItem != true && ItemMultiSelectHandler.current?.IsGroupDragging != true;
+        var index = canShow ? _grid!.IndexAt(Input.mousePosition, CameraOf(_window!), Visible) : -1;
+        var hint = RuleHint(index);
+        _hoverHint.Refresh(index, hint?.nakedText, canShow);
+        _ruleTooltip.FollowPointer();
+    }
+
+    private RichText? RuleHint(int index) => _ruleHints.TryGetValue(index, out var hint) ? hint : null;
+
+    private void ShowRuleHint(int index)
+    {
+        var hint = RuleHint(index);
+        if (hint != null) _ruleTooltip.SetContent(hint);
+    }
+
+    private void HideRuleHint()
+    {
+        _ruleTooltip.Hide();
+        _grid?.HideTooltips();
+    }
+
     private void EndRuleDrag()
     {
+        _pointer.Cancel();
         if (_gestures.PressSlot >= 0) _gestures.Cancel();
         _dragSource = -1;
         if (_ghost != null) _ghost.gameObject.SetActive(false);
         SetTarget(-1);
+        _hoverHint.Hide();
     }
 
     private void SetTarget(int slot, bool force = false)
@@ -689,7 +691,9 @@ internal sealed partial class PartitionWindow
     private void Revert(string messageKey)
     {
         _draft.Rebase(_draft.Baseline);
+        var wasInDetail = _detail != null && HasSubScreen;
         ResetDetail();
+        if (wasInDetail) ReturnToParent();
         Message(messageKey);
     }
 
@@ -703,7 +707,9 @@ internal sealed partial class PartitionWindow
     private void Reload(string messageKey)
     {
         _draft.Rebase(new CellPartitionTags(_cell).Capture().Interpret().Config);
+        var wasInDetail = _detail != null && HasSubScreen;
         ResetDetail();
+        if (wasInDetail) ReturnToParent();
         Message(messageKey);
     }
 
@@ -728,13 +734,13 @@ internal sealed partial class PartitionWindow
         _detail = new RuleDraft(rule, _detailSample);
         _showSample = false;
         _messageKey = null;
-        Render();
+        _ruleScreen = new PartitionRuleScreen(this);
+        SwitchToScreen(_ruleScreen);
     }
 
     private void Back()
     {
-        _detail = null;
-        Render();
+        ReturnToParent();
     }
 
     /// <summary>
@@ -749,6 +755,7 @@ internal sealed partial class PartitionWindow
         if (stored == null) return;
         if (PartitionRuleCodec.Encode(new[] { edited.With(slot: stored.Slot) }) == PartitionRuleCodec.Encode(new[] { stored })) return;
         _draft.Replace(edited);
+        if (_detail != null) RefreshActiveDetail();
     }
 
     private string FieldName(PartitionField field) => field.Id.StartsWith(PartitionFieldRegistry.FeaturePrefix, StringComparison.Ordinal)

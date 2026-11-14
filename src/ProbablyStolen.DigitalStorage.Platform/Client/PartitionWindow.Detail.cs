@@ -27,9 +27,11 @@ internal sealed partial class PartitionWindow
     private readonly List<Image> _detailLayers = new();
     private PopupDropdown? _dropdown;
     private RectTransform? _summaryBox;
+    private ScrollRect? _detailScroll;
 
     private void BuildDetail(CustomUIBuilder builder)
     {
+        _detailScroll = null;
         var rule = _detail!;
         BuildHeader(builder, rule);
 
@@ -53,6 +55,7 @@ internal sealed partial class PartitionWindow
             builder.BeginScroll(CardsBeforeScroll * (cardHeight + Gap) - Gap);
             // The scroll view stretches to the window's content width; keep it to the body's, beside the boxes.
             var view = parent.GetChild(parent.childCount - 1).gameObject;
+            _detailScroll = view.GetComponentInChildren<ScrollRect>(true);
             FixWidth(view, BodyWidth);
             cardWidth = BodyWidth - ScrollbarSpace(view);
         }
@@ -70,7 +73,7 @@ internal sealed partial class PartitionWindow
         builder.AddPointerButton(_text.Get("partition_sample_attributes"), () =>
         {
             _showSample = !_showSample;
-            Render();
+            RefreshActiveDetail();
         });
         var sample = builder.Last;
         SetSize(sample, 140f, ControlHeight);
@@ -86,6 +89,18 @@ internal sealed partial class PartitionWindow
 
         BuildSummary(builder, rule);
         if (_showSample) BuildSampleTable(builder);
+    }
+
+    private void RestoreDetailScroll(float offset)
+    {
+        if (_detailScroll == null || _detailScroll.content == null || _detailScroll.viewport == null) return;
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_detailScroll.transform);
+        _detailScroll.StopMovement();
+        var content = _detailScroll.content;
+        var maxOffset = Mathf.Max(0f, content.rect.height - _detailScroll.viewport.rect.height);
+        var clampedOffset = PartitionViewRefreshCoordinator.ClampScrollOffset(offset, content.rect.height,
+            _detailScroll.viewport.rect.height);
+        _detailScroll.verticalNormalizedPosition = maxOffset <= 0f ? 1f : 1f - clampedOffset / maxOffset;
     }
 
     private void BuildHeader(CustomUIBuilder builder, RuleDraft rule)
@@ -158,7 +173,7 @@ internal sealed partial class PartitionWindow
             {
                 rule.SetOperator(index, operators[choice]);
                 SaveDetail();
-                Render();
+                RefreshActiveDetail();
             }));
 
         switch (row.Field.Kind)
@@ -223,7 +238,7 @@ internal sealed partial class PartitionWindow
         {
             rule.Remove(index);
             SaveDetail();
-            Render();
+            RefreshActiveDetail();
         });
         SetSize(builder.Last, ControlHeight, ControlHeight);
         TerminalTooltipPresenter.SetText(builder.Last, _text.Get("partition_remove_condition_tip"));
@@ -243,7 +258,7 @@ internal sealed partial class PartitionWindow
             {
                 rule.SetTarget(index, choice == 0 ? null : PartitionValue.Of(values[choice - 1]));
                 SaveDetail();
-                Render();
+                RefreshActiveDetail();
             }, searchable ? _text.Get("partition_search_value") : null));
     }
 
@@ -260,7 +275,7 @@ internal sealed partial class PartitionWindow
             if (row < 0) _detail.AddCondition(id);
             else _detail.ChangeField(row, id);
             SaveDetail();
-            Render();
+            RefreshActiveDetail();
         }, _text.Get("partition_search"));
     }
 

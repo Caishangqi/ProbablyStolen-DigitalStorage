@@ -14,7 +14,7 @@ internal sealed class TerminalModulesScreen : SubScreen
 {
     private ModuleBayHost? _bayHost;
 
-    internal TerminalModulesScreen(TerminalWindow window) : base(window)
+    internal TerminalModulesScreen(TerminalWindowHost window) : base(window)
     {
     }
 

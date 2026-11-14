@@ -23,11 +23,21 @@ public sealed class TerminalRegistry
     /// <summary>Creates an empty registry.</summary>
     /// <param name="config">Stores the values of registered settings.</param>
     /// <param name="diagnostic">Receives refused registrations.</param>
-    public TerminalRegistry(IConfigManager config, Action<string> diagnostic)
+    /// <param name="defaultTerminalName">The fallback view name.</param>
+    public TerminalRegistry(IConfigManager config, Action<string> diagnostic, string defaultTerminalName = StorageTerminalName)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _diagnostic = diagnostic ?? throw new ArgumentNullException(nameof(diagnostic));
+        if (string.IsNullOrWhiteSpace(defaultTerminalName)) throw new ArgumentException("A default terminal name is required.", nameof(defaultTerminalName));
+        DefaultTerminalName = defaultTerminalName;
     }
+
+    /// <summary>Gets the terminal used when the selected view is unavailable.</summary>
+    public string DefaultTerminalName { get; }
+
+    /// <summary>Gets the default view; available after <see cref="Freeze"/>.</summary>
+    public TerminalDefinition DefaultTerminal =>
+        Find(DefaultTerminalName) ?? throw new InvalidOperationException("The default terminal is not registered.");
 
     /// <summary>Gets the views by order, ties by name.</summary>
     public IReadOnlyList<TerminalDefinition> Terminals { get; private set; } = Array.Empty<TerminalDefinition>();
@@ -71,12 +81,12 @@ public sealed class TerminalRegistry
         return AddButton(new SettingToggleButton<T>(setting, _config), order, placement, terminalId, _ => true);
     }
 
-    /// <summary>Closes registration. The storage view must be registered by then.</summary>
+    /// <summary>Closes registration. The default view must be registered by then.</summary>
     public void Freeze()
     {
         EnsureOpen();
-        if (Find(StorageTerminalName) == null)
-            throw new InvalidOperationException("The storage terminal must be registered before freezing.");
+        if (Find(DefaultTerminalName) == null)
+            throw new InvalidOperationException("The default terminal must be registered before freezing.");
         _frozen = true;
     }
 

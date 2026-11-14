@@ -224,18 +224,14 @@ partition_mode_whitelist,Whitelist
 partition_mode_blacklist,Blacklist
 partition_mode_button,Mode: {0}
 partition_empty_list_note,An empty list accepts every item.
-partition_open,Open
-partition_duplicate,Copy
-partition_remove,Remove
-partition_clear,Clear
-partition_undo,Undo
+partition_clear,Clear all partition rules on this cell
+partition_tool_clear,X
+partition_hint_title,Controls
+partition_hint_left,Left click: configure
+partition_hint_right,Right click: clear
+partition_hint_middle,Middle click: copy
 partition_tool_whitelist,W
 partition_tool_blacklist,B
-partition_tool_open,O
-partition_tool_duplicate,C
-partition_tool_remove,D
-partition_tool_clear,X
-partition_tool_undo,U
 partition_warning_nevermatches,These conditions never match.
 partition_warning_covered,Another rule already matches everything this rule matches.
 partition_duplicate_found,This rule already exists.

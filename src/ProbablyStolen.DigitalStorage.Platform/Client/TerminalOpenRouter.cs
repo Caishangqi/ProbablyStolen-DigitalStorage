@@ -10,9 +10,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// </summary>
 public static class TerminalOpenRouter
 {
-    private static readonly ConditionalWeakTable<GameItem, TerminalWindow> Windows = new();
+    private static readonly ConditionalWeakTable<GameItem, TerminalWindowHost> Windows = new();
 
-    internal static void Register(GameItem terminal, TerminalWindow window)
+    internal static void Register(GameItem terminal, TerminalWindowHost window)
     {
         Windows.Remove(terminal);
         Windows.Add(terminal, window);
