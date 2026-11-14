@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using ProbablyStolen.DigitalStorage.Api.Integration;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
@@ -20,12 +23,14 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 /// without as a text box, so numbers are defined without a range to let players type them,
 /// and every read clamps the stored value. Each section becomes a header in the order entries are defined.
 /// </summary>
-internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings, IIntegrationSettings
+internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings, IIntegrationSettings,
+    IConfigManager
 {
     internal const int MaximumPowerUsage = 1000;
-    internal const string SortOrderKey = "terminal_view_sort";
-    internal const string SortDirectionKey = "terminal_view_direction";
-    internal const string SizeKey = "terminal_view_size";
+    // The terminal buttons name their settings after these keys, so the rail and the settings panel share one value.
+    internal const string SortOrderKey = StorageTerminalFeature.SortByName;
+    internal const string SortDirectionKey = StorageTerminalFeature.SortDirectionName;
+    internal const string SizeKey = TerminalStyleFeature.SettingName;
     internal const string PartitionSizeKey = "partition_view_size";
     // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
@@ -38,6 +43,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<int> _terminalPowerUsage;
     private readonly ConfigEntry<int> _engineerDailyChance;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
+    private readonly ConfigEntry<bool> _terminalTestView;
     private readonly ConfigEntry<bool> _showCellPages;
     private readonly ConfigEntry<PinyinKeyboard> _pinyinKeyboard;
     private readonly ConfigEntry<PinyinSearchMode> _pinyinMode;
@@ -93,6 +99,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
         _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
             () => text.Get("terminal_diagnostics_name"), tooltip: () => text.Get("terminal_diagnostics_desc"));
+        // Separate from the diagnostics log, which defaults on: the test view must stay hidden from players.
+        _terminalTestView = config.Define("terminal_test_view", false, debug,
+            () => text.Get("terminal_test_view_name"), tooltip: () => text.Get("terminal_test_view_desc"));
         _pinyinKeyboard = config.DefineEnum("terminal_search_keyboard", PinyinKeyboard.Quanpin, search,
             () => text.Get("terminal_search_keyboard_name"), () => text.Get("terminal_search_keyboard_desc"));
         _pinyinMode = config.DefineEnum(PinyinSearchModePolicy.Key, PinyinSearchMode.Auto, search,
@@ -121,7 +130,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
             (_engineerDailyChance, vendors),
-            (_showCellPages, debug), (_terminalDiagnostics, debug),
+            (_showCellPages, debug), (_terminalDiagnostics, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
@@ -299,6 +308,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
     internal bool GetTerminalDiagnostics() => _terminalDiagnostics.Value;
 
+    /// <summary>Gets whether terminals offer the diagnostic test view.</summary>
+    internal bool GetTerminalTestView() => _terminalTestView.Value;
+
     public TerminalSortOrder SortOrder
     {
         get => TerminalViewPolicy.Normalize(_sortOrder.Value);
@@ -322,6 +334,39 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         get => TerminalViewPolicy.Normalize(_partitionSize.Value, TerminalSize.Medium);
         set => _partitionSize.Set(value);
     }
+
+    /// <summary>Reads a terminal rail setting from the global config entry of the same name.</summary>
+    /// <exception cref="ArgumentException">The setting has no config entry of that name and type.</exception>
+    public T GetSetting<T>(Setting<T> setting) where T : struct, Enum => setting?.Name switch
+    {
+        SortOrderKey when SortOrder is T value => value,
+        SortDirectionKey when SortDirection is T value => value,
+        SizeKey when Size is T value => value,
+        _ => throw UnknownSetting(setting?.Name)
+    };
+
+    /// <summary>Writes a terminal rail setting to the global config entry of the same name.</summary>
+    /// <exception cref="ArgumentException">The setting has no config entry of that name and type.</exception>
+    public void PutSetting<T>(Setting<T> setting, T value) where T : struct, Enum
+    {
+        switch (setting?.Name)
+        {
+            case SortOrderKey when value is TerminalSortOrder order:
+                SortOrder = order;
+                break;
+            case SortDirectionKey when value is TerminalSortDirection direction:
+                SortDirection = direction;
+                break;
+            case SizeKey when value is TerminalSize size:
+                Size = size;
+                break;
+            default:
+                throw UnknownSetting(setting?.Name);
+        }
+    }
+
+    private static ArgumentException UnknownSetting(string? name) =>
+        new($"No terminal config entry matches setting '{name}'.", "setting");
 
     /// <summary>Gets whether double-clicking a storage cell also shows its storage pages.</summary>
     internal bool GetShowCellPages() => _showCellPages.Value;

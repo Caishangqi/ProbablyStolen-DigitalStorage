@@ -312,3 +312,20 @@ integration_state_not_running,Not active: the other mod is not running.
 integration_state_unverified,This version of the other mod has not been tested with Digital Storage. The option starts off; turn it on to try it.
 integration_customerstocking_label,Take goods from the digital network
 integration_customerstocking_tooltip,One-click stocking from Customer Stocking may also take goods from online digital networks in its scan range (store, after-hours area, ship). Offline networks and loose cells are never used. Goods leave and return through the network like a terminal transfer. When Customer Stocking skips machine contents, network goods are skipped too, because drives count as machines.
+terminal_dock_title,Functions
+terminal_button_current_tip,Current terminal: {0}
+terminal_button_functions,Fn
+terminal_button_functions_tip,More functions
+terminal_view_storage,Storage
+terminal_view_diagnostics,Test
+terminal_button_diagnostics_rail,T
+terminal_button_diagnostics_rail_tip,Diagnostic test button. Only writes a log line.
+terminal_button_diagnostics_picker,P
+terminal_button_diagnostics_picker_tip,Open the diagnostic test page
+terminal_back,Back to the terminal
+terminal_modules_unavailable,Module panel unavailable
+terminal_page_unavailable,This page cannot be opened
+terminal_diagnostics_view_text,Diagnostic test view. Used to check view switching; it does not read or change items.
+terminal_diagnostics_screen_text,Diagnostic test page. Press Back to return to the terminal.
+terminal_test_view_name,Terminal test view
+terminal_test_view_desc,Adds a placeholder view and test buttons to terminals for checking view switching. For testing only.

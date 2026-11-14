@@ -10,6 +10,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Initialization;
 using ProbablyStolen.DigitalStorage.Platform.Api;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Events;
@@ -164,9 +165,10 @@ public sealed class PlatformComposition : IDisposable
         var housing = new MaterialItem(cell);
         var drive = new DriveItem(appearance, windows, inventory, networkEvents);
         var controller = new ControllerItem(appearance, windows);
+        var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message));
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, search.Service,
-            networkPowerSettings);
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView);
         var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message)),
             PartitionWindow.CloseFor,
@@ -257,7 +259,7 @@ public sealed class PlatformComposition : IDisposable
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
-        TerminalStorageWindow.CloseCurrent();
+        TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
         ModHook.OnGameLoadedInit -= _runtime.OnGameLoading;
@@ -292,7 +294,7 @@ public sealed class PlatformComposition : IDisposable
 
     private void OnGameLoaded()
     {
-        TerminalStorageWindow.CloseCurrent();
+        TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
     }
 

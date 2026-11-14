@@ -16,11 +16,13 @@ internal sealed class NativeWindowSizer : MonoBehaviour
     private int _x = -1;
     private int _y = -1;
     private float _canvasScale = -1;
+    private float _leftExtent;
 
-    internal void Initialize(RectTransform viewport, TerminalDiagnostics? diagnostics)
+    internal void Initialize(RectTransform viewport, TerminalDiagnostics? diagnostics, float leftExtent = 0f)
     {
         _viewport = viewport;
         _diagnostics = diagnostics;
+        _leftExtent = Mathf.Max(0f, leftExtent);
         Apply();
     }
 
@@ -50,14 +52,17 @@ internal sealed class NativeWindowSizer : MonoBehaviour
         // Native window roots need not fill the screen or use a centered origin.
         _viewport.localPosition = new Vector3((minimum.x + maximum.x) / 2f, (minimum.y + maximum.y) / 2f, 0f);
         _viewport.sizeDelta = new Vector2(Mathf.Abs(maximum.x - minimum.x), Mathf.Abs(maximum.y - minimum.y));
-        // The window keeps its design size; only a window larger than the viewport shrinks.
-        var designWidth = Mathf.RoundToInt(window.rect.width);
+        // The window keeps its design size; only a window larger than the viewport shrinks. A left extent (the
+        // terminal dock) widens the box that is fitted and clamped, whose centre lies half the extent left of the
+        // window's centre.
+        var designWidth = Mathf.RoundToInt(window.rect.width + _leftExtent);
         var designHeight = Mathf.RoundToInt(window.rect.height);
         var scale = TerminalWindowMetrics.GetScale(width, height, canvasScale, designWidth, designHeight);
         window.localScale = new Vector3(scale, scale, 1f);
         var position = window.anchoredPosition;
+        var shift = _leftExtent * scale / 2f;
         window.anchoredPosition = new Vector2(
-            TerminalWindowMetrics.GetClampedOffset(position.x, _viewport.rect.width, window.rect.width * scale),
+            TerminalWindowMetrics.GetClampedOffset(position.x - shift, _viewport.rect.width, designWidth * scale) + shift,
             TerminalWindowMetrics.GetClampedOffset(position.y, _viewport.rect.height, window.rect.height * scale));
 
         if (_width == width && _height == height && _x == x && _y == y && _canvasScale == canvasScale)

@@ -312,3 +312,20 @@ integration_state_not_running,未生效: 另一个模组没有运行.
 integration_state_unverified,另一个模组的这个版本尚未与数字存储一起测试过. 此选项默认关闭, 可以手动开启尝试.
 integration_customerstocking_label,从数字网络取货
 integration_customerstocking_tooltip,一键上货时也可以从其扫描范围内 (店铺, 打烊后区域, 飞船) 的在线数字网络取货. 离线网络和散放的元件不会被取货. 取出和放回都像终端一样经过网络. 上货助手开启「跳过机器内物品」时, 网络中的货也会被跳过, 因为驱动器属于机器.
+terminal_dock_title,功能
+terminal_button_current_tip,当前终端: {0}
+terminal_button_functions,选
+terminal_button_functions_tip,功能选择
+terminal_view_storage,存储
+terminal_view_diagnostics,测试
+terminal_button_diagnostics_rail,测
+terminal_button_diagnostics_rail_tip,诊断测试按钮. 只写一行日志.
+terminal_button_diagnostics_picker,页
+terminal_button_diagnostics_picker_tip,打开诊断测试页
+terminal_back,返回终端
+terminal_modules_unavailable,模块面板不可用
+terminal_page_unavailable,该页面无法打开
+terminal_diagnostics_view_text,诊断测试视图. 用于检查视图切换, 不读取或修改物品.
+terminal_diagnostics_screen_text,诊断测试页. 按返回回到终端.
+terminal_test_view_name,终端测试视图
+terminal_test_view_desc,在终端中加入一个占位视图和测试按钮, 用于检查视图切换. 仅供测试.

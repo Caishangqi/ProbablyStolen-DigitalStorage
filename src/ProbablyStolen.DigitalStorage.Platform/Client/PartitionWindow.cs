@@ -26,10 +26,13 @@ internal sealed partial class PartitionWindow
     private const int Columns = TerminalWindowMetrics.Columns;
     private const float CellPixels = TerminalWindowMetrics.CellPixels;
     private const float Gap = 4f;
+    // The partition editor has its own layout: a left button column inside a 486-wide window.
+    private const int ToolbarButton = 28;
+    private const int ToolbarSpacing = 4;
     private static readonly float GridWidth = TerminalWindowMetrics.GridWidth;
-    private static readonly float BodyWidth = TerminalWindowMetrics.ToolbarButton + Gap + GridWidth + Gap +
+    private static readonly float BodyWidth = ToolbarButton + Gap + GridWidth + Gap +
         TerminalWindowMetrics.ScrollbarWidth;
-    private const float WindowWidth = TerminalWindowMetrics.Width;
+    private const float WindowWidth = 486f;
     private const float CountWidth = 110f;
     private static PartitionWindow? _current;
     private readonly ModText _text;
@@ -276,7 +279,7 @@ internal sealed partial class PartitionWindow
         var button = builder.Last;
         var layout = button.root.GetComponent<LayoutElement>() ?? button.root.AddComponent<LayoutElement>();
         layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight =
-            TerminalWindowMetrics.ToolbarButton;
+            ToolbarButton;
         layout.flexibleWidth = layout.flexibleHeight = 0f;
         if (button.text != null)
         {
@@ -312,7 +315,7 @@ internal sealed partial class PartitionWindow
     private const int ToolbarButtons = 7;
 
     private static readonly int ToolbarRows = (int)Math.Ceiling(
-        (ToolbarButtons * TerminalWindowMetrics.ToolbarButton + (ToolbarButtons - 1) * TerminalWindowMetrics.ToolbarSpacing +
+        (ToolbarButtons * ToolbarButton + (ToolbarButtons - 1) * ToolbarSpacing +
          TerminalWindowMetrics.CellSpacing) / (double)(TerminalWindowMetrics.CellPixels + TerminalWindowMetrics.CellSpacing));
 
     private void CycleSize()
@@ -330,7 +333,7 @@ internal sealed partial class PartitionWindow
         _rows = CountRows();
         _scrollRow = Math.Max(0, Math.Min(MaxScroll, _scrollRow));
         builder.BeginRow(Gap);
-        builder.BeginColumn(TerminalWindowMetrics.ToolbarSpacing);
+        builder.BeginColumn(ToolbarSpacing);
         var blacklist = _draft.Mode == PartitionMode.Blacklist;
         AddTool(builder, _text.Get(blacklist ? "partition_tool_blacklist" : "partition_tool_whitelist"),
             _text.Get("partition_mode_button", _text.Get(ModeKey(_draft.Mode))), () =>

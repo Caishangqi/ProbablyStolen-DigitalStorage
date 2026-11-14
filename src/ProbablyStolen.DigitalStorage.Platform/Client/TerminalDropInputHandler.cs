@@ -178,6 +178,10 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
 
             _hitDetails = $"module:{hit.module?.GetType().Name},order:{hit.sortingOrder},layer:{hit.sortingLayer},depth:{hit.depth},ghosts:{skippedGhosts}";
             if (!ReferenceEquals(hit.gameObject.GetComponentInParent<TerminalDropInputHandler>(), this)) return "blocked";
+            // A native inventory drawn inside the window (the embedded module bay) takes its own drops, resolved the
+            // way RenderHandler.RaycastFindParentElement does: the first hit node's element chain. A native inventory
+            // shown while this handler answers drops must keep its own drop.
+            if (hit.gameObject.GetComponent<TreeNodeRender>()?.FindParentElement<GameInventory>() != null) return "native";
             return (_isOverDropArea?.Invoke() ??
                 RectTransformUtility.RectangleContainsScreenPoint(_window.ContentRoot, Input.mousePosition, camera))
                 ? "terminal" : "frame";

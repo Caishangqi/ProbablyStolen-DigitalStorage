@@ -29,8 +29,11 @@ internal static class NativeWindowLayer
     /// front, and a click on either brings it forward (the drag handler's <c>moveFrontObjects</c>, PixelWindow.ToFront).
     /// Falls back to <c>windowRoot</c> before the raised layer exists.
     /// </param>
+    /// <param name="leftExtent">
+    /// Design width drawn left of the window outside its frame (the terminal dock), fitted and clamped with it.
+    /// </param>
     internal static RectTransform? Attach(CustomUIWindow window, string viewportName, Action back, TerminalDiagnostics? diagnostics = null,
-        bool raised = false)
+        bool raised = false, float leftExtent = 0f)
     {
         var native = RenderHandler.current;
         if (window == null || native == null || native.windowRoot == null) return null;
@@ -57,7 +60,7 @@ internal static class NativeWindowLayer
         drag.ignoreClamp = true;
         drag.moveFrontObjects = new List<GameObject> { viewport.gameObject };
         if (window.frame != null) window.frame.dragHandle = drag;
-        window.root.AddComponent<NativeWindowSizer>().Initialize(viewport, diagnostics);
+        window.root.AddComponent<NativeWindowSizer>().Initialize(viewport, diagnostics, leftExtent);
         window.root.AddComponent<RaiseOnPress>().Initialize(window, viewport, back);
         return viewport;
     }
@@ -76,9 +79,16 @@ internal static class NativeWindowLayer
     /// inventory, so nothing can be placed on it. It stays behind the controls: native event interfaces on input or
     /// button children would steal their events.
     /// </summary>
-    internal static TreeNodeRender AttachInputShield(CustomUIWindow window, string name)
+    internal static TreeNodeRender AttachInputShield(CustomUIWindow window, string name) =>
+        AttachInputShield(window.Rect, name);
+
+    /// <summary>
+    /// Adds the same shield behind the controls of <paramref name="area"/>, for parts drawn outside the window frame
+    /// such as the terminal's dock and selection panel.
+    /// </summary>
+    internal static TreeNodeRender AttachInputShield(RectTransform area, string name)
     {
-        var shield = TreeNodeRender.InstantiateAsRoot(window.Rect);
+        var shield = TreeNodeRender.InstantiateAsRoot(area);
         shield.gameObject.name = name;
         shield.rectTransform.anchorMin = Vector2.zero;
         shield.rectTransform.anchorMax = Vector2.one;

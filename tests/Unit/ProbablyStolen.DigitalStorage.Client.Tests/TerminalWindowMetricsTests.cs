@@ -55,34 +55,54 @@ public sealed class TerminalWindowMetricsTests
     }
 
     [Test]
-    public void DefaultGrid_KeepsThirtySixSlotsAndFitsToolbarGridAndScrollbar()
+    public void DefaultGrid_KeepsThirtySixSlotsAndFitsGridAndScrollbar()
     {
         Assert.That(TerminalWindowMetrics.Columns * TerminalWindowMetrics.Rows, Is.EqualTo(36));
-        Assert.That(TerminalWindowMetrics.ToolbarButton + 4 + TerminalWindowMetrics.GridWidth + 4 +
-            TerminalWindowMetrics.ScrollbarWidth, Is.LessThanOrEqualTo(TerminalWindowMetrics.Width - 32));
-        // Search row, grid and status row with the content spacing, below the title and window padding.
-        Assert.That(32 + TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.Rows) + 40 + 2 * 6,
-            Is.LessThanOrEqualTo(TerminalWindowMetrics.Height - 74));
+        Assert.That(TerminalWindowMetrics.GridWidth + TerminalWindowMetrics.ScrollbarGap +
+            TerminalWindowMetrics.ScrollbarWidth, Is.EqualTo(TerminalWindowMetrics.Width - 32));
+        // Search row, grid and status row with the content spacing fill the frame exactly: no extra space below the
+        // status row. 74 is the title, rule and the frame padding above and below.
+        Assert.That(32 + TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.Rows) + 20 + 2 * 6,
+            Is.EqualTo(TerminalWindowMetrics.Height - 74));
         Assert.That(TerminalWindowMetrics.GetHeight(TerminalWindowMetrics.Rows), Is.EqualTo(TerminalWindowMetrics.Height));
         Assert.That(TerminalWindowMetrics.GetScale(2560, 1440, 2.67f), Is.EqualTo(0.5f));
     }
 
     [Test]
-    public void ShortGrid_KeepsRoomForTheWholeToolbar()
+    public void Height_FollowsOnlyTheGrid()
     {
-        Assert.That(TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.MinimumRows),
-            Is.LessThan(TerminalWindowMetrics.ToolbarHeight));
+        // The function rail sits outside the frame, so short grids are not padded for it.
         Assert.That(TerminalWindowMetrics.GetHeight(TerminalWindowMetrics.MinimumRows),
-            Is.EqualTo(TerminalWindowMetrics.Chrome + TerminalWindowMetrics.ToolbarHeight));
+            Is.EqualTo(TerminalWindowMetrics.Chrome + TerminalWindowMetrics.GetGridHeight(TerminalWindowMetrics.MinimumRows)));
     }
 
-    [TestCase(TerminalSize.Small, 4)]
-    [TestCase(TerminalSize.Medium, 9)]
-    [TestCase(TerminalSize.Tall, 14)]
-    [TestCase(TerminalSize.Full, 19)]
+    [Test]
+    public void Width_IsTheBodyPlusEqualFramePadding()
+    {
+        // No button column inside the frame, and 16 units of frame padding on each side.
+        Assert.That(TerminalWindowMetrics.Width, Is.EqualTo(16 + 384 + 4 + 12 + 16));
+        Assert.That(TerminalWindowMetrics.Width,
+            Is.EqualTo(TerminalWindowMetrics.HorizontalChrome + TerminalWindowMetrics.GridWidth +
+                TerminalWindowMetrics.ScrollbarGap + TerminalWindowMetrics.ScrollbarWidth));
+    }
+
+    [Test]
+    public void DockButtons_MatchOneGridSlot()
+    {
+        // Same side and gap as a grid slot, taken from the grid constants.
+        Assert.That(TerminalWindowMetrics.DockButton, Is.EqualTo(TerminalWindowMetrics.CellPixels));
+        Assert.That(TerminalWindowMetrics.DockSpacing, Is.EqualTo(TerminalWindowMetrics.CellSpacing));
+        Assert.That(TerminalWindowMetrics.DockWidth,
+            Is.EqualTo(TerminalWindowMetrics.DockButton + 2 * TerminalWindowMetrics.DockPadding));
+    }
+
+    [TestCase(TerminalSize.Small, 5)]
+    [TestCase(TerminalSize.Medium, 10)]
+    [TestCase(TerminalSize.Tall, 15)]
+    [TestCase(TerminalSize.Full, 20)]
     public void Rows_ScaleByQuarterOfTheRowsThatFit(TerminalSize size, int expected)
     {
-        // 1080 px at canvas scale 2 is 1080 design units: (1080 - 80 - 169 + 3) / 43 = 19 rows fit.
+        // 1080 px at canvas scale 2 is 1080 design units: (1080 - 80 - 138 + 3) / 43 = 20 rows fit.
         Assert.That(TerminalWindowMetrics.GetRows(size, 1080f, 2f), Is.EqualTo(expected));
     }
 
