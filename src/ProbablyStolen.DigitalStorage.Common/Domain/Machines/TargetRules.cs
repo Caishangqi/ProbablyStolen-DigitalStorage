@@ -23,4 +23,23 @@ public static class TargetRules
             return rule(source, target) | allowed;
         };
     }
+
+    /// <summary>
+    /// Returns one rule that refuses every target <paramref name="excluded"/> matches and otherwise allows a target
+    /// when any rule in <paramref name="previous"/> allows it; without previous rules nothing is allowed.
+    /// </summary>
+    public static Func<TSource, TTarget, bool> Unless<TSource, TTarget>(
+        Func<TSource, TTarget, bool>? previous, Func<TTarget, bool> excluded)
+    {
+        if (excluded == null) throw new ArgumentNullException(nameof(excluded));
+        if (previous == null) return (_, _) => false;
+        var chain = previous.GetInvocationList().Cast<Func<TSource, TTarget, bool>>().ToArray();
+        return (source, target) =>
+        {
+            if (excluded(target)) return false;
+            var allowed = false;
+            foreach (var check in chain) allowed |= check(source, target);
+            return allowed;
+        };
+    }
 }

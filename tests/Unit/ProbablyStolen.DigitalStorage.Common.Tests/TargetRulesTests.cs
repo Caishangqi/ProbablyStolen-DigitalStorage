@@ -111,4 +111,24 @@ public sealed class TargetRulesTests
 
         Assert.That(compose, Throws.ArgumentNullException);
     }
+
+    [TestCase(Machine, true)]
+    [TestCase(ForeignMachine, false)]
+    [TestCase(Cell, true)]
+    [TestCase("other", false)]
+    public void Unless_RefusesExcludedTargetsEvenWhenAPreviousRuleAllowsThem(string target, bool expected)
+    {
+        var composed = TargetRules.Unless(TargetRules.OrWith(Native, CellRule), candidate => candidate == ForeignMachine);
+
+        Assert.That(composed("kit", target), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Unless_OrsAMulticastChainAndAllowsNothingWithoutRules()
+    {
+        var chain = Native + ((_, _) => false);
+
+        Assert.That(TargetRules.Unless(chain, _ => false)("kit", Machine), Is.True);
+        Assert.That(TargetRules.Unless<string, string>(null, _ => false)("kit", Machine), Is.False);
+    }
 }

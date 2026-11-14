@@ -50,7 +50,7 @@ internal sealed class TerminalItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            _windows.Attach(item);
+            _windows.Attach(item, fullModuleBay: true);
             var storageWindow = new TerminalStorageWindow(_text,
                 () => _networkPower.ReadTerminalInventory(item),
                 (entry, amount) => _networkPower.ExtractToPlayer(item, entry.Key, amount),
