@@ -67,10 +67,10 @@ internal sealed class ItemSlotGrid
         for (var index = 0; index < count; index++)
         {
             var slotIndex = index;
-            builder.BeginPanel(_cellPixels, _cellPixels, padding: 2f, spacing: 0f, id: $"slot_{index}");
+            builder.BeginPanel(_cellPixels, _cellPixels, padding: 2f, spacing: 0f, id: null);
             if (index == 0) Root = builder.Last.Rect.parent as RectTransform;
             ConfigureBorder(builder.Last);
-            builder.AddPointerButton(string.Empty, () => click(slotIndex), $"button_{index}");
+            builder.AddPointerButton(string.Empty, () => click(slotIndex), null);
             if (secondaryClick != null)
                 builder.Last.root.AddComponent<TerminalSlotClick>().Initialize(() => secondaryClick(slotIndex));
             _buttons[index] = builder.Last;
@@ -79,7 +79,7 @@ internal sealed class ItemSlotGrid
             _layers[index] = new List<Image>();
             if (_showBadge)
             {
-                builder.AddLabel(string.Empty, $"badge_{index}");
+                builder.AddLabel(string.Empty, null);
                 ConfigureBadge(builder.Last);
                 _badges[index] = builder.Last;
             }

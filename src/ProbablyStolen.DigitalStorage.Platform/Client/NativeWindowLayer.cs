@@ -46,12 +46,14 @@ internal static class NativeWindowLayer
         window.Rect.anchorMin = window.Rect.anchorMax = window.Rect.pivot = new Vector2(0.5f, 0.5f);
         window.Rect.anchoredPosition = Vector2.zero;
 
-        // UIDragHandler caches its Canvas in Awake, so bind a fresh instance after reparenting.
+        // UIDragHandler.Awake creates one CanvasGroup per component, so release its owned group with the old handler.
         var previousDrag = window.root.GetComponent<UIDragHandler>();
         if (previousDrag != null)
         {
             previousDrag.enabled = false;
-            Object.Destroy(previousDrag);
+            var previousGroup = previousDrag.GetComponent<CanvasGroup>();
+            Object.DestroyImmediate(previousDrag);
+            if (previousGroup != null) Object.DestroyImmediate(previousGroup);
         }
 
         var drag = window.root.AddComponent<UIDragHandler>();
