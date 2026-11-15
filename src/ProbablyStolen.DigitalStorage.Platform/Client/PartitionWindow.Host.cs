@@ -23,6 +23,10 @@ internal sealed partial class PartitionWindow
     protected override int HostHeight => TerminalWindowMetrics.GetHeight(CountRows()) - 38;
     protected override GameItem? PositionOwner => _workbench;
     protected override ICurrentTerminalStore CreateCurrentTerminalStore() => _currentViewStore;
+
+    // The partition window edits cell tags; it keeps no feature data on the item it was opened from.
+    protected override ProbablyStolen.DigitalStorage.Client.Terminal.Extensions.ITerminalFeatureData CreateFeatureData() =>
+        ProbablyStolen.DigitalStorage.Client.Terminal.Extensions.NoTerminalFeatureData.Instance;
     protected override bool SessionIsCurrent() => _session.IsActive && !SaveManager.IsDecoding;
     protected override void SubscribeHostSources()
     {

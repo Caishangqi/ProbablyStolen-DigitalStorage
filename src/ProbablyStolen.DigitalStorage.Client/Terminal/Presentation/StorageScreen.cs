@@ -10,26 +10,37 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 /// <summary>Represents one fixed-size terminal slot with no native item ownership.</summary>
 public sealed class TerminalSlotView
 {
-    internal TerminalSlotView(int index, TerminalEntry? entry, int cellPixels)
+    internal TerminalSlotView(int index, DisplayEntry? group, int cellPixels, IReadOnlyList<SlotDecoration> decorations)
     {
         Index = index;
-        Entry = entry;
-        if (entry == null)
+        Group = group;
+        Decorations = decorations;
+        if (group == null)
         {
             return;
         }
 
+        var entry = group.Representative;
         var maximum = Math.Max(entry.SpriteWidth, entry.SpriteHeight);
         SpriteWidthPixels = Math.Max(1, cellPixels * entry.SpriteWidth / maximum);
         SpriteHeightPixels = Math.Max(1, cellPixels * entry.SpriteHeight / maximum);
-        QuantityBadge = TerminalQuantityFormatter.Format(entry.Amount);
+        QuantityBadge = TerminalQuantityFormatter.Format(group.Total);
     }
 
     /// <summary>Gets the stable zero-based slot index.</summary>
     public int Index { get; }
 
-    /// <summary>Gets the display entry, or null for an intentionally empty slot.</summary>
-    public TerminalEntry? Entry { get; }
+    /// <summary>Gets the display group, or null for an intentionally empty slot.</summary>
+    public DisplayEntry? Group { get; }
+
+    /// <summary>Gets the group's first member, which supplies the picture and tooltip, or null for an empty slot.</summary>
+    public TerminalEntry? Entry => Group?.Representative;
+
+    /// <summary>Gets the stored pieces of the slot, zero for an empty slot or placeholder.</summary>
+    public long Amount => Group?.Total ?? 0;
+
+    /// <summary>Gets the corner marks extensions added.</summary>
+    public IReadOnlyList<SlotDecoration> Decorations { get; } = Array.Empty<SlotDecoration>();
 
     /// <summary>Gets the equal-aspect fitted width for the fixed cell.</summary>
     public int SpriteWidthPixels { get; }
@@ -132,12 +143,14 @@ public sealed class StorageScreen
         CellPixels = cellPixels;
     }
 
+    private static readonly IReadOnlyList<SlotDecoration> NoDecorations = Array.Empty<SlotDecoration>();
     private readonly TerminalSearchService _search;
-    private readonly List<TerminalEntry> _entries = new();
+    private readonly List<DisplayEntry> _entries = new();
+    private Func<DisplayEntry, IReadOnlyList<SlotDecoration>> _decorate = _ => NoDecorations;
     private string _searchText = string.Empty;
     private int _scrollRow;
     private TerminalDisplayState _baseState = TerminalDisplayState.Loading;
-    private TerminalEntry[] _filteredEntries = Array.Empty<TerminalEntry>();
+    private DisplayEntry[] _filteredEntries = Array.Empty<DisplayEntry>();
     private bool _filterDirty = true;
     private string? _filterText;
     private long _filterConfigurationRevision = -1;
@@ -168,13 +181,23 @@ public sealed class StorageScreen
         ClampScroll();
     }
 
-    /// <summary>Replaces the current display snapshot without retaining platform objects.</summary>
+    /// <summary>Sets how slots get their corner marks; the page is rebuilt.</summary>
+    public void SetDecorator(Func<DisplayEntry, IReadOnlyList<SlotDecoration>> decorate)
+    {
+        _decorate = decorate ?? throw new ArgumentNullException(nameof(decorate));
+        _page = null;
+    }
+
+    /// <summary>Drops the cached page, for example after extension settings changed.</summary>
+    public void InvalidatePage() => _page = null;
+
+    /// <summary>Replaces the current display snapshot with single entries sorted by name.</summary>
     public void SetEntries(IEnumerable<TerminalEntry> entries)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
         _entries.Clear();
         _entries.AddRange(entries.Where(entry => entry != null).OrderBy(entry => entry.DisplayName,
-            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key));
+            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key).Select(DisplayEntry.Single));
         _baseState = TerminalDisplayState.Ready;
         _scrollRow = 0;
         InvalidateEntries();
@@ -189,8 +212,13 @@ public sealed class StorageScreen
         InvalidateEntries();
     }
 
-    /// <summary>Replaces the display snapshot in the caller's stable ordering.</summary>
-    public void SetEntriesInOrder(IEnumerable<TerminalEntry> entries)
+    /// <summary>Replaces the display snapshot with single entries in the caller's stable ordering.</summary>
+    public void SetEntriesInOrder(IEnumerable<TerminalEntry> entries) =>
+        SetEntriesInOrder((entries ?? throw new ArgumentNullException(nameof(entries))).Where(entry => entry != null)
+            .Select(DisplayEntry.Single));
+
+    /// <summary>Replaces the display snapshot with groups in the caller's stable ordering.</summary>
+    public void SetEntriesInOrder(IEnumerable<DisplayEntry> entries)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
         _entries.Clear();
@@ -206,14 +234,19 @@ public sealed class StorageScreen
         if (entries == null) throw new ArgumentNullException(nameof(entries));
         _entries.Clear();
         _entries.AddRange(entries.Where(entry => entry != null).OrderBy(entry => entry.DisplayName,
-            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key));
+            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key).Select(DisplayEntry.Single));
         _baseState = TerminalDisplayState.Ready;
         InvalidateEntries();
         ClampScroll();
     }
 
     /// <summary>Updates entries in caller order while retaining the current query and valid scroll row.</summary>
-    public void UpdateEntriesInOrder(IEnumerable<TerminalEntry> entries)
+    public void UpdateEntriesInOrder(IEnumerable<TerminalEntry> entries) =>
+        UpdateEntriesInOrder((entries ?? throw new ArgumentNullException(nameof(entries))).Where(entry => entry != null)
+            .Select(DisplayEntry.Single));
+
+    /// <summary>Replaces groups in the caller's ordering while keeping the first visible row valid.</summary>
+    public void UpdateEntriesInOrder(IEnumerable<DisplayEntry> entries)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
         _entries.Clear();
@@ -272,7 +305,9 @@ public sealed class StorageScreen
         var slots = new List<TerminalSlotView>(slotCount);
         for (var index = 0; index < slotCount; index++)
         {
-            slots.Add(new TerminalSlotView(index, index < visible.Length ? visible[index] : null, CellPixels));
+            var group = index < visible.Length ? visible[index] : null;
+            slots.Add(new TerminalSlotView(index, group, CellPixels,
+                group == null || group.Total == 0 ? NoDecorations : _decorate(group)));
         }
 
         var state = _baseState == TerminalDisplayState.Ready && filtered.Length == 0
@@ -284,12 +319,13 @@ public sealed class StorageScreen
     /// <summary>Shares the cached query result with input coloring, including render-before-input-callback order.</summary>
     public bool HasSearchResults(string? query) => GetFilteredEntries(query ?? string.Empty).Length > 0;
 
-    private TerminalEntry[] GetFilteredEntries(string query)
+    private DisplayEntry[] GetFilteredEntries(string query)
     {
         if (!_filterDirty && _filterConfigurationRevision == _search.ConfigurationRevision &&
             string.Equals(_filterText, query, StringComparison.Ordinal)) return _filteredEntries;
         var predicate = _search.CreatePredicate(query);
-        var filtered = _entries.Where(entry => predicate(entry.Document)).ToArray();
+        // Each member is matched on its own, so the parts of an AND or a negation never come from different members.
+        var filtered = _entries.Where(group => group.Members.Any(member => predicate(member.Document))).ToArray();
         _filteredEntries = filtered;
         _filterText = query;
         _filterConfigurationRevision = _search.ConfigurationRevision;
@@ -301,7 +337,7 @@ public sealed class StorageScreen
     private void InvalidateEntries()
     {
         _filterDirty = true;
-        _filteredEntries = Array.Empty<TerminalEntry>();
+        _filteredEntries = Array.Empty<DisplayEntry>();
         _page = null;
     }
 

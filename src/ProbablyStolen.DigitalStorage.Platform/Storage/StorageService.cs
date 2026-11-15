@@ -33,6 +33,7 @@ internal sealed class StorageService
     private readonly NativeNetworkScanner _scanner;
     private readonly Func<NativeGridSnapshot, Grid, bool> _isPowered;
     private readonly Action<string> _log;
+    private readonly HashSet<(string, NativeItemIdentityFailure)> _reportedFallbacks = new();
     private const string NoSpaceKey = "terminal_storage_reject_no_space";
     private static readonly IActionSource Player = new PlayerSource("player");
     private readonly Func<GameItem, bool> _migrate;
@@ -58,8 +59,12 @@ internal sealed class StorageService
     /// for this session: they can still be stored, show as their own terminal entry, and never match a partition.
     /// Mod items get null and are never stored.
     /// </summary>
-    internal static ItemKey? Identify(GameItem item)
+    internal static ItemKey? Identify(GameItem item) => Identify(item, out _);
+
+    /// <summary>Gets an item's type and, for a fallback key, why its state could not be read.</summary>
+    internal static ItemKey? Identify(GameItem item, out NativeItemIdentityFailure failure)
     {
+        failure = NativeItemIdentityFailure.None;
         if (item == null || IsModItem(item))
         {
             return null;
@@ -70,6 +75,8 @@ internal sealed class StorageService
         {
             return result.Identity;
         }
+
+        failure = result.Failure;
 
         return FallbackKeys.GetValue(item, unread => new ItemKey(
             string.IsNullOrWhiteSpace(unread.identifier) ? "unknown" : unread.identifier,
@@ -86,18 +93,22 @@ internal sealed class StorageService
             return new TerminalInventorySnapshot(false, Array.Empty<TerminalEntry>(), network.StorageUnavailable);
         }
 
-        var groups = new Dictionary<ItemKey, (long Amount, GameItem Sample)>();
+        var groups = new Dictionary<ItemKey, (long Pieces, long Units, GameItem Sample)>();
         foreach (var root in network.Cells.SelectMany(CellPages.Roots))
         {
-            var key = Identify(root);
+            var key = Identify(root, out var failure);
             if (key == null)
             {
                 continue;
             }
 
+            // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
+            if (failure != NativeItemIdentityFailure.None && _reportedFallbacks.Add((root.identifier, failure)))
+                _log($"Digital Storage: identity fallback item={root.identifier} reason={failure}");
+
             groups[key] = groups.TryGetValue(key, out var group)
-                ? (group.Amount + root.unitCount, group.Sample)
-                : (root.unitCount, root);
+                ? (group.Pieces + 1, group.Units + root.unitCount, group.Sample)
+                : (1, root.unitCount, root);
         }
 
         _samples.Clear();
@@ -106,7 +117,7 @@ internal sealed class StorageService
             _samples[pair.Key] = pair.Value.Sample;
         }
 
-        var entries = groups.Select(pair => Entry(pair.Key, pair.Value.Amount, pair.Value.Sample));
+        var entries = groups.Select(pair => Entry(pair.Key, pair.Value.Pieces, pair.Value.Units, pair.Value.Sample));
         return new TerminalInventorySnapshot(true, entries, network.StorageUnavailable);
     }
 
@@ -238,33 +249,36 @@ internal sealed class StorageService
         return mounted.Network.Online && TryStore(mounted, item, Actionable.Simulate) == null;
     }
 
-    /// <summary>Moves stored items of one type into the player's inventory until at least <paramref name="amount"/> units moved.</summary>
-    internal TerminalExtractionResult Extract(GameItem terminal, ItemKey key, long amount)
+    /// <summary>
+    /// Moves at most <paramref name="pieces"/> stored roots of one type into the player's inventory. A root the
+    /// inventory cannot take whole stays stored, so no item is split and no more pieces move than asked.
+    /// </summary>
+    internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces)
     {
-        if (amount <= 0)
+        if (pieces <= 0)
         {
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.InvalidAmount, amount, 0,
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.InvalidAmount, pieces, 0,
                 "terminal_storage_invalid_amount");
         }
 
         var mounted = GetInventory(terminal);
         if (!mounted.Network.Online)
         {
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, amount, 0, UnavailableKey);
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, pieces, 0, UnavailableKey);
         }
 
         var available = new KeyCounter();
-        mounted.Storage.GetAvailableStacks(available);
+        mounted.Storage.GetAvailablePieces(available);
         if (available.Get(key) == 0)
         {
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, amount, 0, "terminal_storage_no_items");
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, pieces, 0, "terminal_storage_no_items");
         }
 
         // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
-        var destination = new InventoryRootSink(EmporiumEntry.Instance.invElement);
+        var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true), pieces);
         try
         {
-            var result = mounted.Storage.Extract(key, amount, destination, Actionable.Modulate, Player);
+            var result = mounted.Storage.Extract(key, long.MaxValue, destination, Actionable.Modulate, Player);
             if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
                 _log($"Digital Storage: extract left an item without an owner (key={key.Identifier}).");
         }
@@ -277,16 +291,16 @@ internal sealed class StorageService
             foreach (var cell in mounted.Cells) CellPages.Compact(cell);
         }
 
-        var moved = destination.MovedUnits;
+        var moved = destination.Accepted;
         if (moved == 0)
         {
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.TargetRejected, amount, 0,
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.TargetRejected, pieces, 0,
                 "terminal_storage_target_rejected");
         }
 
         return TerminalExtractionResult.Create(
-            moved >= amount ? TerminalExtractionStatus.Success : TerminalExtractionStatus.Partial,
-            amount, moved, "terminal_storage_extracted");
+            moved >= pieces ? TerminalExtractionStatus.Success : TerminalExtractionStatus.Partial,
+            pieces, moved, "terminal_storage_extracted");
     }
 
     /// <summary>Stores or simulates one item; returns the rejection text key, or null when it went in.</summary>
@@ -342,19 +356,6 @@ internal sealed class StorageService
     private bool IsRestoreApplied() => _restoreApplied ??= CellPageRestore.IsApplied();
 
     /// <summary>
-    /// Gets the native stack limit of a stored type, measured on a stored sample in its page the way the game's own
-    /// stacking does (<c>GameItem.MaxNumAdd</c>: the larger inventory or item <c>maxSlotAmountItemFunc</c>, or 1 when
-    /// neither is set). Returns 1 when no sample is stored.
-    /// </summary>
-    internal long StackLimit(GameItem terminal, ItemKey key)
-    {
-        var sample = FindSample(terminal, key);
-        if (sample == null || !IsStored(sample)) return 1;
-        var room = sample.MaxNumAdd();
-        return room >= int.MaxValue - sample.unitCount ? long.MaxValue : Math.Max(1, sample.unitCount + Math.Max(0, room));
-    }
-
-    /// <summary>
     /// Lists the bays holding a cell on the terminal's grid, numbered by drive order and bay position, for partition
     /// editing. Power is not required: partitions only change cell tags, never stored items.
     /// </summary>
@@ -398,7 +399,7 @@ internal sealed class StorageService
         return new Network(true, available.Length < all.Length, available);
     }
 
-    private static TerminalEntry Entry(ItemKey key, long amount, GameItem sample)
+    private static TerminalEntry Entry(ItemKey key, long pieces, long units, GameItem sample)
     {
         var name = string.IsNullOrWhiteSpace(sample.name) ? sample.identifier : sample.name;
         var sprite = $"{sample.spriteAtlasPath}|{sample.spritePath}";
@@ -413,8 +414,9 @@ internal sealed class StorageService
             sample.itemTypes, new[] { sample.shortDescription, sample.longDescription, sample.flavorText }),
             enabledTags.Select(pair => pair.Key),
             type => LocHelper.GetLocalizedMechanicOrDefault("type_" + type.ToLowerInvariant(), type));
-        return new TerminalEntry(key, amount, string.IsNullOrWhiteSpace(name) ? "?" : name, sprite,
-            Math.Max(1, sample.shape.globalWidth), Math.Max(1, sample.shape.globalHeight), document: document);
+        return new TerminalEntry(key, pieces, string.IsNullOrWhiteSpace(name) ? "?" : name, sprite,
+            Math.Max(1, sample.shape.globalWidth), Math.Max(1, sample.shape.globalHeight), document: document,
+            totalUnits: units);
     }
 
     internal readonly struct Network

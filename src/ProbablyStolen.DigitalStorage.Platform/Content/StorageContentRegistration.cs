@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using ProbablyStolen.DigitalStorage.Api.Registries;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 using ProbablyStolen.DigitalStorage.Platform.Client;
@@ -23,7 +24,7 @@ internal sealed class StorageContentRegistration : IDisposable
 
     internal StorageContentRegistration(TerminalItem terminal, DriveItem drive, StorageCellItem cell,
         ControllerItem controller, StorageComponentFactory component, MaterialItem housing,
-        CellWorkbenchItem workbench, CellModuleFactory modules,
+        CellWorkbenchItem workbench, CellModuleFactory modules, TerminalModuleFactory terminalModules,
         ItemContentService service, ModLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -45,6 +46,7 @@ internal sealed class StorageContentRegistration : IDisposable
         Add(CellWorkbenchItem.ItemId, () => Create(workbench.Create));
         Add(CellUpgradeInventory.TypeLimitId, () => Create(modules.CreateTypeLimit));
         Add(CellUpgradeInventory.EqualDistributionId, () => Create(modules.CreateEqualDistribution));
+        Add(StackingModule.ModuleId, () => Create(terminalModules.CreateStackDisplay));
         foreach (var tier in StorageCellTier.All)
         {
             Func<GameItem> createComponent = () => Create(() => component.Create(tier));

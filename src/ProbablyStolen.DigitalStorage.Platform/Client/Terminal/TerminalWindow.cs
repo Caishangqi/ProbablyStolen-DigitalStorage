@@ -16,4 +16,7 @@ internal sealed class TerminalWindow : TerminalWindowHost
     }
 
     internal override ITerminalView CreateStorageView() => new StorageTerminalView(_storage, this);
+
+    /// <summary>The storage services of this terminal, used by pages that read the stored items.</summary>
+    internal StorageTerminalServices Storage => _storage;
 }

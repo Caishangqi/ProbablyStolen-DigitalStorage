@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 using TMPro;
 using UnityEngine;
@@ -26,13 +28,24 @@ internal sealed class StorageTerminalView : ITerminalView
     // One box serves every terminal; only one terminal window shows at a time.
     private static readonly TooltipSideBox HintBox = new();
 
+    // Overlay windows outlive views, so feature panels keep one box each for the whole game session.
+    private static readonly Dictionary<string, TooltipSideBox> PanelBoxes = new(StringComparer.Ordinal);
+
     private readonly StorageTerminalServices _services;
     private readonly ITerminalViewHost _host;
     private readonly StorageScreen _screen;
     private readonly ItemPictureCapture _pictureCapture;
     private readonly TerminalSnapshotCache<ItemPicture> _pictures;
     private readonly ItemSlotGrid _grid;
+    private readonly SlotDecorationLayer _decorations;
     private readonly StorageMenu _menu = new();
+    private const int MaxDumpedMembers = 4;
+    private readonly EntryAttributeReader _attributes;
+    private long _pipelineRevision = -1;
+    private DisplayEntry? _hoverHintGroup;
+    private long _hoverHintRevision = -1;
+    private IReadOnlyList<PanelText>? _hoverPanels;
+    private IReadOnlyList<PanelText>? _hintPanels;
     // Pages are locked to players, so outside the terminal's own operations contents only change when cells,
     // machines, batteries or controller power change, or when the public API moves items (another mod or an
     // integration plugin); those raise NetworkChanged and the next frame rereads.
@@ -50,7 +63,6 @@ internal sealed class StorageTerminalView : ITerminalView
     private ItemKey? _hoverKey;
     private GameItemElement? _hoverSample;
     private bool _showingTooltip;
-    private RichText? _hintText;
     private string? _messageKey;
     private long _messageAmount;
     private bool _storageUnavailable;
@@ -66,6 +78,10 @@ internal sealed class StorageTerminalView : ITerminalView
         _pictures = new TerminalSnapshotCache<ItemPicture>(entry => _pictureCapture.Capture(entry.Key, entry.SpriteKey),
             (entry, error) => _pictureCapture.Failed(entry.Key, entry.SpriteKey, error));
         _grid = new ItemSlotGrid(_pictureCapture, showBadge: true, CellPixels);
+        _decorations = new SlotDecorationLayer(_grid, key => _host.Icons.Overlay(key), services.WriteDiagnostic);
+        _attributes = new EntryAttributeReader(services.AttributeCaptures, services.FindSample, services.WriteDiagnostic);
+        _menu.SetProjection(Project);
+        _screen.SetDecorator(group => _host.Pipeline.Decorate(group, _host.Context));
     }
 
     private CustomUIWindow Window => _host.Window;
@@ -100,6 +116,8 @@ internal sealed class StorageTerminalView : ITerminalView
 
         builder.BeginRow(spacing: Gap);
         builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
+        // New slot panels hold no overlays yet, whatever the layer drew on the previous ones.
+        _decorations.Reset();
         _grid.Build(builder, Columns * rows,
             index => Extract(index, IsShiftHeld() ? TerminalClick.All : TerminalClick.Stack),
             index => Extract(index, TerminalClick.Half));
@@ -151,6 +169,8 @@ internal sealed class StorageTerminalView : ITerminalView
         _inventoryMonitor.Reset(Time.unscaledTime);
         // A fresh view starts at row 0 either way; a resumed one keeps its row.
         Refresh(ReadSnapshot(), preserveView: true);
+        // A page such as the stacking rules may have changed how entries group while this view was hidden.
+        Regroup();
     }
 
     /// <inheritdoc />
@@ -218,8 +238,10 @@ internal sealed class StorageTerminalView : ITerminalView
         _menu.Reset();
         _storageUnavailable = false;
         _grid.Reset();
+        _decorations.Reset();
         _messageKey = null;
-        _hintText = null;
+        _hintPanels = null;
+        _hoverPanels = null;
         if (_container != null) CustomUIBuilder.ClearContainer(_container);
         _container = null;
     }
@@ -340,6 +362,7 @@ internal sealed class StorageTerminalView : ITerminalView
             _searchRevision = search.ConfigurationRevision;
             Refresh();
         }
+        if (_pipelineRevision != _host.Pipeline.Revision) Regroup();
         UpdateHoverTooltip();
         ApplyWheel();
         var viewChanged = _menu.SetPaused(IsShiftHeld());
@@ -393,9 +416,11 @@ internal sealed class StorageTerminalView : ITerminalView
         var observedSnapshot = snapshot;
         _inventoryMonitor.ApplySnapshot(observedSnapshot, () =>
         {
+            // Stored items changed, so values read for grouping (an estimated value, for example) are read again.
+            _attributes.Clear();
             var entries = snapshot.Entries.Select(entry => new TerminalEntry(entry.Key, entry.Amount, entry.DisplayName,
                 entry.SpriteKey, entry.SpriteWidth, entry.SpriteHeight, entry.Serial,
-                _services.Search.PrepareDocument(entry.Document))).ToArray();
+                _services.Search.PrepareDocument(entry.Document), entry.TotalUnits)).ToArray();
             snapshot = new TerminalInventorySnapshot(snapshot.Online, entries, snapshot.StorageUnavailable);
             _pictures.Accept(snapshot.Entries);
             _menu.BroadcastChanges(snapshot);
@@ -412,22 +437,9 @@ internal sealed class StorageTerminalView : ITerminalView
         Refresh();
     }
 
-    private long StackLimit(ItemKey key)
-    {
-        try
-        {
-            return _services.StackLimit(key);
-        }
-        catch
-        {
-            // Without a readable limit a click still takes one stored stack.
-            return 1;
-        }
-    }
-
     private static bool IsShiftHeld() => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
-    /// <summary>Takes from a slot: left click one stack, right click half, Shift + left click everything.</summary>
+    /// <summary>Takes from a slot: left click one piece, right click half of its pieces, Shift + left click all.</summary>
     private void Extract(int index, TerminalClick click)
     {
         if (!_host.IsCurrentSession())
@@ -436,21 +448,46 @@ internal sealed class StorageTerminalView : ITerminalView
         }
 
         var page = _screen.GetPage();
-        if (index < 0 || index >= page.Slots.Count || page.Slots[index].Entry == null)
-        {
-            return;
-        }
-
-        var entry = page.Slots[index].Entry!;
-        if (entry.Amount <= 0 || entry.Serial < 0) return;
-        var limit = StackLimit(entry.Key);
-        var amount = TerminalClickAmount.For(click, entry.Amount, limit);
-        var result = _menu.HandleInteraction(entry.Serial, amount, _services.Extract);
+        if (index < 0 || index >= page.Slots.Count) return;
+        var group = page.Slots[index].Group;
+        if (group == null || group.Total <= 0) return;
+        var pieces = TerminalClickAmount.For(click, group.Total);
+        RecordIdentities(group);
+        var result = _menu.HandleGroupInteraction(group, pieces, _services.Extract);
         Diagnostics?.Record("extract_result",
-            $"click={click} stored={entry.Amount} stack_limit={limit} requested={amount} moved={result.ExtractedAmount} status={result.Status}");
+            $"click={click} stored={group.Total} members={group.Members.Count} requested={pieces} moved={result.ExtractedAmount} status={result.Status}");
         _messageKey = result.MessageKey;
         _messageAmount = result.ExtractedAmount;
         Refresh(ReadSnapshot(), preserveView: true);
+    }
+
+    // With the item identity log on, writes the full identity of the clicked slot's members before they move, so the
+    // log shows exactly which data keeps entries apart. Values are included; ordinary logs never get this.
+    private void RecordIdentities(DisplayEntry group)
+    {
+        if (!_services.IdentityLogEnabled()) return;
+        foreach (var member in group.Members.Take(MaxDumpedMembers))
+            _services.WriteDiagnostic(
+                $"Digital Storage: item_identity pieces={member.Amount} units={member.TotalUnits}\n{ItemIdentityDump.ToJson(member.Key)}");
+    }
+
+    private IReadOnlyList<ProjectedGroup> Project(IReadOnlyList<TerminalEntry> entries)
+    {
+        var context = _host.Context;
+        var projector = _host.Pipeline.ActiveProjector(context);
+        var attributes = projector == null ? EntryAttributes.Empty : _attributes.Read(entries, projector.RequiredAttributes);
+        return _host.Pipeline.Project(entries, context, attributes);
+    }
+
+    /// <summary>Groups and sorts again, for example after the stacking rules or the installed modules changed.</summary>
+    private void Regroup()
+    {
+        if (_container == null) return;
+        _pipelineRevision = _host.Pipeline.Revision;
+        _attributes.Clear();
+        _menu.SetProjection(Project);
+        _screen.InvalidatePage();
+        ApplyMenuView(preserveView: true);
     }
 
     /// <summary>
@@ -493,7 +530,7 @@ internal sealed class StorageTerminalView : ITerminalView
         overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f), _hoverSample.GetTooltip(),
             NativeTooltipWidth(_hoverSample));
         _showingTooltip = true;
-        HintBox.Show(_hintText ??= BuildHintText());
+        ShowPanels(PanelsFor(slotIndex));
     }
 
     /// <summary>Uses the same maximum width rules as the native ItemTooltipHandler.</summary>
@@ -524,15 +561,111 @@ internal sealed class StorageTerminalView : ITerminalView
         return null;
     }
 
-    private RichText BuildHintText()
+    /// <summary>
+    /// Shows the panels of the hovered slot below the native tooltip: the view's own hint panel first, then the panels
+    /// features registered, each in the colors its feature chose. The native tooltip stays untouched.
+    /// </summary>
+    private void ShowPanels(IReadOnlyList<PanelText> panels)
     {
+        TooltipSideBox? previous = null;
+        foreach (var panel in panels)
+        {
+            var box = panel.Id == TooltipPanelDefinition.HintId ? HintBox : BoxFor(panel.Id);
+            var frame = panel.BorderRgb.HasValue ? _host.Icons.Frame(FrameKey, FrameBorder) : null;
+            box.ShowFramed(panel.Text, frame, frame == null ? Color.white : Tint(panel.BorderRgb!.Value), after: previous);
+            previous = box;
+        }
+
+        foreach (var pair in PanelBoxes)
+            if (!panels.Any(panel => panel.Id == pair.Key)) pair.Value.Hide();
+    }
+
+    private const string FrameKey = "window_frame";
+    private const int FrameBorder = 4;
+
+    private static Color Tint(int rgb) => RenderHandler.GetColorFromPalette(Palette(rgb));
+
+    private static TooltipSideBox BoxFor(string panelId)
+    {
+        if (!PanelBoxes.TryGetValue(panelId, out var box)) PanelBoxes.Add(panelId, box = new TooltipSideBox());
+        return box;
+    }
+
+    private IReadOnlyList<PanelText> PanelsFor(int slotIndex)
+    {
+        var page = _screen.GetPage();
+        var group = slotIndex >= 0 && slotIndex < page.Slots.Count ? page.Slots[slotIndex].Group : null;
+        if (group == null)
+            return _hintPanels ??= new[] { new PanelText(TooltipPanelDefinition.HintId, BuildHint(null), _host.Pipeline.HintPanel.BorderRgb) };
+        if (_hoverPanels != null && ReferenceEquals(_hoverHintGroup, group) && _hoverHintRevision == _host.Pipeline.Revision)
+            return _hoverPanels;
+        _hoverHintGroup = group;
+        _hoverHintRevision = _host.Pipeline.Revision;
+        _hoverPanels = BuildPanels(group);
+        return _hoverPanels;
+    }
+
+    private IReadOnlyList<PanelText> BuildPanels(DisplayEntry group)
+    {
+        var panels = _host.Pipeline.Tooltip(group, _host.Context);
+        var result = new List<PanelText>
+        {
+            new(TooltipPanelDefinition.HintId,
+                BuildHint(panels.FirstOrDefault(panel => panel.Definition.Id == TooltipPanelDefinition.HintId)),
+                _host.Pipeline.HintPanel.BorderRgb)
+        };
+        foreach (var panel in panels)
+        {
+            if (panel.Definition.Id == TooltipPanelDefinition.HintId) continue;
+            result.Add(new PanelText(panel.Definition.Id, AddLines(new RichTextBuilder(60), panel).Build(),
+                panel.Definition.BorderRgb));
+        }
+
+        return result;
+    }
+
+    /// <summary>The view's own panel: lines extensions added to it, then the usage hints.</summary>
+    private RichText BuildHint(TooltipPanel? added)
+    {
+        var builder = new RichTextBuilder(60);
+        if (added != null) AddLines(builder, added).AddLine(string.Empty);
         var text = _services.Text;
-        return new RichTextBuilder(60)
-            .AddLine(text.Get("terminal_hint_title"), ignoreEmpty: true, RenderHandler.ColorPalette.White)
-            .AddLine(text.Get("terminal_hint_left"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
-            .AddLine(text.Get("terminal_hint_right"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
-            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue)
+        var hint = _host.Pipeline.HintPanel;
+        return builder
+            .AddLine(text.Get("terminal_hint_title"), ignoreEmpty: true, Palette(hint.TitleRgb))
+            .AddLine(text.Get("terminal_hint_left"), ignoreEmpty: true, Palette(hint.LabelRgb))
+            .AddLine(text.Get("terminal_hint_right"), ignoreEmpty: true, Palette(hint.LabelRgb))
+            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, Palette(hint.LabelRgb))
             .Build();
+    }
+
+    private RichTextBuilder AddLines(RichTextBuilder builder, TooltipPanel panel)
+    {
+        foreach (var line in panel.Lines)
+            builder.AddLine(Localize(line.TextKey, line.Args), ignoreEmpty: true, Palette(panel.Definition.ColorOf(line.Role)));
+        return builder;
+    }
+
+    private string Localize(string key, IReadOnlyList<object> args) =>
+        _services.Text.Get(key, args.Select(arg => arg is LocalizedText inner ? Localize(inner.TextKey, inner.Args) : arg).ToArray());
+
+    // The game's palette values are 0xRRGGBB colors, and its rich text accepts any such value.
+    private static RenderHandler.ColorPalette Palette(int rgb) => (RenderHandler.ColorPalette)rgb;
+
+    private sealed class PanelText
+    {
+        internal PanelText(string id, RichText text, int? borderRgb)
+        {
+            Id = id;
+            Text = text;
+            BorderRgb = borderRgb;
+        }
+
+        internal string Id { get; }
+
+        internal RichText Text { get; }
+
+        internal int? BorderRgb { get; }
     }
 
     private void HideHoverTooltip()
@@ -541,6 +674,7 @@ internal sealed class StorageTerminalView : ITerminalView
         {
             OverlayHandler.current?.HideTooltip();
             HintBox.Hide();
+            foreach (var box in PanelBoxes.Values) box.Hide();
         }
 
         _showingTooltip = false;
@@ -560,6 +694,7 @@ internal sealed class StorageTerminalView : ITerminalView
         for (var index = 0; index < page.Slots.Count; index++)
         {
             var slot = page.Slots[index];
+            _decorations.Set(index, slot.Decorations);
             if (slot.Entry == null)
             {
                 _grid.SetEmpty(index);
@@ -567,7 +702,7 @@ internal sealed class StorageTerminalView : ITerminalView
             }
 
             // The native item tooltip replaces the plain name hint (see UpdateHoverTooltip).
-            var available = slot.Entry.Amount > 0;
+            var available = slot.Amount > 0;
             _grid.SetEntry(index, available ? _pictures.Get(slot.Entry.Key) : null, available, available, slot.QuantityBadge);
         }
 

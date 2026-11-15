@@ -51,7 +51,13 @@
     "Textures/button_blacklist.png",
     "Textures/button_clear.png",
     "Textures/button_delete.png",
-    "Textures/button_placeholder.png"
+    "Textures/button_placeholder.png",
+    "Textures/Items/module_type_stack_display.png",
+    "Textures/button_stack.png",
+    "Textures/button_add.png",
+    "Textures/annotation_square.png",
+    "Textures/window_frame.png",
+    "Textures/button_sample_attributes.png"
   ],
   "legacy": [
     "manifest.xml",

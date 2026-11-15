@@ -11,7 +11,7 @@ from unittest.mock import patch
 REPOSITORY = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
 from digital_storage_tools.assets import (  # noqa: E402
-    ASSETS, BUTTON_ASSETS, ContentValidationError, check_assets, check_image, check_matches_source, image_api,
+    ASSETS, INTERFACE_ASSETS, ContentValidationError, check_assets, check_image, check_matches_source, image_api,
     check_content, format_parameters, main, prepare_assets, read_localization, validate_write_root,
 )
 
@@ -32,7 +32,7 @@ class ContentAssetTests(unittest.TestCase):
             image.save(self.source / (name + ".png"))
 
     def runtime(self, name):
-        return self.output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png")
+        return self.output / "Textures" / ("" if name in INTERFACE_ASSETS else "Items") / (name + ".png")
 
     def snapshot(self):
         return {p.relative_to(self.root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

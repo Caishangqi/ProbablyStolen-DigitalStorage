@@ -17,13 +17,13 @@ public sealed class StorageMenuTests
         menu.BroadcastChanges(Snapshot(true, ("apple", 5), ("banana", 2)));
         var appleSerial = Entry(menu, "apple").Serial;
         Assert.That(menu.GetLinkState().IsConnected, Is.True);
-        Assert.That(menu.GetEntries().Sum(entry => entry.Amount), Is.EqualTo(7));
+        Assert.That(Entries(menu).Sum(entry => entry.Amount), Is.EqualTo(7));
 
         menu.BroadcastChanges(Snapshot(true, ("apple", 8), ("banana", 2)));
         Assert.That(Entry(menu, "apple").Serial, Is.EqualTo(appleSerial));
-        Assert.That(menu.GetEntries().Single(entry => entry.Key.Identifier == "apple").Amount, Is.EqualTo(8));
+        Assert.That(Entries(menu).Single(entry => entry.Key.Identifier == "apple").Amount, Is.EqualTo(8));
 
-        var appleKey = menu.GetEntries().Single(entry => entry.Key.Identifier == "apple").Key;
+        var appleKey = Entries(menu).Single(entry => entry.Key.Identifier == "apple").Key;
         menu.BroadcastChanges(Snapshot(true, ("banana", 2)));
         Assert.That(menu.GetStackBySerial(appleSerial), Is.Null);
         Assert.That(menu.GetRepository().GetAllEntries().Select(entry => entry.What!.GetPrimaryKey()),
@@ -35,7 +35,7 @@ public sealed class StorageMenuTests
         Assert.That(menu.GetSerial(appleKey), Is.Null);
         menu.BroadcastChanges(Snapshot(true, ("apple", 1)));
         Assert.That(menu.GetLinkState().IsConnected, Is.True);
-        Assert.That(menu.GetEntries().Single().Amount, Is.EqualTo(1));
+        Assert.That(Entries(menu).Single().Amount, Is.EqualTo(1));
     }
 
     [Test]
@@ -46,13 +46,13 @@ public sealed class StorageMenuTests
         var entry = new TerminalEntry(original.Key, 2, original.DisplayName, original.SpriteKey, document: document);
         var menu = new StorageMenu();
         menu.BroadcastChanges(new TerminalInventorySnapshot(true, new[] { entry }));
-        var serial = menu.GetEntries().Single().Serial;
+        var serial = Entries(menu).Single().Serial;
         menu.GetRepository().HandleUpdate(false, new[] { new InventoryEntryUpdate(serial, null, 3) });
-        Assert.That(menu.GetEntries().Single().Document, Is.SameAs(document));
+        Assert.That(Entries(menu).Single().Document, Is.SameAs(document));
         menu.SetPaused(true);
         menu.BroadcastChanges(new TerminalInventorySnapshot(true, System.Array.Empty<TerminalEntry>()));
-        Assert.That(menu.GetEntries().Single().Document, Is.SameAs(document));
-        Assert.That(menu.GetEntries().Single().Amount, Is.Zero);
+        Assert.That(Entries(menu).Single().Document, Is.SameAs(document));
+        Assert.That(Entries(menu).Single().Amount, Is.Zero);
     }
 
     [Test]
@@ -65,13 +65,13 @@ public sealed class StorageMenuTests
 
         menu.Reset();
         Assert.That(menu.GetLinkState().IsConnected, Is.False);
-        Assert.That(menu.GetEntries(), Is.Empty);
+        Assert.That(Entries(menu), Is.Empty);
         Assert.That(menu.GetRepository().GetAllEntries(), Is.Empty);
         Assert.That(snapshot.Entries.Single().Amount, Is.EqualTo(5));
 
         menu.BroadcastChanges(snapshot);
         Assert.That(menu.GetLinkState().IsConnected, Is.True);
-        Assert.That(menu.GetEntries().Single().Amount, Is.EqualTo(5));
+        Assert.That(Entries(menu).Single().Amount, Is.EqualTo(5));
         Assert.That(Entry(menu, "apple").Serial, Is.EqualTo(1));
     }
 
@@ -81,12 +81,12 @@ public sealed class StorageMenuTests
         var menu = new StorageMenu();
         var screen = new StorageScreen(3, 1, 24);
         menu.BroadcastChanges(Snapshot(true, ("apple", 2), ("banana", 3)));
-        screen.SetEntriesInOrder(menu.GetEntries());
+        screen.SetEntriesInOrder(Entries(menu));
         menu.SetPaused(true);
 
         var oldAppleSerial = menu.GetSerial(screen.GetPage().Slots[0].Entry!.Key)!.Value;
         menu.BroadcastChanges(Snapshot(true, ("banana", 4), ("carrot", 1)));
-        screen.UpdateEntriesInOrder(menu.GetEntries());
+        screen.UpdateEntriesInOrder(Entries(menu));
         var paused = screen.GetPage();
         Assert.That(paused.Slots[0].Entry!.Key.Identifier, Is.EqualTo("apple"));
         Assert.That(paused.Slots[0].Entry!.Amount, Is.Zero);
@@ -96,7 +96,7 @@ public sealed class StorageMenuTests
         var removedSerial = menu.GetSerial(paused.Slots[0].Entry!.Key);
         Assert.That(removedSerial, Is.Null);
         var staleActionInvoked = false;
-        var staleAction = menu.HandleInteraction(oldAppleSerial, 1, (_, _) =>
+        var staleAction = menu.HandleGroupInteraction(paused.Slots[0].Group!, 1, (_, _) =>
         {
             staleActionInvoked = true;
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 1, 1, "done");
@@ -105,7 +105,7 @@ public sealed class StorageMenuTests
         Assert.That(staleActionInvoked, Is.False);
 
         Assert.That(menu.SetPaused(false), Is.True);
-        screen.UpdateEntriesInOrder(menu.GetEntries());
+        screen.UpdateEntriesInOrder(Entries(menu));
         var resumed = screen.GetPage();
         Assert.That(resumed.Slots[0].Entry!.Key.Identifier, Is.EqualTo("banana"));
         Assert.That(resumed.Slots[1].Entry!.Key.Identifier, Is.EqualTo("carrot"));
@@ -120,8 +120,9 @@ public sealed class StorageMenuTests
         var invoked = false;
         menu.BroadcastChanges(Snapshot(true, ("apple", 2)));
         var liveSerial = menu.GetSerial(item.Key)!.Value;
+        var liveGroup = menu.GetEntries().Single();
         menu.BroadcastChanges(new TerminalInventorySnapshot(false, System.Array.Empty<TerminalEntry>()));
-        var offline = menu.HandleInteraction(liveSerial, 1, (_, _) =>
+        var offline = menu.HandleGroupInteraction(liveGroup, 1, (_, _) =>
         {
             invoked = true;
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 1, 1, "done");
@@ -132,7 +133,7 @@ public sealed class StorageMenuTests
         menu.BroadcastChanges(Snapshot(true, ("apple", 2)));
         var reconnectedSerial = menu.GetSerial(item.Key)!.Value;
         Assert.That(reconnectedSerial, Is.Not.EqualTo(liveSerial));
-        var success = menu.HandleInteraction(reconnectedSerial, 1, (_, _) =>
+        var success = menu.HandleGroupInteraction(menu.GetEntries().Single(), 1, (_, _) =>
         {
             invoked = true;
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 1, 1, "done");
@@ -146,15 +147,15 @@ public sealed class StorageMenuTests
     {
         var menu = new StorageMenu();
         menu.BroadcastChanges(Snapshot(true, ("apple", 6)));
-        var serial = Entry(menu, "apple").Serial;
+        var group = menu.GetEntries().Single();
         var requested = new List<long>();
 
-        var clicked = menu.HandleInteraction(serial, 1, (_, amount) =>
+        var clicked = menu.HandleGroupInteraction(group, 1, (_, amount) =>
         {
             requested.Add(amount);
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, amount, amount, "done");
         });
-        var explicitResult = menu.HandleInteraction(serial, 4, (_, amount) =>
+        var explicitResult = menu.HandleGroupInteraction(group, 4, (_, amount) =>
         {
             requested.Add(amount);
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Partial, amount, 2, "partial");
@@ -173,10 +174,10 @@ public sealed class StorageMenuTests
     {
         var menu = new StorageMenu();
         menu.BroadcastChanges(Snapshot(true, ("apple", 2)));
-        var serial = Entry(menu, "apple").Serial;
+        var group = menu.GetEntries().Single();
         var invoked = false;
 
-        var result = menu.HandleInteraction(serial, 0, (_, _) =>
+        var result = menu.HandleGroupInteraction(group, 0, (_, _) =>
         {
             invoked = true;
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 0, 0, "unexpected");
@@ -195,12 +196,12 @@ public sealed class StorageMenuTests
         repository.HandleUpdate(true, new[] { Update(1, "apple", 2), Update(2, "banana", 3) });
         repository.SetPaused(true);
         repository.HandleUpdate(false, new[] { new InventoryEntryUpdate(1, null, 0) });
-        Assert.That(repository.GetView()[0].What!.GetPrimaryKey(), Is.EqualTo("apple"));
-        Assert.That(repository.GetView()[0].StoredAmount, Is.Zero);
+        Assert.That(repository.GetView()[0].Representative.Key.GetPrimaryKey(), Is.EqualTo("apple"));
+        Assert.That(repository.GetView()[0].Total, Is.Zero);
         Assert.That(repository.GetAllEntries().Select(entry => entry.What!.GetPrimaryKey()),
             Is.EquivalentTo(new[] { "banana" }));
         repository.SetPaused(false);
-        Assert.That(repository.GetView().Select(entry => entry.What!.GetPrimaryKey()), Is.EqualTo(new[] { "banana" }));
+        Assert.That(repository.GetView().Select(entry => entry.Representative.Key.GetPrimaryKey()), Is.EqualTo(new[] { "banana" }));
     }
 
     [Test]
@@ -208,20 +209,21 @@ public sealed class StorageMenuTests
     {
         var menu = new StorageMenu();
         menu.BroadcastChanges(Snapshot(true, ("apple", 2), ("banana", 3)));
-        var beforeRemoval = menu.GetEntries()[0];
+        var beforeGroup = menu.GetEntries()[0];
+        var beforeRemoval = beforeGroup.Representative;
         menu.SetPaused(true);
         menu.BroadcastChanges(Snapshot(true, ("banana", 3)));
-        Assert.That(menu.GetEntries()[0].Serial, Is.EqualTo(beforeRemoval.Serial));
-        Assert.That(menu.GetEntries()[0].Amount, Is.Zero);
+        Assert.That(Entries(menu)[0].Serial, Is.EqualTo(beforeRemoval.Serial));
+        Assert.That(Entries(menu)[0].Amount, Is.Zero);
 
         menu.BroadcastChanges(Snapshot(true, ("apple", 5), ("banana", 3)));
-        var afterReinsert = menu.GetEntries()[0];
-        Assert.That(menu.GetEntries(), Has.Count.EqualTo(2));
+        var afterReinsert = Entries(menu)[0];
+        Assert.That(Entries(menu), Has.Count.EqualTo(2));
         Assert.That(afterReinsert.Key, Is.EqualTo(beforeRemoval.Key));
         Assert.That(afterReinsert.Serial, Is.Not.EqualTo(beforeRemoval.Serial));
         Assert.That(afterReinsert.Amount, Is.EqualTo(5));
         var invoked = false;
-        var rejected = menu.HandleInteraction(beforeRemoval.Serial, 1, (_, _) =>
+        var rejected = menu.HandleGroupInteraction(beforeGroup, 1, (_, _) =>
         {
             invoked = true;
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 1, 1, "done");
@@ -241,7 +243,7 @@ public sealed class StorageMenuTests
             new TerminalEntry(b, 1, "Tool", "items|tool"),
             new TerminalEntry(a, 1, "Tool", "items|tool")
         }));
-        Assert.That(menu.GetEntries().Select(entry => entry.Key), Is.EqualTo(new[] { a, b }));
+        Assert.That(Entries(menu).Select(entry => entry.Key), Is.EqualTo(new[] { a, b }));
     }
 
     [Test]
@@ -256,7 +258,7 @@ public sealed class StorageMenuTests
             new TerminalEntry(first, 1, "Tool", "items|tool")
         }));
 
-        Assert.That(menu.GetEntries().Select(entry => entry.Key), Is.EqualTo(new[] { first, second }));
+        Assert.That(Entries(menu).Select(entry => entry.Key), Is.EqualTo(new[] { first, second }));
     }
 
     [Test]
@@ -271,7 +273,7 @@ public sealed class StorageMenuTests
 
         Assert.That(menu.GetLinkState().IsConnected, Is.False);
         Assert.That(menu.GetLinkState().StatusDescription, Is.EqualTo("terminal_storage_unavailable"));
-        Assert.That(menu.GetEntries(), Is.Empty);
+        Assert.That(Entries(menu), Is.Empty);
 
         // A later unavailable read must not be presented as an empty online inventory.
         menu.BroadcastChanges(new TerminalInventorySnapshot(false,
@@ -293,7 +295,7 @@ public sealed class StorageMenuTests
         menu.SetSort(order, direction);
 
         // Equal amounts (banana and date) keep name order in both directions.
-        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(expected));
+        Assert.That(Entries(menu).Select(entry => entry.Key.Identifier), Is.EqualTo(expected));
     }
 
     [Test]
@@ -304,10 +306,10 @@ public sealed class StorageMenuTests
         menu.SetPaused(true);
 
         menu.SetSort(TerminalSortOrder.Amount, TerminalSortDirection.Descending);
-        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "apple", "banana" }));
+        Assert.That(Entries(menu).Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "apple", "banana" }));
 
         menu.SetPaused(false);
-        Assert.That(menu.GetEntries().Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "banana", "apple" }));
+        Assert.That(Entries(menu).Select(entry => entry.Key.Identifier), Is.EqualTo(new[] { "banana", "apple" }));
     }
 
     private static InventoryEntryUpdate Entry(StorageMenu menu, string id) =>
@@ -321,4 +323,7 @@ public sealed class StorageMenuTests
 
     private static TerminalInventorySnapshot Snapshot(bool online, params (string Id, long Amount)[] items) =>
         new(online, items.Select(item => Item(item.Id, item.Amount)));
+
+    private static IReadOnlyList<TerminalEntry> Entries(StorageMenu menu) =>
+        menu.GetEntries().Select(group => group.Representative).ToList();
 }

@@ -101,7 +101,7 @@ public sealed class TerminalInventoryMonitor
         var rightByKey = right.Entries.ToDictionary(entry => entry.Key);
         foreach (var entry in left.Entries)
         {
-            if (!rightByKey.TryGetValue(entry.Key, out var other) || entry.Amount != other.Amount ||
+            if (!rightByKey.TryGetValue(entry.Key, out var other) || entry.Amount != other.Amount || entry.TotalUnits != other.TotalUnits ||
                 !string.Equals(entry.DisplayName, other.DisplayName, StringComparison.Ordinal) ||
                 !string.Equals(entry.SpriteKey, other.SpriteKey, StringComparison.Ordinal) ||
                 entry.SpriteWidth != other.SpriteWidth || entry.SpriteHeight != other.SpriteHeight ||

@@ -190,6 +190,13 @@ public sealed class BasicCellInventory : IStorageCell
     }
 
     /// <inheritdoc />
+    public void GetAvailablePieces(KeyCounter output)
+    {
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        foreach (var entry in _view.Usage.Types) output.Add(entry.Key, entry.Value.Pieces);
+    }
+
+    /// <inheritdoc />
     public string GetDescription() => $"{Tier.Name} storage cell";
 
     // Area units left unused in the last partly used byte.

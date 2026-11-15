@@ -36,8 +36,6 @@ internal sealed class GridNetworkPowerCoordinator
 
     internal IReadOnlyList<CellBayReference> ListCellBays(GameItem terminal) => _storage.ListCellBays(terminal);
 
-    internal long StackLimit(GameItem terminal, ItemKey key) => _storage.StackLimit(terminal, key);
-
     internal TerminalInsertionResult StoreSelected(GameItem terminal, IReadOnlyList<GameItem> items,
         Action<string>? reportDiagnostic = null) => _storage.Store(terminal, items);
 
@@ -57,8 +55,8 @@ internal sealed class GridNetworkPowerCoordinator
     internal bool CanStore(GameItem terminal, GameItem item, int amount) =>
         amount >= item.unitCount && _storage.CanStore(terminal, item);
 
-    internal TerminalExtractionResult ExtractToPlayer(GameItem terminal, ItemKey key, long amount) =>
-        _storage.Extract(terminal, key, amount);
+    internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces) =>
+        _storage.ExtractPieces(terminal, key, pieces);
 
     internal GridPowerResult OnControllerCycleEnd(GameItem controller)
     {

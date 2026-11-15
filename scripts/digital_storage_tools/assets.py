@@ -32,7 +32,7 @@ ASSETS["workbench"] = ((48, 48), (48, 48))
 # Three workbench corner cells are transparent, so their centres are exempt from the opacity check.
 OPEN_CENTER_ASSETS = frozenset({"workbench"})
 for module in ("module_type_expansion_common", "module_type_expansion_rare", "module_type_expansion_epic",
-               "module_equal_distribution"):
+               "module_equal_distribution", "module_type_stack_display"):
     ASSETS[module] = ((32, 32), (32, 32))
 
 
@@ -40,9 +40,14 @@ BUTTON_ASSETS = (
     "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
     "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
     "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_placeholder",
+    "button_stack", "button_add", "annotation_square", "button_sample_attributes",
 )
 for button in BUTTON_ASSETS:
     ASSETS[button] = ((16, 16), (16, 16))
+# Interface textures that sit beside the buttons in Textures/ but are not button sized.
+FRAME_ASSETS = ("window_frame",)
+ASSETS["window_frame"] = ((64, 64), (64, 64))
+INTERFACE_ASSETS = frozenset((*BUTTON_ASSETS, *FRAME_ASSETS))
 
 
 class ContentValidationError(ValueError):
@@ -126,7 +131,7 @@ def expected_png(source: Path, name: str) -> bytes:
 
 
 def runtime_png(output: Path, name: str):
-    path = plain_path(output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png"))
+    path = plain_path(output / "Textures" / ("" if name in INTERFACE_ASSETS else "Items") / (name + ".png"))
     try:
         data = path.read_bytes()
         with image_api().open(io.BytesIO(data)) as opened:
@@ -174,7 +179,7 @@ def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSE
         raise ContentValidationError("Choose unique known asset names.")
     # Preflight all inputs and destination paths before writing any image.
     prepared = {name: expected_png(source, name) for name in names}
-    paths = {name: plain_path(output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png")) for name in names}
+    paths = {name: plain_path(output / "Textures" / ("" if name in INTERFACE_ASSETS else "Items") / (name + ".png")) for name in names}
     for path in paths.values():
         if path.exists() and not path.is_file():
             raise ContentValidationError(f"Runtime destination is not a file: {path}")
@@ -286,6 +291,8 @@ def check_content(project: Path, output: Path) -> None:
     keys.update((
         "module_equal_distribution_desc",
         "module_equal_distribution_name",
+        "module_stack_display_desc",
+        "module_stack_display_name",
         "module_quality_common",
         "module_quality_epic",
         "module_quality_rare",
@@ -388,6 +395,7 @@ def check_content(project: Path, output: Path) -> None:
         "network_power_terminal_name", "network_power_terminal_desc",
         "terminal_storage_title", "terminal_storage_search_placeholder", "terminal_storage_loading",
         "terminal_storage_drag_hint", "terminal_storage_drag_rejected", "terminal_storage_whole_stack_only", "terminal_diagnostics_name", "terminal_diagnostics_desc",
+        "debug_item_identity_log_name", "debug_item_identity_log_desc",
         "terminal_storage_offline", "terminal_storage_empty",
         "terminal_storage_invalid_amount", "terminal_storage_no_items", "terminal_storage_insufficient_power",
         "terminal_storage_target_rejected", "terminal_storage_unsupported_item",
@@ -451,6 +459,47 @@ def check_content(project: Path, output: Path) -> None:
         "upper_engineer_right_item", "upper_engineer_repeat", "upper_engineer_accept",
         "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
         "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
+        "terminal_button_stacking_tip",
+        "terminal_tooltip_total_units",
+        "stacking_marker_color", "stacking_marker_placeholder", "stacking_marker_color_tip", "stacking_marker_invalid",
+        "stacking_info_title", "stacking_info_kinds", "stacking_info_rules", "stacking_info_rule",
+        "stacking_conditions", "stacking_rule_count",
+        "stacking_enable",
+        "stacking_scope_hint",
+        "stacking_config_unreadable",
+        "stacking_saved_immediately",
+        "stacking_save_failed",
+        "stacking_remove_rule_tip",
+        "stacking_add_rule",
+        "stacking_clear_rules",
+        "stacking_search",
+        "stacking_field_absent",
+        "stacking_mode_match",
+        "stacking_mode_ignore",
+        "stacking_summary_disabled",
+        "stacking_summary_exact",
+        "stacking_summary_ignored",
+        "stacking_summary_separator",
+        "stacking_note_match_alone",
+        "stacking_note_derived_alone",
+        "stacking_note_value_still_compared",
+        "stacking_note_container_first_only",
+        "stacking_field_appraised_value",
+        "stacking_field_appraised_value_desc",
+        "stacking_field_price_composition",
+        "stacking_field_price_composition_desc",
+        "stacking_field_metal_purity",
+        "stacking_field_metal_purity_desc",
+        "stacking_field_container_content",
+        "stacking_field_container_content_desc",
+        "stacking_field_legality",
+        "stacking_field_legality_desc",
+        "stacking_field_stolen",
+        "stacking_field_stolen_desc",
+        "stacking_field_heat",
+        "stacking_field_heat_desc",
+        "stacking_field_feature",
+        "stacking_field_feature_desc",
     ))
     if (platform / "Diagnostics" / "ItemCommands.cs").exists():
         raise ContentValidationError("Removed custom command source must not be present.")

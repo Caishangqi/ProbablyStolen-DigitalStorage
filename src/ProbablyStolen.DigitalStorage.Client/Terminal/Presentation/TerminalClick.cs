@@ -6,32 +6,31 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 /// <summary>Terminal slot clicks: left-click, right-click and shift-click extraction.</summary>
 public enum TerminalClick
 {
-    /// <summary>Left click: take up to one full stack.</summary>
+    /// <summary>Left click: take one piece.</summary>
     Stack,
 
-    /// <summary>Right click: take half of one full stack.</summary>
+    /// <summary>Right click: take half of the slot's pieces.</summary>
     Half,
 
-    /// <summary>Shift + left click: take everything of this type.</summary>
+    /// <summary>Shift + left click: take every piece of the slot.</summary>
     All
 }
 
-/// <summary>Maps a slot click to the requested extraction amount.</summary>
+/// <summary>Maps a slot click to the requested number of pieces.</summary>
 public static class TerminalClickAmount
 {
     /// <summary>
-    /// Gets the amount to request. A full stack is the item's native stack limit or everything stored, whichever is
-    /// smaller; half rounds up so a single unit can still be taken.
+    /// Gets the pieces to request from a slot holding <paramref name="pieces"/>: left click one, right click half rounded
+    /// up, Shift + left click all. A piece is one physical item whatever its unit count, so a request never splits one.
     /// </summary>
-    public static long For(TerminalClick click, long stored, long stackLimit)
+    public static long For(TerminalClick click, long pieces)
     {
-        if (stored <= 0) throw new ArgumentOutOfRangeException(nameof(stored));
-        var stack = Math.Min(stored, Math.Max(1, stackLimit));
+        if (pieces <= 0) throw new ArgumentOutOfRangeException(nameof(pieces));
         return click switch
         {
-            TerminalClick.Stack => stack,
-            TerminalClick.Half => (stack + 1) / 2,
-            TerminalClick.All => stored,
+            TerminalClick.Stack => 1,
+            TerminalClick.Half => (pieces + 1) / 2,
+            TerminalClick.All => pieces,
             _ => throw new ArgumentOutOfRangeException(nameof(click))
         };
     }

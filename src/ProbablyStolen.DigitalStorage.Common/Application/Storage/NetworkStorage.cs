@@ -113,6 +113,13 @@ public sealed class NetworkStorage : IRootStorage
     }
 
     /// <inheritdoc />
+    public void GetAvailablePieces(KeyCounter output)
+    {
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        foreach (var (_, storage) in _mounted) storage.GetAvailablePieces(output);
+    }
+
+    /// <inheritdoc />
     public string GetDescription() => $"network storage ({_mounted.Count} mounted)";
 
     private static IEnumerable<RootSnapshot> Remaining(IRootSource roots)

@@ -31,7 +31,10 @@ public enum StoreRejection
     PartitionUnknown = 7,
 
     /// <summary>The stored partition cannot be read or its last apply was not confirmed.</summary>
-    PartitionInvalid = 8
+    PartitionInvalid = 8,
+
+    /// <summary>The destination already took every root the caller asked for; nothing failed.</summary>
+    RequestFilled = 9
 }
 
 /// <summary>Which rules apply to a plan.</summary>

@@ -6,6 +6,8 @@ terminal_storage_drag_rejected,These dragged items cannot currently be stored. D
 terminal_storage_whole_stack_only,Drag storage currently requires a whole stack. The selected partial quantity was not stored; items stay at their source.
 terminal_diagnostics_name,Terminal diagnostics
 terminal_diagnostics_desc,Write bounded UI layer and drag event diagnostics to Player.log. Item names and saved state are excluded.
+debug_item_identity_log_name,Item identity log
+debug_item_identity_log_desc,"For debugging. When on, clicking a terminal slot writes the full identity of its items (tags and feature values included) to Player.log, and the reasons items of one kind stay apart under the stack rules. Writes a lot; leave off for normal play."
 terminal_storage_search_placeholder,Search items
 config_section_terminal_search,Terminal search
 terminal_search_keyboard_name,Pinyin keyboard
@@ -133,8 +135,8 @@ terminal_view_size_desc,How much of the screen height the terminal window uses. 
 partition_view_size_name,Partition window height
 partition_view_size_desc,How much of the screen height the cell partition window uses. The button on the left of the window also changes it, and the choice is kept.
 terminal_hint_title,Controls
-terminal_hint_left,Left click: take one stack (one item if it does not stack)
-terminal_hint_right,Right click: take half a stack (stored stacks are not split)
+terminal_hint_left,Left click: take one item
+terminal_hint_right,Right click: take half of the items in the slot (items are never split)
 terminal_hint_shift,Shift + left click: take all
 config_section_power,Network power
 config_section_debug,Debug
@@ -310,3 +312,53 @@ terminal_diagnostics_view_text,Diagnostic test view. Used to check view switchin
 terminal_diagnostics_screen_text,Diagnostic test page. Press Back to return to the terminal.
 terminal_test_view_name,Terminal test view
 terminal_test_view_desc,Adds a placeholder view and test buttons to terminals for checking view switching. For testing only.
+module_stack_display_name,Stack Display Module
+module_stack_display_desc,Lets a storage terminal show items as merged stacks by rules you set. Install it in the terminal's module bay.
+terminal_button_stacking_tip,Stack display rules
+terminal_tooltip_total_units,{0} units in total
+stacking_marker_color,Stack mark color
+stacking_marker_placeholder,#RRGGBB
+stacking_marker_color_tip,"Enter #RGB or #RRGGBB, or pick a swatch."
+stacking_marker_invalid,Enter a color as #RGB or #RRGGBB; the previous color still applies.
+stacking_info_title,Stack Display Module
+stacking_info_kinds,Stacked kinds: {0}
+stacking_info_rules,Stacking rules applied:
+stacking_info_rule,"    {0}"
+stacking_conditions,Meet these rules
+stacking_rule_count,{0} rules
+stacking_enable,Merge stacks
+stacking_scope_hint,Applies to every item in this terminal.
+stacking_config_unreadable,These stack settings cannot be read. They are kept unchanged and items show unmerged.
+stacking_saved_immediately,Changes are saved immediately.
+stacking_save_failed,The change could not be saved; the previous rules still apply.
+stacking_remove_rule_tip,Remove this rule
+stacking_add_rule,Add stack rule
+stacking_clear_rules,Clear all rules
+stacking_search,Search attributes...
+stacking_field_absent,No stored item has this attribute now
+stacking_mode_match,Match
+stacking_mode_ignore,Ignore
+stacking_summary_disabled,Stacking: off
+stacking_summary_exact,Stacking: exact (only identical items merge)
+stacking_summary_ignored,Stacking: ignore {0}
+stacking_summary_separator,", "
+stacking_note_match_alone,"On its own, Match changes nothing; use it next to an ignored attribute."
+stacking_note_derived_alone,Ignoring the estimated value alone changes nothing while the price composition still differs.
+stacking_note_value_still_compared,This also changes the estimated value; items with different values stay apart unless the estimated value is ignored too.
+stacking_note_container_first_only,Merged containers may hold different items; the tooltip shows the first one only.
+stacking_field_appraised_value,Estimated value
+stacking_field_appraised_value_desc,The estimated value shown in the item tooltip.
+stacking_field_price_composition,Price composition
+stacking_field_price_composition_desc,"Base values, the price paid when bought, and purely economic modifiers such as discounts."
+stacking_field_metal_purity,Metal purity
+stacking_field_metal_purity_desc,The purity of ingots; only purity you have discovered.
+stacking_field_container_content,Container content
+stacking_field_container_content_desc,The items inside a container.
+stacking_field_legality,Legality
+stacking_field_legality_desc,The contraband level.
+stacking_field_stolen,Stolen status
+stacking_field_stolen_desc,"Whether an item is stolen, heat included."
+stacking_field_heat,Heat
+stacking_field_heat_desc,The heat of stolen items.
+stacking_field_feature,Feature: {0}
+stacking_field_feature_desc,The visible item feature {0}.

@@ -177,9 +177,11 @@ public sealed class PlatformComposition : IDisposable
         var housing = new MaterialItem(cell);
         var drive = new DriveItem(appearance, windows, inventory, networkEvents);
         var controller = new ControllerItem(appearance, windows);
-        var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message));
+        var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
+            networkPowerSettings.GetItemIdentityLog);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, search.Service,
+            networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
+            search.Service,
             networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons);
         var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
@@ -188,7 +190,7 @@ public sealed class PlatformComposition : IDisposable
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
         itemContent.SetModulePresenter(modules.Present);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
-            modules, itemContent, log);
+            modules, new TerminalModuleFactory(appearance), itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,

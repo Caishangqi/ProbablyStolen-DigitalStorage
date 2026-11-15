@@ -44,5 +44,6 @@ public static class StorageTerminalFeature
             _ => true, createView));
         registry.AddSetting(SortBy, 0, ActionPlacement.Rail, TerminalRegistry.StorageTerminalName);
         registry.AddSetting(SortDirection, 10, ActionPlacement.Rail, TerminalRegistry.StorageTerminalName);
+        registry.AddTooltipContributor(new UnitTotalTooltip());
     }
 }

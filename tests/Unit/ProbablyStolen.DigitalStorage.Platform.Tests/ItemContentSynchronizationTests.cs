@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -21,7 +22,8 @@ internal sealed class ItemContentSynchronizationTests
             [MaterialItem.ItemId] = 80,
             [CellWorkbenchItem.ItemId] = 300,
             [CellUpgradeInventory.EqualDistributionId] = 200,
-            [CellUpgradeInventory.TypeLimitId] = 100
+            [CellUpgradeInventory.TypeLimitId] = 100,
+            [StackingModule.ModuleId] = 200
         };
         foreach (var tier in StorageCellTier.All)
         {

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Registries;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Host;
@@ -19,6 +21,11 @@ public sealed class TerminalRegistry
     private readonly Action<string> _diagnostic;
     private readonly Registry<TerminalDefinition> _terminals = new(Identifier.Parse("digital_storage:terminals"));
     private readonly Registry<RegisteredButton> _buttonRegistry = new(Identifier.Parse("digital_storage:terminal_buttons"));
+    private readonly List<IStorageEntryProjector> _projectors = new();
+    private readonly List<ISlotDecorator> _decorators = new();
+    private readonly List<IEntryTooltipContributor> _contributors = new();
+    private readonly List<TooltipPanelDefinition> _panels = new() { TooltipPanelDefinition.Hint };
+    private readonly HashSet<string> _extensionIds = new(StringComparer.Ordinal);
     private bool _frozen;
 
     /// <summary>Creates an empty registry.</summary>
@@ -82,6 +89,47 @@ public sealed class TerminalRegistry
         return AddButton(new SettingToggleButton<T>(setting, _config), order, placement, terminalId, _ => true);
     }
 
+    /// <summary>Adds a storage view projector; a repeated id is refused and logged.</summary>
+    public bool AddStorageProjector(IStorageEntryProjector projector) =>
+        AddExtension(projector ?? throw new ArgumentNullException(nameof(projector)), projector.Id, _projectors);
+
+    /// <summary>Adds a storage slot decorator; a repeated id is refused and logged.</summary>
+    public bool AddSlotDecorator(ISlotDecorator decorator) =>
+        AddExtension(decorator ?? throw new ArgumentNullException(nameof(decorator)), decorator.Id, _decorators);
+
+    /// <summary>Adds a storage tooltip contributor; a repeated id is refused and logged.</summary>
+    public bool AddTooltipContributor(IEntryTooltipContributor contributor) =>
+        AddExtension(contributor ?? throw new ArgumentNullException(nameof(contributor)), contributor.Id, _contributors);
+
+    /// <summary>
+    /// Adds a tooltip panel next to the native tooltip; a repeated id is refused and logged. The storage view's own
+    /// panel is always registered.
+    /// </summary>
+    public bool AddTooltipPanel(TooltipPanelDefinition panel)
+    {
+        if (panel == null) throw new ArgumentNullException(nameof(panel));
+        EnsureOpen();
+        if (_panels.Any(existing => existing.Id == panel.Id))
+        {
+            _diagnostic($"terminal_registry refused=tooltip_panel id={panel.Id} reason=duplicate");
+            return false;
+        }
+
+        _panels.Add(panel);
+        return true;
+    }
+
+    /// <summary>Gets the registered tooltip panels, the storage view's own first.</summary>
+    public IReadOnlyList<TooltipPanelDefinition> TooltipPanels => _panels;
+
+    /// <summary>Gets the registered projectors.</summary>
+    public IReadOnlyList<IStorageEntryProjector> StorageProjectors => _projectors;
+
+    /// <summary>Creates the storage pipeline of one window over the registered extensions.</summary>
+    public StoragePresentationPipeline CreateStoragePipeline(Action<string> diagnostic) =>
+        new(_projectors, _decorators, _contributors, _panels,
+            diagnostic ?? throw new ArgumentNullException(nameof(diagnostic)));
+
     /// <summary>Closes registration. The default view must be registered by then.</summary>
     public void Freeze()
     {
@@ -110,6 +158,20 @@ public sealed class TerminalRegistry
 
         var entry = new RegisteredButton(button, order, placement, terminalId, isVisible);
         _buttonRegistry.Register(key, entry);
+        return true;
+    }
+
+    private bool AddExtension<T>(T extension, string id, List<T> target)
+    {
+        EnsureOpen();
+        if (string.IsNullOrEmpty(id)) throw new ArgumentException("An extension id is required.", nameof(extension));
+        if (!_extensionIds.Add(id))
+        {
+            _diagnostic($"terminal_registry refused=extension id={id} reason=duplicate");
+            return false;
+        }
+
+        target.Add(extension);
         return true;
     }
 

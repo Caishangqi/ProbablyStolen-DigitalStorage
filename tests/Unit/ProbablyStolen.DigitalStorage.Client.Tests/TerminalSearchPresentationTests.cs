@@ -92,7 +92,7 @@ public sealed class TerminalSearchPresentationTests
         menu.BroadcastChanges(new TerminalInventorySnapshot(true, new[] { Entry("apple", "Apple", "fruit") }));
         screen.SetEntriesInOrder(menu.GetEntries());
         screen.SetSearchText("#fruit");
-        var serial = menu.GetEntries().Single().Serial;
+        var serial = menu.GetEntries().Single().Representative.Serial;
         menu.GetRepository().HandleUpdate(false, new[] { new InventoryEntryUpdate(serial, null, 3) });
         screen.UpdateEntriesInOrder(menu.GetEntries());
         Assert.That(screen.GetPage().Slots[0].Entry!.Amount, Is.EqualTo(3));

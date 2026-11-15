@@ -65,6 +65,10 @@ internal static class NativeCellResolver
         {
         }
 
+        public void GetAvailablePieces(KeyCounter output)
+        {
+        }
+
         public string GetDescription() => "status-only mounted cell";
     }
 }

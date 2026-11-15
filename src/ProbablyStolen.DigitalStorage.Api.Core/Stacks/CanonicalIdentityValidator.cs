@@ -25,21 +25,40 @@ internal sealed class CanonicalIdentityValidator
     private int _edges;
     private int _records;
     private CanonicalItemSummary.Builder? _summary;
+    private bool _decode;
 
     private CanonicalIdentityValidator(byte[] data) => _data = data;
 
     /// <summary>Validates an envelope and returns what its root item records, or null when it is invalid.</summary>
     internal static CanonicalItemSummary? ReadSummary(byte[] data, string expectedIdentifier)
     {
-        if (data == null || data.Length > MaxBytes || string.IsNullOrWhiteSpace(expectedIdentifier))
-        {
-            return null;
-        }
-
+        if (!Acceptable(data, expectedIdentifier)) return null;
         try
         {
             var reader = new CanonicalIdentityValidator(data) { _summary = new CanonicalItemSummary.Builder() };
-            return reader.ReadEnvelope(expectedIdentifier) ? reader._summary.Build() : null;
+            return reader.ReadEnvelope(expectedIdentifier) != null ? reader._summary.Build() : null;
+        }
+        catch (InvalidIdentityException)
+        {
+            return null;
+        }
+        catch (DecoderFallbackException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Validates an envelope and rebuilds the detached input it was encoded from, or returns null when it is invalid.
+    /// Encoding the result again yields the same bytes.
+    /// </summary>
+    internal static CanonicalIdentityInput? Decode(byte[] data, string expectedIdentifier)
+    {
+        if (!Acceptable(data, expectedIdentifier)) return null;
+        try
+        {
+            var reader = new CanonicalIdentityValidator(data) { _decode = true };
+            return reader.ReadEnvelope(expectedIdentifier)?.Item;
         }
         catch (InvalidIdentityException)
         {
@@ -53,15 +72,10 @@ internal sealed class CanonicalIdentityValidator
 
     internal static bool IsValid(byte[] data, string expectedIdentifier)
     {
-        if (data == null || data.Length > MaxBytes || string.IsNullOrWhiteSpace(expectedIdentifier))
-        {
-            return false;
-        }
-
+        if (!Acceptable(data, expectedIdentifier)) return false;
         try
         {
-            var reader = new CanonicalIdentityValidator(data);
-            return reader.ReadEnvelope(expectedIdentifier);
+            return new CanonicalIdentityValidator(data).ReadEnvelope(expectedIdentifier) != null;
         }
         catch (InvalidIdentityException)
         {
@@ -73,23 +87,31 @@ internal sealed class CanonicalIdentityValidator
         }
     }
 
-    private bool ReadEnvelope(string expectedIdentifier)
+    private static bool Acceptable(byte[] data, string expectedIdentifier) =>
+        data != null && data.Length <= MaxBytes && !string.IsNullOrWhiteSpace(expectedIdentifier);
+
+    /// <summary>Returns the root item, or null when bytes remain after it.</summary>
+    private DecodedItem? ReadEnvelope(string expectedIdentifier)
     {
         Require(ReadByte() == (byte)'D' && ReadByte() == (byte)'S' && ReadByte() == (byte)'I' && ReadByte() == (byte)'D');
         Require(ReadUInt32() == 1);
-        ReadItem(false, 0, 0, expectedIdentifier);
-        return _offset == _data.Length;
+        var root = ReadItem(false, 0, 0, expectedIdentifier);
+        return _offset == _data.Length ? root : null;
     }
 
-    private void ReadItem(bool child, int itemDepth, int nodeDepth, string? expectedIdentifier = null)
+    private DecodedItem ReadItem(bool child, int itemDepth, int nodeDepth, string? expectedIdentifier = null)
     {
         Require(itemDepth <= MaxItemDepth && ++_items <= MaxItems);
         Require(ReadByte() == (child ? 11 : 10));
+        var unitCount = 0;
+        CanonicalIdentityShape? originalShape = null;
+        CanonicalIdentityShape? modifiedShape = null;
         if (child)
         {
-            Require(ReadInt32() > 0);
-            ReadShape();
-            ReadShape();
+            unitCount = ReadInt32();
+            Require(unitCount > 0);
+            originalShape = ReadShape();
+            modifiedShape = ReadShape();
         }
 
         Require(ReadByte() == 1);
@@ -104,16 +126,21 @@ internal sealed class CanonicalIdentityValidator
 
         if (capture != null) capture.Identifier = identifier!;
 
-        ReadString();
-        ReadString();
-        ReadString();
-        Skip(32);
-        var itemTypes = ReadItemTypeCount();
-        for (var i = 0; i < itemTypes; i++)
+        var name = ReadString();
+        var shortDescription = ReadString();
+        var flavorText = ReadString();
+        var unitBaseValue = ReadInt64();
+        var unitValue = ReadInt64();
+        var lateUnitValue = ReadInt64();
+        var backupUnitValue = ReadInt64();
+        var itemTypeCount = ReadItemTypeCount();
+        var itemTypes = _decode ? new List<string>(itemTypeCount) : null;
+        for (var i = 0; i < itemTypeCount; i++)
         {
             var type = ReadString();
             Require(type != null);
             capture?.ItemTypes.Add(type!);
+            itemTypes?.Add(type!);
         }
 
         var atlas = ReadString();
@@ -123,7 +150,9 @@ internal sealed class CanonicalIdentityValidator
             capture.SpriteAtlasPath = atlas;
             capture.SpritePath = sprite;
         }
+
         var tagCount = ReadCount();
+        var tags = _decode ? new List<CanonicalIdentityTag>(tagCount) : null;
         string? previous = null;
         for (var i = 0; i < tagCount; i++)
         {
@@ -131,8 +160,8 @@ internal sealed class CanonicalIdentityValidator
             var key = ReadString();
             Require(key != null && (previous == null || StringComparer.Ordinal.Compare(previous, key) < 0));
             previous = key;
-            ReadString();
-            ReadString();
+            var tagIdentifier = ReadString();
+            var tagIdentifierName = ReadString();
             var enabled = ReadBool();
             var valueString = ReadString();
             var intValue = ReadInt32();
@@ -146,19 +175,28 @@ internal sealed class CanonicalIdentityValidator
                 (floatBits & 0x7fffffffU) != 0 || longValue != 0 ||
                 (doubleBits & 0x7fffffffffffffffUL) != 0 || boolValue);
             capture?.Tags.Add(key!, new CanonicalItemSummary.Tag(enabled, valueString, intValue));
+            tags?.Add(new CanonicalIdentityTag(key!, tagIdentifier, tagIdentifierName, enabled, valueString, intValue,
+                floatBits, unchecked((long)longValue), doubleBits, boolValue));
         }
 
         var featureCount = ReadCount();
+        var features = _decode ? new List<CanonicalIdentityFeature>(featureCount) : null;
         for (var i = 0; i < featureCount; i++)
         {
-            ReadFeature(capture);
+            var feature = ReadFeature(capture);
+            if (feature != null) features!.Add(feature);
         }
 
-        ReadItemWindow(1, itemDepth, nodeDepth);
-        ReadItemWindow(2, itemDepth, nodeDepth);
+        var content = ReadItemWindow(1, itemDepth, nodeDepth);
+        var examine = ReadItemWindow(2, itemDepth, nodeDepth);
+        if (!_decode) return default;
+        var item = new CanonicalIdentityInput(identifier!, itemTypes!, tags!, features!, name, shortDescription,
+            flavorText, unitBaseValue, unitValue, lateUnitValue, backupUnitValue, atlas, sprite, content, examine);
+        return new DecodedItem(item,
+            child ? new CanonicalIdentityChild(item, unitCount, originalShape!, modifiedShape!) : null);
     }
 
-    private void ReadFeature(CanonicalItemSummary.Builder? capture)
+    private CanonicalIdentityFeature? ReadFeature(CanonicalItemSummary.Builder? capture)
     {
         AddRecord();
         var featureType = ReadInt32();
@@ -177,119 +215,149 @@ internal sealed class CanonicalIdentityValidator
             }
         }
 
-        ReadString();
-        ReadString();
-        ReadString();
-        ReadInt32();
-        ReadBool();
+        var publicDisplay = ReadString();
+        var actualDisplay = ReadString();
+        var removedByTool = ReadString();
+        var valueModifier = ReadInt32();
+        var initiallyShown = ReadBool();
         var exposed = ReadBool();
-        ReadBool();
-        ReadBool();
-        ReadOptionalCondition();
-        ReadOptionalCondition();
-        ReadBool();
-        ReadBool();
-        ReadInt32();
-        ReadBool();
-        ReadBool();
-        ReadInt32();
+        var exposing = ReadBool();
+        var discovered = ReadBool();
+        var fakeCondition = ReadOptionalCondition();
+        var realCondition = ReadOptionalCondition();
+        var useCondition = ReadBool();
+        var usePreExposeValue = ReadBool();
+        var preExposeValueModifier = ReadInt32();
+        var exposable = ReadBool();
+        var publicHidden = ReadBool();
+        var customIntValue1 = ReadInt32();
         var disabled = ReadBool();
         var id = ReadString();
         Require(!string.IsNullOrWhiteSpace(id));
         Require(_featureIds.Add(id!));
         var category = ReadString();
         Require(category != null && !string.Equals(category, "contrabandMarkUp", StringComparison.Ordinal));
-        ReadBool();
+        var featureMatch = ReadBool();
         capture?.Features.Add(new CanonicalItemSummary.Feature(id!, exposed, disabled));
+        return _decode
+            ? new CanonicalIdentityFeature(id!, category!, featureType, stage, publicDisplay, actualDisplay,
+                removedByTool, valueModifier, initiallyShown, exposed, exposing, discovered, fakeCondition,
+                realCondition, useCondition, usePreExposeValue, preExposeValueModifier, exposable, publicHidden,
+                customIntValue1, disabled, featureMatch)
+            : null;
     }
 
-    private void ReadOptionalCondition()
+    private CanonicalIdentityCondition? ReadOptionalCondition()
     {
-        if (!ReadBool()) return;
+        if (!ReadBool()) return null;
         AddRecord();
-        ReadString();
-        ReadString();
-        ReadInt32();
-        ReadInt32();
-        ReadBool();
-        ReadString();
-        ReadBool();
-        ReadInt32();
-        ReadString();
-        ReadInt32();
+        var display = ReadString();
+        var identifier = ReadString();
+        var modValue = ReadInt32();
+        var modValueDisplay = ReadInt32();
+        var transformative = ReadBool();
+        var category = ReadString();
+        var hiddenAsPublic = ReadBool();
+        var customValue = ReadInt32();
+        var actionId = ReadString();
+        var compareValue = ReadInt32();
+        return _decode
+            ? new CanonicalIdentityCondition(display, identifier, modValue, modValueDisplay, transformative, category,
+                hiddenAsPublic, customValue, actionId, compareValue)
+            : null;
     }
 
-    private void ReadItemWindow(byte kind, int itemDepth, int nodeDepth)
+    private CanonicalIdentityNode? ReadItemWindow(byte kind, int itemDepth, int nodeDepth)
     {
-        if (!ReadBool()) return;
+        if (!ReadBool()) return null;
         AddEdge();
         _path.Add(new PathStep(kind));
-        ReadNode(itemDepth, nodeDepth + 1);
+        var node = ReadNode(itemDepth, nodeDepth + 1);
         _path.RemoveAt(_path.Count - 1);
+        return node;
     }
 
-    private void ReadNode(int itemDepth, int nodeDepth)
+    private CanonicalIdentityNode? ReadNode(int itemDepth, int nodeDepth)
     {
         Require(nodeDepth <= MaxNodeDepth && ++_nodes <= MaxNodes);
         var kind = ReadByte();
         switch (kind)
         {
             case 1:
-                ReadNodes(itemDepth, nodeDepth);
-                break;
+            {
+                var nodes = ReadNodes(itemDepth, nodeDepth);
+                return _decode ? CanonicalIdentityNode.Window(nodes!) : null;
+            }
             case 2:
-                ReadShape();
-                ReadItems(itemDepth, nodeDepth);
-                break;
+            {
+                var shape = ReadShape();
+                var items = ReadItems(itemDepth, nodeDepth);
+                return _decode ? CanonicalIdentityNode.Grid(shape!, items!) : null;
+            }
             case 3:
-                RequireDimension(ReadInt32());
-                RequireDimension(ReadInt32());
-                ReadBool();
-                ReadItems(itemDepth, nodeDepth);
-                break;
+            {
+                var width = ReadInt32();
+                RequireDimension(width);
+                var height = ReadInt32();
+                RequireDimension(height);
+                var alwaysStack = ReadBool();
+                var items = ReadItems(itemDepth, nodeDepth);
+                return _decode ? CanonicalIdentityNode.Scrollable(width, height, alwaysStack, items!) : null;
+            }
             case 4:
+            {
                 var orientation = ReadInt32();
                 Require(orientation >= 0 && orientation <= 3);
+                CanonicalIdentityChild? slotItem = null;
                 if (ReadBool())
                 {
                     AddEdge();
                     _path.Add(new PathStep(5));
-                    ReadItem(true, itemDepth + 1, nodeDepth);
+                    slotItem = ReadItem(true, itemDepth + 1, nodeDepth).Child;
                     _path.RemoveAt(_path.Count - 1);
                 }
 
-                ReadNodes(itemDepth, nodeDepth);
-                break;
+                var nodes = ReadNodes(itemDepth, nodeDepth);
+                return _decode ? CanonicalIdentityNode.Slot(orientation, slotItem, nodes!) : null;
+            }
             default:
                 throw new InvalidIdentityException();
         }
     }
 
-    private void ReadNodes(int itemDepth, int nodeDepth)
+    private List<CanonicalIdentityNode>? ReadNodes(int itemDepth, int nodeDepth)
     {
         var count = ReadCount();
+        var nodes = _decode ? new List<CanonicalIdentityNode>(count) : null;
         for (var i = 0; i < count; i++)
         {
             AddEdge();
             _path.Add(new PathStep(3, (uint)i));
-            ReadNode(itemDepth, nodeDepth + 1);
+            var node = ReadNode(itemDepth, nodeDepth + 1);
+            if (node != null) nodes!.Add(node);
             _path.RemoveAt(_path.Count - 1);
         }
+
+        return nodes;
     }
 
-    private void ReadItems(int itemDepth, int nodeDepth)
+    private List<CanonicalIdentityChild>? ReadItems(int itemDepth, int nodeDepth)
     {
         var count = ReadCount();
+        var items = _decode ? new List<CanonicalIdentityChild>(count) : null;
         for (var i = 0; i < count; i++)
         {
             AddEdge();
             _path.Add(new PathStep(4, (uint)i));
-            ReadItem(true, itemDepth + 1, nodeDepth);
+            var child = ReadItem(true, itemDepth + 1, nodeDepth).Child;
+            if (child != null) items!.Add(child);
             _path.RemoveAt(_path.Count - 1);
         }
+
+        return items;
     }
 
-    private void ReadShape()
+    private CanonicalIdentityShape? ReadShape()
     {
         var x = ReadInt32();
         var y = ReadInt32();
@@ -299,16 +367,25 @@ internal sealed class CanonicalIdentityValidator
         RequireDimension(height);
         var area = (long)width * height;
         Require(area <= MaxBytes);
-        ReadBool();
+        var flipped = ReadBool();
         var orientation = ReadInt32();
         Require(orientation >= 0 && orientation <= 3);
         var globalWidth = orientation % 2 == 0 ? width : height;
         var globalHeight = orientation % 2 == 0 ? height : width;
         Require((long)x + globalWidth - 1 <= int.MaxValue && (long)y + globalHeight - 1 <= int.MaxValue);
-        Require(ReadByte() <= 1);
+        var outside = ReadByte();
+        Require(outside <= 1);
         Require(ReadUInt32() == area);
         Require(area <= _data.Length - _offset);
-        for (var i = 0; i < area; i++) Require(ReadByte() <= 1);
+        var mask = _decode ? new byte[area] : null;
+        for (var i = 0; i < area; i++)
+        {
+            var bit = ReadByte();
+            Require(bit <= 1);
+            if (mask != null) mask[i] = bit;
+        }
+
+        return mask == null ? null : new CanonicalIdentityShape(x, y, width, height, flipped, orientation, outside, mask);
     }
 
     private static void RequireDimension(int value) => Require(value >= 1 && value <= 4096);
@@ -366,7 +443,7 @@ internal sealed class CanonicalIdentityValidator
 
     private int ReadInt32() => unchecked((int)ReadUInt32());
     private ulong ReadInt64Bits() => ((ulong)ReadUInt32() << 32) | ReadUInt32();
-    private void Skip(int count) { Require(count <= _data.Length - _offset); _offset += count; }
+    private long ReadInt64() => unchecked((long)ReadInt64Bits());
     private static void Require(bool condition) { if (!condition) throw new InvalidIdentityException(); }
 
     private readonly struct PathStep
@@ -374,6 +451,13 @@ internal sealed class CanonicalIdentityValidator
         internal PathStep(byte kind, uint index = 0) { Kind = kind; Index = index; }
         internal byte Kind { get; }
         internal uint Index { get; }
+    }
+
+    private readonly struct DecodedItem
+    {
+        internal DecodedItem(CanonicalIdentityInput item, CanonicalIdentityChild? child) { Item = item; Child = child; }
+        internal CanonicalIdentityInput? Item { get; }
+        internal CanonicalIdentityChild? Child { get; }
     }
 
     private sealed class InvalidIdentityException : Exception { }

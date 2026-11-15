@@ -42,7 +42,7 @@ public enum PinyinKeyboard
 /// <summary>Immutable pinyin, fuzzy matching, field-mode and syntax-highlighting options.</summary>
 public sealed class SearchConfiguration
 {
-    /// <summary>Creates options using full pinyin and the approved terminal field defaults.</summary>
+    /// <summary>Creates options using full pinyin and the terminal field defaults.</summary>
     public SearchConfiguration(PinyinKeyboard keyboard = PinyinKeyboard.Quanpin,
         bool enabled = true, bool zh2z = false, bool sh2s = false, bool ch2c = false,
         bool ang2an = false, bool ing2in = false, bool eng2en = false, bool u2v = false,

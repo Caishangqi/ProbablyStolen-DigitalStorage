@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
@@ -51,6 +52,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private Vector2? _positionBeforeSubScreen;
     private bool _closing;
     private bool _rebuilding;
+    private StoragePresentationPipeline? _pipeline;
 
     internal TerminalWindowHost(TerminalRegistry registry, StorageTerminalServices storage, ITerminalViewSettings settings,
         Func<bool> testViewEnabled, ButtonIcons icons) : this(registry, storage.Text, settings, testViewEnabled, storage.DiagnosticsEnabled,
@@ -77,6 +79,9 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     internal ModText Text => _text;
 
+    /// <summary>The button icons of this window, for pages that add icon buttons.</summary>
+    internal ButtonIcons ButtonIcons => Icons;
+
     private readonly ModText _text;
 
     /// <summary>The terminal item this window belongs to.</summary>
@@ -97,7 +102,19 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     int ITerminalViewHost.Rows => _rows;
 
+    ButtonIcons ITerminalViewHost.Icons => Icons;
+
     bool ITerminalViewHost.IsCurrentSession() => IsCurrentSession();
+
+    /// <summary>The storage extensions of this window, created once from the frozen registry.</summary>
+    internal StoragePresentationPipeline StoragePipeline => _pipeline ??= _registry.CreateStoragePipeline(WriteDiagnostic);
+
+    StoragePresentationPipeline ITerminalViewHost.Pipeline => StoragePipeline;
+
+    TerminalContext? ITerminalViewHost.Context => _host?.Context;
+
+    /// <summary>A fresh context of the window, or null while it is not open.</summary>
+    internal TerminalContext? CurrentContext => _host?.Context;
 
     /// <summary>Writes one diagnostic line to the mod log.</summary>
     internal void WriteDiagnostic(string message) => _writeDiagnostic(message);
@@ -114,6 +131,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     protected virtual GameItem? PositionOwner => _terminal;
 
     protected virtual ICurrentTerminalStore CreateCurrentTerminalStore() => new TerminalTags(Terminal);
+
+    protected virtual ITerminalFeatureData CreateFeatureData() => new TerminalFeatureData(Terminal, IsCurrentSession);
 
     protected virtual string HostLayerId => "digital_storage_terminal_viewport";
 
@@ -242,7 +261,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
         var handler = new UniversalTerminalHandler(_registry, CreateCurrentTerminalStore(), WriteDiagnostic);
         var bar = new VerticalButtonBar(_registry, handler, WriteDiagnostic);
-        _host = new TerminalHost(_registry, handler, bar, this, InstalledModules, _testViewEnabled, WriteDiagnostic, this);
+        _host = new TerminalHost(_registry, handler, bar, this, InstalledModules, _testViewEnabled, WriteDiagnostic, this,
+            CreateFeatureData());
         var host = _host;
         _dock = DockView.Create(_window, Text, Icons, bar, () => host.Context);
     }
@@ -315,7 +335,9 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     private void OnModulesChanged()
     {
-        if (_window != null && !_closing && IsCurrentSession()) _host?.Invalidate();
+        if (_window == null || _closing || !IsCurrentSession()) return;
+        StoragePipeline.Invalidate();
+        _host?.Invalidate();
     }
 
     private IReadOnlyCollection<string> InstalledModules()

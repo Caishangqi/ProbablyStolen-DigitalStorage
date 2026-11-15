@@ -8,9 +8,12 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 internal sealed class ButtonIcons : IDisposable
 {
     internal const string Placeholder = "button_placeholder";
+    internal const string Add = "button_add";
+    internal const string SampleAttributes = "button_sample_attributes";
     private readonly Action<string> _error;
     private readonly Dictionary<string, Sprite> _sprites = new(StringComparer.Ordinal);
     private readonly HashSet<string> _reported = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Sprite?> _frames = new(StringComparer.Ordinal);
     private Dictionary<string, Texture2D>? _textures;
 
     internal ButtonIcons(Action<string> error) => _error = error;
@@ -29,7 +32,8 @@ internal sealed class ButtonIcons : IDisposable
         {
             "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
             "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
-            "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete"
+            "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_stack",
+            Add, SampleAttributes
         }) TryCreate(key, out _);
     }
 
@@ -46,6 +50,43 @@ internal sealed class ButtonIcons : IDisposable
     {
         if (!Ready) throw new InvalidOperationException("Button placeholder is unavailable.");
         return TryCreate(key, out var sprite) ? sprite! : _sprites[Placeholder];
+    }
+
+    /// <summary>
+    /// Gets a slot overlay image of the icon size, drawn with point sampling so its pixels stay sharp when stretched
+    /// over a slot; null when the texture is missing, so a missing overlay is left out instead of drawn as a
+    /// placeholder.
+    /// </summary>
+    internal Sprite? Overlay(string key) => Ready && TryCreate(key, out var sprite) ? sprite : null;
+
+    /// <summary>
+    /// Gets a nine-slice frame image with <paramref name="border"/> pixels on each side, drawn with point sampling;
+    /// null when the texture is missing.
+    /// </summary>
+    internal Sprite? Frame(string key, int border)
+    {
+        if (_frames.TryGetValue(key, out var cached)) return cached;
+        Sprite? created = null;
+        try
+        {
+            if (_textures == null || !_textures.TryGetValue(key, out var texture) || texture == null ||
+                texture.width <= 2 * border || texture.height <= 2 * border)
+                throw new InvalidOperationException("Missing or invalid texture.");
+            texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            created = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f,
+                0, SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+            if (created == null) throw new InvalidOperationException("Sprite creation failed.");
+        }
+        catch (Exception error)
+        {
+            if (created != null) UnityEngine.Object.Destroy(created);
+            if (_reported.Add(key)) _error($"Digital Storage: frame {key} unavailable ({error.Message}).");
+            created = null;
+        }
+
+        _frames[key] = created;
+        return created;
     }
 
     private bool TryCreate(string key, out Sprite? sprite)
@@ -84,6 +125,9 @@ internal sealed class ButtonIcons : IDisposable
     {
         foreach (var sprite in _sprites.Values) UnityEngine.Object.Destroy(sprite);
         _sprites.Clear();
+        foreach (var frame in _frames.Values)
+            if (frame != null) UnityEngine.Object.Destroy(frame);
+        _frames.Clear();
         _textures = null;
     }
 }

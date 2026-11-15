@@ -24,7 +24,8 @@ internal sealed class MachineContentWindow
     }
 
     internal void Attach(GameItem machine, GridPixelElement? cellBays = null,
-        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false)
+        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false,
+        string[]? moduleTypes = null)
     {
         var battery = new GameSlotInventory();
         var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
@@ -68,7 +69,8 @@ internal sealed class MachineContentWindow
             SyncPowerPanel();
         }
 
-        MachineHelper.SetupModuleBay(modules, machine);
+        // Null keeps the native default, which accepts universal modules only.
+        MachineHelper.SetupModuleBay(modules, machine, null, moduleTypes);
         ModuleBayExpansionHooks.Initialize(machine);
         machine.mayStackItemFunc = (_, _) => false;
         machine.maxSlotAmountItemFunc = (_, _, _) => 1;

@@ -30,6 +30,9 @@ internal static class ItemPrices
     /// <summary>The equal distribution module's base value.</summary>
     internal const long EqualDistributionModule = 200;
 
+    /// <summary>The stack display module's base value.</summary>
+    internal const long StackDisplayModule = EqualDistributionModule;
+
     /// <summary>The definition value of a type limit module; synchronization requires a valid roll to reprice it.</summary>
     internal const long TypeLimitModule = 100;
 

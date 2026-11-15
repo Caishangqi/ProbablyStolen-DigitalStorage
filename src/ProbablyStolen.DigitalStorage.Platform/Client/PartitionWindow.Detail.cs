@@ -7,13 +7,13 @@ using UnityEngine.UI;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using static ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets.RuleCardWidgets;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 internal sealed partial class PartitionWindow
 {
-    private const float ControlHeight = 28f;
-    private const float CardPadding = 6f;
+    private const float ControlHeight = RuleCardWidgets.ControlHeight;
     private const float FieldWidth = 108f;
     private const float OperatorWidth = 76f;
     private const float ValueWidth = 140f;
@@ -21,10 +21,6 @@ internal sealed partial class PartitionWindow
     private const float RangeWidth = 56f;
     private const float UnitWidth = 32f;
     private const int CardsBeforeScroll = 4;
-    // Room kept beside the cards when the scroll view's scrollbar width cannot be read.
-    private const float ScrollGutter = 16f;
-    private static readonly Color CardFill = new(1f, 1f, 1f, 0.06f);
-    private static readonly Color StripeFill = new(1f, 1f, 1f, 0.04f);
     private readonly List<Image> _detailLayers = new();
     private PopupDropdown? _dropdown;
     private RectTransform? _summaryBox;
@@ -67,15 +63,15 @@ internal sealed partial class PartitionWindow
         builder.BeginRow(Gap, TextAnchor.MiddleLeft);
         FixWidth(builder.CurrentContainer.gameObject, BodyWidth);
         CustomUIElement? add = null;
-        add = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Placeholder, false,
-            () => OpenFieldPicker(add!, -1), 140f, ControlHeight);
+        add = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Add, false,
+            () => OpenFieldPicker(add!, -1), ControlHeight);
         TerminalTooltipPresenter.SetText(add, _text.Get("partition_add_condition"));
         builder.AddFlexibleSpace();
-        var sample = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Placeholder, _showSample, () =>
+        var sample = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.SampleAttributes, _showSample, () =>
         {
             _showSample = !_showSample;
             RefreshActiveDetail();
-        }, 140f, ControlHeight);
+        }, ControlHeight);
         TerminalTooltipPresenter.SetText(sample, _text.Get("partition_sample_attributes"));
         builder.End();
 
@@ -144,11 +140,7 @@ internal sealed partial class PartitionWindow
     private void BuildCard(CustomUIBuilder builder, RuleDraft rule, int index, float width)
     {
         var row = rule.Rows[index];
-        builder.BeginRow(Gap, TextAnchor.MiddleLeft);
-        Fill(builder.CurrentContainer.gameObject, CardFill);
-        if (builder.CurrentContainer.GetComponent<HorizontalLayoutGroup>() is { } card)
-            card.padding = new RectOffset((int)CardPadding, (int)CardPadding, (int)CardPadding, (int)CardPadding);
-        FixWidth(builder.CurrentContainer.gameObject, width);
+        RuleCardWidgets.BeginCard(builder, Gap, width);
 
         CustomUIElement? field = null;
         field = PopupDropdown.AddField(builder, FieldName(row.Field), FieldWidth, () => OpenFieldPicker(field!, index));
@@ -300,15 +292,7 @@ internal sealed partial class PartitionWindow
 
     private void BuildSummary(CustomUIBuilder builder, RuleDraft rule)
     {
-        builder.BeginColumn(2f);
-        var box = builder.CurrentContainer;
-        _summaryBox = box;
-        var image = box.gameObject.AddComponent<Image>();
-        image.sprite = MachineryStyle.Intake;
-        image.type = Image.Type.Sliced;
-        image.pixelsPerUnitMultiplier = 0.5f;
-        image.raycastTarget = false;
-        if (box.GetComponent<VerticalLayoutGroup>() is { } column) column.padding = new RectOffset(10, 10, 8, 8);
+        _summaryBox = BeginSpecBox(builder);
         FillSummary(builder, rule);
         builder.End();
     }
@@ -341,7 +325,7 @@ internal sealed partial class PartitionWindow
         {
             var value = SampleText(field);
             builder.BeginRow(8f, TextAnchor.MiddleLeft);
-            if (stripe) Fill(builder.CurrentContainer.gameObject, StripeFill);
+            if (stripe) Fill(builder.CurrentContainer.gameObject, RuleCardWidgets.StripeFill);
             stripe = !stripe;
             if (builder.CurrentContainer.GetComponent<HorizontalLayoutGroup>() is { } line)
                 line.padding = new RectOffset(8, 8, 2, 2);
@@ -355,48 +339,6 @@ internal sealed partial class PartitionWindow
                 builder.Last.text.color = value.Length == 0 ? MachineryStyle.BUTTON_TEXT_DISABLED : MachineryStyle.VALUE_TEXT;
             builder.End();
         }
-    }
-
-    private static void Ellipsis(CustomUIElement label)
-    {
-        if (label.text == null) return;
-        label.text.overflowMode = TextOverflowModes.Ellipsis;
-        label.text.enableWordWrapping = false;
-    }
-
-    private static float ScrollbarSpace(GameObject view)
-    {
-        var scroll = view.GetComponentInChildren<ScrollRect>(true);
-        var bar = scroll == null ? null : scroll.verticalScrollbar;
-        var width = bar == null ? 0f : ((RectTransform)bar.transform).rect.width;
-        return width > 0f ? width + Math.Max(0f, scroll!.verticalScrollbarSpacing) : ScrollGutter;
-    }
-
-    private static void FixWidth(GameObject target, float width)
-    {
-        var layout = target.GetComponent<LayoutElement>() ?? target.AddComponent<LayoutElement>();
-        layout.layoutPriority = 2;
-        layout.minWidth = layout.preferredWidth = width;
-        layout.flexibleWidth = 0f;
-    }
-
-    private static void Fill(GameObject target, Color color)
-    {
-        var image = target.GetComponent<Image>() ?? target.AddComponent<Image>();
-        image.sprite = MachineryStyle.White;
-        image.type = Image.Type.Simple;
-        image.color = color;
-        image.raycastTarget = false;
-    }
-
-    // TMP_InputField reports its text size at priority 1; priority 2 keeps long values from widening the card.
-    private static void SetSize(CustomUIElement control, float width, float height)
-    {
-        var layout = control.root.GetComponent<LayoutElement>() ?? control.root.AddComponent<LayoutElement>();
-        layout.layoutPriority = 2;
-        layout.minWidth = layout.preferredWidth = width;
-        layout.minHeight = layout.preferredHeight = height;
-        layout.flexibleWidth = layout.flexibleHeight = 0f;
     }
 
     private IEnumerable<PartitionField> MenuFields()

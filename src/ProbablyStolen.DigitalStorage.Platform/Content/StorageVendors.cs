@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -20,11 +21,11 @@ internal sealed class StorageVendors : IDisposable
 {
     internal const string EngineerId = "digital_storage.upper_engineer";
     // Dr. Jackson always stocks a machine the player does not own yet and a quarter of the time one already owned;
-    // the workbench and the equal distribution module follow the same rule.
+    // the workbench, the equal distribution module and the stack display module follow the same rule.
     private static readonly string[] Machines =
     {
         ControllerItem.ItemId, DriveItem.ItemId, TerminalItem.ItemId, CellWorkbenchItem.ItemId,
-        CellUpgradeInventory.EqualDistributionId
+        CellUpgradeInventory.EqualDistributionId, StackingModule.ModuleId
     };
     private readonly ModText _text;
     private readonly Func<int> _engineerDailyChance;
@@ -140,6 +141,7 @@ internal sealed class StorageVendors : IDisposable
             else if (roll <= 65) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
             else if (roll <= 75) PlayerStore.Instance.AddDirectSellingItemToTable(CellWorkbenchItem.ItemId);
             else if (roll <= 82) PlayerStore.Instance.AddDirectSellingItemToTable(CellUpgradeInventory.EqualDistributionId);
+            else if (roll <= 89) PlayerStore.Instance.AddDirectSellingItemToTable(StackingModule.ModuleId);
             else OfferTypeLimitModule(TypeLimitRolls.RollQuality(NativeRandom.Instance));
         }
     }

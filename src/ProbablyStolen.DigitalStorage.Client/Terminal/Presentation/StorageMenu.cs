@@ -116,32 +116,53 @@ public sealed class StorageMenu
     /// <summary>Changes the repository ordering used by <see cref="GetEntries"/>.</summary>
     public void SetSort(TerminalSortOrder order, TerminalSortDirection direction) => _repository.SetSort(order, direction);
 
-    /// <summary>Returns the current item entries in repository view order.</summary>
-    public IReadOnlyList<TerminalEntry> GetEntries() => _repository.GetView()
-        .Where(entry => entry.What is not null)
-        .Select(entry => entry.ToTerminalEntry())
-        .ToArray();
+    /// <summary>Replaces how entries are grouped; the view is rebuilt unless paused.</summary>
+    public void SetProjection(Func<IReadOnlyList<TerminalEntry>, IReadOnlyList<ProjectedGroup>> project) =>
+        _repository.SetProjection(project);
 
-    /// <summary>Routes an item action through the key currently assigned to a visible repository serial.</summary>
-    public TerminalExtractionResult HandleInteraction(long serial, long amount,
-        Func<TerminalEntry, long, TerminalExtractionResult> operation)
+    /// <summary>Returns the current display groups in view order, placeholders included while paused.</summary>
+    public IReadOnlyList<DisplayEntry> GetEntries() => _repository.GetView();
+
+    /// <summary>
+    /// Takes pieces from a shown slot: members in group order, each by its real key, until the request is met or a
+    /// member cannot be taken completely. The group must still be shown with the same members; otherwise nothing moves
+    /// and the caller refreshes. Moved pieces stay moved when a later member fails.
+    /// </summary>
+    /// <param name="shown">The group the player clicked, as captured by the shown page.</param>
+    /// <param name="requested">The pieces to take.</param>
+    /// <param name="extract">Takes up to the given pieces of one member and reports how many moved.</param>
+    public TerminalExtractionResult HandleGroupInteraction(DisplayEntry shown, long requested,
+        Func<TerminalEntry, long, TerminalExtractionResult> extract)
     {
-        if (operation == null) throw new ArgumentNullException(nameof(operation));
+        if (shown == null) throw new ArgumentNullException(nameof(shown));
+        if (extract == null) throw new ArgumentNullException(nameof(extract));
         if (!_linkState.IsConnected)
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, amount, 0,
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, requested, 0,
                 _linkState.StatusDescription ?? "terminal_storage_offline");
-
-        if (amount <= 0)
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.InvalidAmount, amount, 0,
+        if (requested <= 0)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.InvalidAmount, requested, 0,
                 "terminal_storage_invalid_amount");
 
-        var key = GetStackBySerial(serial);
-        var current = _repository.GetAllEntries().FirstOrDefault(entry => entry.Serial == serial);
-        if (key == null || current == null || current.What != key || !current.IsMeaningful())
-            return TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, amount, 0,
-                "terminal_storage_no_items");
+        var current = _repository.GetView().FirstOrDefault(group => group.Id == shown.Id && group.Total > 0);
+        if (current == null || !SameMembers(shown, current))
+            return NoItems(requested);
 
-        return operation(current.ToTerminalEntry(), amount);
+        long moved = 0;
+        TerminalExtractionResult? last = null;
+        foreach (var step in GroupExtractionPlan.Steps(current, requested))
+        {
+            var member = step.Member;
+            if (GetStackBySerial(member.Serial) != member.Key) break;
+            last = extract(member, step.Pieces);
+            moved = checked(moved + Math.Max(0, last.ExtractedAmount));
+            if (last.ExtractedAmount < step.Pieces) break;
+        }
+
+        if (moved >= requested)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, requested, moved, "terminal_storage_extracted");
+        if (moved > 0)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Partial, requested, moved, "terminal_storage_extracted");
+        return last ?? NoItems(requested);
     }
 
     /// <summary>Routes an insertion action while connected; the operation rechecks the current grid.</summary>
@@ -156,10 +177,18 @@ public sealed class StorageMenu
 
     private static InventoryEntryUpdate CreateEntry(long serial, TerminalEntry entry) =>
         new(serial, entry.Key, entry.Amount, displayName: entry.DisplayName, spriteKey: entry.SpriteKey,
-            spriteWidth: entry.SpriteWidth, spriteHeight: entry.SpriteHeight, searchDocument: entry.Document);
+            spriteWidth: entry.SpriteWidth, spriteHeight: entry.SpriteHeight, searchDocument: entry.Document,
+            totalUnits: entry.TotalUnits);
+
+    private static TerminalExtractionResult NoItems(long requested) =>
+        TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, requested, 0, "terminal_storage_no_items");
+
+    private static bool SameMembers(DisplayEntry shown, DisplayEntry current) =>
+        shown.Members.Select(member => member.Serial).OrderBy(serial => serial)
+            .SequenceEqual(current.Members.Select(member => member.Serial).OrderBy(serial => serial));
 
     private static bool Equivalent(TerminalEntry left, TerminalEntry right) =>
-        left.Amount == right.Amount && string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal) &&
+        left.Amount == right.Amount && left.TotalUnits == right.TotalUnits && string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal) &&
         string.Equals(left.SpriteKey, right.SpriteKey, StringComparison.Ordinal) &&
         left.SpriteWidth == right.SpriteWidth && left.SpriteHeight == right.SpriteHeight &&
         left.Document.HasSameContent(right.Document);

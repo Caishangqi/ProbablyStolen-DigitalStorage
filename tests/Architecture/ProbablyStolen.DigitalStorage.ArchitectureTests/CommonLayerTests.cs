@@ -133,7 +133,7 @@ public sealed class CommonLayerTests
     }
 
     /// <summary>Namespace-level dependencies between types defined in one assembly.</summary>
-    private static class NamespaceGraph
+    internal static class NamespaceGraph
     {
         private static readonly Dictionary<short, OpCode> OpCodesByValue = typeof(OpCodes)
             .GetFields(BindingFlags.Public | BindingFlags.Static)

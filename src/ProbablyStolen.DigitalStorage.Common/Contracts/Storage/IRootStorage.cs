@@ -29,6 +29,9 @@ public interface IRootStorage
     /// <summary>Adds the stored units of every type to the counter.</summary>
     void GetAvailableStacks(KeyCounter output);
 
+    /// <summary>Adds the stored roots of every type to the counter; a root is one physical item whatever its units.</summary>
+    void GetAvailablePieces(KeyCounter output);
+
     /// <summary>Gets a short description for logs.</summary>
     string GetDescription();
 }

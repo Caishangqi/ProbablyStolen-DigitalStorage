@@ -10,7 +10,7 @@ public sealed class InventoryEntryUpdate
     /// <summary>Creates a complete entry or an incremental update for a previous serial.</summary>
     public InventoryEntryUpdate(long serial, ItemKey? what, long storedAmount, long requestableAmount = 0,
         bool craftable = false, string? displayName = null, string? spriteKey = null, int spriteWidth = 1,
-        int spriteHeight = 1, SearchDocument? searchDocument = null)
+        int spriteHeight = 1, SearchDocument? searchDocument = null, long totalUnits = -1)
     {
         Serial = serial;
         What = what;
@@ -22,7 +22,11 @@ public sealed class InventoryEntryUpdate
         SpriteWidth = spriteWidth;
         SpriteHeight = spriteHeight;
         SearchDocument = searchDocument;
+        TotalUnits = totalUnits < 0 ? storedAmount : totalUnits;
     }
+
+    /// <summary>Gets the units the stored pieces hold together.</summary>
+    public long TotalUnits { get; }
 
     /// <summary>Gets the stable identifier for this key during the menu session.</summary>
     public long Serial { get; }
@@ -62,6 +66,7 @@ public sealed class InventoryEntryUpdate
         if (What is not ItemKey itemKey ||
             string.IsNullOrWhiteSpace(DisplayName) || string.IsNullOrWhiteSpace(SpriteKey))
             throw new InvalidOperationException("The terminal repository entry is incomplete for display.");
-        return new TerminalEntry(itemKey, StoredAmount, DisplayName, SpriteKey, SpriteWidth, SpriteHeight, Serial, SearchDocument);
+        return new TerminalEntry(itemKey, StoredAmount, DisplayName, SpriteKey, SpriteWidth, SpriteHeight, Serial, SearchDocument,
+            TotalUnits);
     }
 }

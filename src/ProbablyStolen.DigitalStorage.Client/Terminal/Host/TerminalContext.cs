@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 
@@ -12,9 +13,11 @@ public sealed class TerminalContext
     /// <param name="currentTerminal">The name of the shown terminal view.</param>
     /// <param name="commands">Host commands that buttons may call.</param>
     /// <param name="window">The platform window, passed through to view and sub-screen factories.</param>
+    /// <param name="featureData">Values stored on the terminal item, or null when the window has no terminal item.</param>
     public TerminalContext(IReadOnlyCollection<string> installedModules, bool testViewEnabled, string currentTerminal,
-        ITerminalCommands commands, object window)
+        ITerminalCommands commands, object window, ITerminalFeatureData? featureData = null)
     {
+        FeatureData = featureData ?? NoTerminalFeatureData.Instance;
         Window = window ?? throw new ArgumentNullException(nameof(window));
         InstalledModules = installedModules ?? throw new ArgumentNullException(nameof(installedModules));
         TestViewEnabled = testViewEnabled;
@@ -33,6 +36,9 @@ public sealed class TerminalContext
 
     /// <summary>Gets the host commands.</summary>
     public ITerminalCommands Commands { get; }
+
+    /// <summary>Gets the values stored on the terminal item.</summary>
+    public ITerminalFeatureData FeatureData { get; }
 
     /// <summary>Gets the platform window; client code only passes it to platform factories.</summary>
     public object Window { get; }

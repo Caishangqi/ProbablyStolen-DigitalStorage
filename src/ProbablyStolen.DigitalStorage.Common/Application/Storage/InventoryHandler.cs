@@ -64,5 +64,8 @@ public sealed class InventoryHandler : IRootStorage
     public void GetAvailableStacks(KeyCounter output) => _inner.GetAvailableStacks(output);
 
     /// <inheritdoc />
+    public void GetAvailablePieces(KeyCounter output) => _inner.GetAvailablePieces(output);
+
+    /// <inheritdoc />
     public string GetDescription() => _inner.GetDescription();
 }

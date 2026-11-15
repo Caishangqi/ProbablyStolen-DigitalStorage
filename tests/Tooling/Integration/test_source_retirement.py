@@ -125,7 +125,7 @@ class RetirementContractTests(unittest.TestCase):
         coordinator = (NETWORK / "GridNetworkPowerCoordinator.cs").read_text(encoding="utf-8")
         for required in ("StoreSelected(GameItem terminal",
                          "StoreSingle(GameItem terminal", "CanStore(GameItem terminal",
-                         "ExtractToPlayer(GameItem terminal", "_storage.Store(", "_storage.Extract("):
+                         "ExtractPiecesToPlayer(GameItem terminal", "_storage.Store(", "_storage.ExtractPieces("):
             self.assertIn(required, coordinator)
         for forbidden in ("storage.insert(", "storage.extract(", "PoweredExtraction", "Journal", "Codec"):
             self.assertNotIn(forbidden, coordinator)

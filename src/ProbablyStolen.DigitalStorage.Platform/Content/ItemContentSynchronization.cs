@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -214,7 +215,9 @@ internal static class ItemContentDefinitions
             [CellUpgradeInventory.TypeLimitId] = new(CellUpgradeInventory.TypeLimitId, "module_type_limit_name",
                 "module_type_limit_desc", ItemPrices.TypeLimitModule),
             [CellUpgradeInventory.EqualDistributionId] = new(CellUpgradeInventory.EqualDistributionId,
-                "module_equal_distribution_name", "module_equal_distribution_desc", ItemPrices.EqualDistributionModule)
+                "module_equal_distribution_name", "module_equal_distribution_desc", ItemPrices.EqualDistributionModule),
+            [StackingModule.ModuleId] = new(StackingModule.ModuleId, "module_stack_display_name",
+                "module_stack_display_desc", ItemPrices.StackDisplayModule)
         };
         foreach (var tier in StorageCellTier.All)
         {

@@ -8,10 +8,11 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 public readonly struct TypeUsage
 {
     /// <summary>Creates a usage entry.</summary>
-    public TypeUsage(long units, long areaUnits)
+    public TypeUsage(long units, long areaUnits, long pieces)
     {
         Units = units;
         AreaUnits = areaUnits;
+        Pieces = pieces;
     }
 
     /// <summary>Gets the stored native units.</summary>
@@ -19,6 +20,9 @@ public readonly struct TypeUsage
 
     /// <summary>Gets the stored area units: units * bounding width * bounding height.</summary>
     public long AreaUnits { get; }
+
+    /// <summary>Gets the stored roots, each one physical item whatever its unit count.</summary>
+    public long Pieces { get; }
 }
 
 /// <summary>Per-type and total usage of one cell; updated in place while one operation runs.</summary>
@@ -65,19 +69,16 @@ public sealed class CellUsage
         if (units <= 0 || areaUnits <= 0) throw new ArgumentException("A stored root has positive units and area.");
         var current = Get(key);
         var total = checked(AreaUnits + areaUnits);
-        _types[key] = new TypeUsage(checked(current.Units + units), checked(current.AreaUnits + areaUnits));
+        _types[key] = new TypeUsage(checked(current.Units + units), checked(current.AreaUnits + areaUnits),
+            checked(current.Pieces + 1));
         AreaUnits = total;
     }
 
-    /// <summary>Records an item root leaving the cell; the type stops counting once its last root leaves.</summary>
+    /// <summary>Records one whole root leaving the cell; the type stops counting once its last units leave.</summary>
     /// <exception cref="InvalidOperationException">More than the stored amount would be removed.</exception>
     public void Remove(ItemKey key, long units, long areaUnits)
     {
-        if (key == null) throw new ArgumentNullException(nameof(key));
-        if (units <= 0 || areaUnits <= 0) throw new ArgumentException("A stored root has positive units and area.");
-        if (!_types.TryGetValue(key, out var current) || current.Units < units || current.AreaUnits < areaUnits)
-            throw new InvalidOperationException("The cell does not hold that many units of the type.");
-
+        var current = Require(key, units, areaUnits);
         if (current.Units == units)
         {
             if (current.AreaUnits != areaUnits)
@@ -86,9 +87,30 @@ public sealed class CellUsage
         }
         else
         {
-            _types[key] = new TypeUsage(current.Units - units, current.AreaUnits - areaUnits);
+            // A type with units left still has at least one root, even if earlier counts came from older layouts.
+            _types[key] = new TypeUsage(current.Units - units, current.AreaUnits - areaUnits,
+                Math.Max(1, current.Pieces - 1));
         }
 
         AreaUnits -= areaUnits;
+    }
+
+    /// <summary>Records units leaving a root that stays stored, so the root count does not change.</summary>
+    public void RemoveUnits(ItemKey key, long units, long areaUnits)
+    {
+        var current = Require(key, units, areaUnits);
+        if (current.Units == units)
+            throw new InvalidOperationException("A root that stays stored keeps at least one unit.");
+        _types[key] = new TypeUsage(current.Units - units, current.AreaUnits - areaUnits, current.Pieces);
+        AreaUnits -= areaUnits;
+    }
+
+    private TypeUsage Require(ItemKey key, long units, long areaUnits)
+    {
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (units <= 0 || areaUnits <= 0) throw new ArgumentException("A stored root has positive units and area.");
+        if (!_types.TryGetValue(key, out var current) || current.Units < units || current.AreaUnits < areaUnits)
+            throw new InvalidOperationException("The cell does not hold that many units of the type.");
+        return current;
     }
 }

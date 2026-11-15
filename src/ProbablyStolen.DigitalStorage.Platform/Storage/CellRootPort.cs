@@ -205,9 +205,22 @@ internal sealed class ItemListSource : INativeRootSource
 internal sealed class InventoryRootSink : IRootSink
 {
     private readonly GameGridInventory _destination;
+    private readonly bool _wholeRootOnly;
 
-    internal InventoryRootSink(GameGridInventory destination) =>
+    /// <summary>Creates a sink into a player inventory.</summary>
+    /// <param name="destination">The inventory that receives roots.</param>
+    /// <param name="wholeRootOnly">
+    /// Whether a root the destination can only take in part stays stored. The native partial accept splits a new item
+    /// off without copying the root's full state, so the terminal never asks for it.
+    /// </param>
+    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false)
+    {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
+        _wholeRootOnly = wholeRootOnly;
+    }
+
+    /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
+    internal static bool AcceptsWhole(int transferable, int units) => units > 0 && transferable >= units;
 
     /// <summary>Gets the units that actually moved, including part of a root the destination only partly took.</summary>
     internal long MovedUnits { get; private set; }
@@ -231,7 +244,9 @@ internal sealed class InventoryRootSink : IRootSink
         try
         {
             if (!page.Expel(item)) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
-            moved = _destination.TryFindOneValidInventorySlot(item, keepOrientation: true)?.TryAcceptOnce(requested) ?? 0;
+            var slot = _destination.TryFindOneValidInventorySlot(item, keepOrientation: true);
+            if (slot != null && (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
+                moved = slot.TryAcceptOnce(requested);
         }
         catch (Exception exception)
         {

@@ -187,7 +187,7 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("_windows.Attach(item, bays, drivePriority: true)", drive)
         self.assertNotIn("configurePartitions:", drive)
         self.assertNotIn("new CellPartitionSource(slots[index])", drive)
-        self.assertIn("_windows.Attach(item);", terminal)
+        self.assertIn("_windows.Attach(item, moduleTypes: ModuleTypes);", terminal)
         scanner = (original / "Network/NativeNetworkScanner.cs").read_text(encoding="utf-8")
         self.assertIn("FindAdjacentType<GameItem>()", scanner)
         self.assertIn("ReferenceEquals(item.parentInventory, parentInventory)", scanner)

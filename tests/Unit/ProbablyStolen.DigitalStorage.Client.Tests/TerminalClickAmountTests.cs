@@ -7,26 +7,23 @@ namespace ProbablyStolen.DigitalStorage.Client.Tests;
 [TestFixture]
 public sealed class TerminalClickAmountTests
 {
-    [TestCase(TerminalClick.Stack, 2L, 4L, 2L)]
-    [TestCase(TerminalClick.Stack, 10L, 4L, 4L)]
-    [TestCase(TerminalClick.Stack, 3L, 1L, 1L)]
-    [TestCase(TerminalClick.Stack, 3L, 0L, 1L)]
-    [TestCase(TerminalClick.Stack, 3L, long.MaxValue, 3L)]
-    [TestCase(TerminalClick.Half, 10L, 4L, 2L)]
-    [TestCase(TerminalClick.Half, 10L, 5L, 3L)]
-    [TestCase(TerminalClick.Half, 2L, 4L, 1L)]
-    [TestCase(TerminalClick.Half, 1L, 4L, 1L)]
-    [TestCase(TerminalClick.All, 12345L, 4L, 12345L)]
-    public void For_ClickModifiers_ReturnExpectedAmount(TerminalClick click, long stored, long stackLimit, long expected)
+    [TestCase(TerminalClick.Stack, 4L, 1L)]
+    [TestCase(TerminalClick.Stack, 1L, 1L)]
+    [TestCase(TerminalClick.Half, 4L, 2L)]
+    [TestCase(TerminalClick.Half, 89L, 45L)]
+    [TestCase(TerminalClick.Half, 11L, 6L)]
+    [TestCase(TerminalClick.Half, 1L, 1L)]
+    [TestCase(TerminalClick.All, 12345L, 12345L)]
+    public void For_ClickModifiers_ReturnExpectedPieces(TerminalClick click, long pieces, long expected)
     {
-        Assert.That(TerminalClickAmount.For(click, stored, stackLimit), Is.EqualTo(expected));
+        Assert.That(TerminalClickAmount.For(click, pieces), Is.EqualTo(expected));
     }
 
     [TestCase(0L)]
     [TestCase(-1L)]
-    public void For_RejectsAnEmptyEntry(long stored)
+    public void For_RejectsAnEmptyEntry(long pieces)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(new Action(() => TerminalClickAmount.For(TerminalClick.All, stored, 4)));
+        Assert.Throws<ArgumentOutOfRangeException>(new Action(() => TerminalClickAmount.For(TerminalClick.All, pieces)));
     }
 
     [Test]

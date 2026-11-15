@@ -56,4 +56,13 @@ internal interface ITerminalViewHost
 
     /// <summary>Whether the window still belongs to the loaded game; closes the window when it does not.</summary>
     bool IsCurrentSession();
+
+    /// <summary>The window's button and overlay images.</summary>
+    ButtonIcons Icons { get; }
+
+    /// <summary>The storage extensions of this window.</summary>
+    ProbablyStolen.DigitalStorage.Client.Terminal.Extensions.StoragePresentationPipeline Pipeline { get; }
+
+    /// <summary>A fresh context of the window, or null while it is not open.</summary>
+    ProbablyStolen.DigitalStorage.Client.Terminal.Host.TerminalContext? Context { get; }
 }

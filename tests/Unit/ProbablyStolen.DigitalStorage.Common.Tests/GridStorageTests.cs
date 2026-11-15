@@ -105,6 +105,8 @@ public sealed class GridStorageTests
 
         public void GetAvailableStacks(KeyCounter output) => throw new NotSupportedException();
 
+        public void GetAvailablePieces(KeyCounter output) => throw new NotSupportedException();
+
         public string GetDescription() => "stub";
     }
 }

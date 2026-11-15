@@ -4,16 +4,21 @@ using System.Linq;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
-/// <summary>Maintains the client-side view of serial-addressed terminal inventory updates.</summary>
+/// <summary>
+/// The client-side display snapshot of one terminal: exact entries by serial, grouped by the current projection and
+/// sorted by group. Members inside a group follow the same sort, so the first member is the piece a click takes.
+/// While paused (Shift held), shown groups keep their slots and groups that disappeared leave empty placeholders.
+/// </summary>
 public sealed class ItemRepository : IItemRepository
 {
     private readonly Dictionary<long, InventoryEntryUpdate> _entries = new();
-    private readonly List<InventoryEntryUpdate> _view = new();
+    private readonly List<DisplayEntry> _view = new();
+    private Func<IReadOnlyList<TerminalEntry>, IReadOnlyList<ProjectedGroup>> _project = IdentityProjection.Project;
     private bool _paused;
     private TerminalSortOrder _sortOrder = TerminalSortOrder.Name;
     private TerminalSortDirection _sortDirection = TerminalSortDirection.Ascending;
 
-    /// <summary>Applies a complete snapshot or an incremental batch from the menu.</summary>
+    /// <inheritdoc />
     public void HandleUpdate(bool fullUpdate, IReadOnlyList<InventoryEntryUpdate> entries)
     {
         if (fullUpdate) Clear();
@@ -37,50 +42,48 @@ public sealed class ItemRepository : IItemRepository
 
         _entries[update.Serial] = update.What == null
             ? new InventoryEntryUpdate(current.Serial, current.What, update.StoredAmount, update.RequestableAmount,
-                update.Craftable, current.DisplayName, current.SpriteKey, current.SpriteWidth, current.SpriteHeight, current.SearchDocument)
+                update.Craftable, current.DisplayName, current.SpriteKey, current.SpriteWidth, current.SpriteHeight,
+                current.SearchDocument, update.TotalUnits)
             : update;
     }
 
-    /// <summary>Rebuilds the ordered view, preserving visible positions while paused.</summary>
+    /// <summary>
+    /// Replaces the projection and rebuilds the view, even while paused: groups of another projection have other
+    /// identifiers, so kept positions would only leave empty duplicates.
+    /// </summary>
+    public void SetProjection(Func<IReadOnlyList<TerminalEntry>, IReadOnlyList<ProjectedGroup>> project)
+    {
+        _project = project ?? throw new ArgumentNullException(nameof(project));
+        _view.Clear();
+        _view.AddRange(Sort(BuildGroups()));
+    }
+
+    /// <summary>Rebuilds the grouped, sorted view; while paused, shown groups keep their positions.</summary>
     public void UpdateView()
     {
+        var groups = BuildGroups();
         if (_paused)
         {
-            var serials = new HashSet<long>();
+            var current = groups.ToDictionary(group => group.Id, StringComparer.Ordinal);
+            var shownIds = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < _view.Count; index++)
             {
                 var shown = _view[index];
-                if (_entries.TryGetValue(shown.Serial, out var current)) _view[index] = current;
-                else _view[index] = new InventoryEntryUpdate(shown.Serial, shown.What, 0, 0, false,
-                    shown.DisplayName, shown.SpriteKey, shown.SpriteWidth, shown.SpriteHeight, shown.SearchDocument);
-                serials.Add(shown.Serial);
+                _view[index] = current.TryGetValue(shown.Id, out var group) ? group : Placeholder(shown);
+                shownIds.Add(shown.Id);
             }
-            foreach (var entry in Sort(_entries.Values.Where(entry => !serials.Contains(entry.Serial))))
-            {
-                var emptyIndex = _view.FindIndex(shown => !shown.IsMeaningful() && Equals(shown.What, entry.What));
-                if (emptyIndex >= 0) _view[emptyIndex] = entry;
-                else _view.Add(entry);
-            }
+
+            // A group that comes back keeps its identifier, so it already took its old slot above.
+            _view.AddRange(Sort(groups.Where(group => !shownIds.Contains(group.Id))));
+
             return;
         }
 
         _view.Clear();
-        _view.AddRange(Sort(_entries.Values.Where(entry => entry.IsMeaningful())));
+        _view.AddRange(Sort(groups));
     }
 
-    private IOrderedEnumerable<InventoryEntryUpdate> Sort(IEnumerable<InventoryEntryUpdate> entries)
-    {
-        var descending = _sortDirection == TerminalSortDirection.Descending;
-        var ordered = _sortOrder == TerminalSortOrder.Amount
-            ? descending ? entries.OrderByDescending(entry => entry.StoredAmount) : entries.OrderBy(entry => entry.StoredAmount)
-            : descending
-                ? entries.OrderByDescending(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
-                : entries.OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase);
-        // Ties fall back to a fixed name then key order so equal amounts never swap between refreshes.
-        return ordered.ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.What);
-    }
-
-    /// <summary>Changes the ordering; while paused the visible positions stay until resorting resumes.</summary>
+    /// <inheritdoc cref="SetSort" />
     public void SetSort(TerminalSortOrder order, TerminalSortDirection direction)
     {
         if (_sortOrder == order && _sortDirection == direction) return;
@@ -89,14 +92,14 @@ public sealed class ItemRepository : IItemRepository
         if (!_paused) UpdateView();
     }
 
-    /// <summary>Removes all current entries and visible positions.</summary>
+    /// <summary>Removes every entry and the view.</summary>
     public void Clear()
     {
         _entries.Clear();
         _view.Clear();
     }
 
-    /// <summary>Pauses resorting until resumed, retaining current visible serial positions.</summary>
+    /// <summary>Pauses or resumes resorting; resuming rebuilds the view.</summary>
     public void SetPaused(bool paused)
     {
         if (_paused == paused) return;
@@ -104,9 +107,45 @@ public sealed class ItemRepository : IItemRepository
         if (!paused) UpdateView();
     }
 
-    /// <summary>Returns the current meaningful entries keyed by their stable serials.</summary>
+    /// <inheritdoc />
     public IReadOnlyCollection<InventoryEntryUpdate> GetAllEntries() => _entries.Values.ToArray();
 
-    /// <summary>Returns the visible ordering, including empty placeholders while paused.</summary>
-    public IReadOnlyList<InventoryEntryUpdate> GetView() => _view.ToArray();
+    /// <summary>Gets the groups in view order, placeholders included while paused.</summary>
+    public IReadOnlyList<DisplayEntry> GetView() => _view.ToArray();
+
+    private IReadOnlyList<DisplayEntry> BuildGroups()
+    {
+        var entries = _entries.Values.Where(entry => entry.What != null && entry.IsMeaningful())
+            .Select(entry => entry.ToTerminalEntry()).ToArray();
+        var groups = _project(entries);
+        return groups.Select(group => new DisplayEntry(group.Id, OrderMembers(group.Members))).ToArray();
+    }
+
+    private IEnumerable<TerminalEntry> OrderMembers(IEnumerable<TerminalEntry> members)
+    {
+        var descending = _sortDirection == TerminalSortDirection.Descending;
+        var ordered = _sortOrder == TerminalSortOrder.Amount
+            ? descending ? members.OrderByDescending(member => member.Amount) : members.OrderBy(member => member.Amount)
+            : descending
+                ? members.OrderByDescending(member => member.DisplayName, StringComparer.OrdinalIgnoreCase)
+                : members.OrderBy(member => member.DisplayName, StringComparer.OrdinalIgnoreCase);
+        // Ties follow identity order, so the first member stays the same between refreshes.
+        return ordered.ThenBy(member => member.GetIdentitySortKey(), StringComparer.Ordinal);
+    }
+
+    private IEnumerable<DisplayEntry> Sort(IEnumerable<DisplayEntry> groups)
+    {
+        var descending = _sortDirection == TerminalSortDirection.Descending;
+        var ordered = _sortOrder == TerminalSortOrder.Amount
+            ? descending ? groups.OrderByDescending(group => group.Total) : groups.OrderBy(group => group.Total)
+            : descending
+                ? groups.OrderByDescending(group => group.Representative.DisplayName, StringComparer.OrdinalIgnoreCase)
+                : groups.OrderBy(group => group.Representative.DisplayName, StringComparer.OrdinalIgnoreCase);
+        // Ties fall back to a fixed name then key order so equal amounts never swap between refreshes.
+        return ordered.ThenBy(group => group.Representative.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(group => group.Representative.Key).ThenBy(group => group.Id, StringComparer.Ordinal);
+    }
+
+    private static DisplayEntry Placeholder(DisplayEntry shown) =>
+        shown.Total == 0 ? shown : new DisplayEntry(shown.Id, new[] { shown.Representative.WithAmount(0) });
 }

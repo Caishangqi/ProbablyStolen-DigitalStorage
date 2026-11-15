@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Host;
@@ -17,14 +18,16 @@ public sealed class TerminalHost : ITerminalCommands
     private readonly Func<bool> _testViewEnabled;
     private readonly Action<string> _diagnostic;
     private readonly object _window;
+    private readonly ITerminalFeatureData? _featureData;
     private readonly Dictionary<string, object?> _states = new(StringComparer.Ordinal);
     private bool _fallbackOnReturn;
 
     /// <summary>Creates the host of one terminal window.</summary>
     public TerminalHost(TerminalRegistry registry, UniversalTerminalHandler handler, VerticalButtonBar bar,
         ITerminalHostView view, Func<IReadOnlyCollection<string>> installedModules, Func<bool> testViewEnabled,
-        Action<string> diagnostic, object window)
+        Action<string> diagnostic, object window, ITerminalFeatureData? featureData = null)
     {
+        _featureData = featureData;
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
@@ -49,7 +52,7 @@ public sealed class TerminalHost : ITerminalCommands
     public bool InSubScreen => SubScreen != null;
 
     /// <summary>Gets a fresh context for evaluating buttons and views.</summary>
-    public TerminalContext Context => new(_installedModules(), _testViewEnabled(), CurrentTerminal, this, _window);
+    public TerminalContext Context => new(_installedModules(), _testViewEnabled(), CurrentTerminal, this, _window, _featureData);
 
     /// <summary>Shows the stored view, or the default view when it cannot show.</summary>
     public void Open()

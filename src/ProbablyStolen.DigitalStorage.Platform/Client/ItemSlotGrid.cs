@@ -29,6 +29,9 @@ internal enum SlotTone
 /// </summary>
 internal sealed class ItemSlotGrid
 {
+    /// <summary>The border width between a slot panel and its button.</summary>
+    internal const float SlotPadding = 2f;
+
     private readonly ItemPictureCapture _pictures;
     private readonly bool _showBadge;
     private readonly float _cellPixels;
@@ -67,7 +70,7 @@ internal sealed class ItemSlotGrid
         for (var index = 0; index < count; index++)
         {
             var slotIndex = index;
-            builder.BeginPanel(_cellPixels, _cellPixels, padding: 2f, spacing: 0f, id: null);
+            builder.BeginPanel(_cellPixels, _cellPixels, padding: SlotPadding, spacing: 0f, id: null);
             if (index == 0) Root = builder.Last.Rect.parent as RectTransform;
             ConfigureBorder(builder.Last);
             builder.AddPointerButton(string.Empty, () => click(slotIndex), null);
@@ -100,6 +103,20 @@ internal sealed class ItemSlotGrid
         if (button?.button != null) button.button.interactable = interactable;
         ShowPicture(index, null, occupied: false);
         Badge(index)?.SetVisible(false);
+    }
+
+    /// <summary>
+    /// Gets the panel that holds a slot's overlays and the child position just below its quantity badge, or null
+    /// outside the grid.
+    /// </summary>
+    internal RectTransform? OverlayParent(int index, out int siblingIndex)
+    {
+        siblingIndex = 0;
+        var button = Button(index);
+        if (button?.root == null || button.root.transform.parent is not RectTransform panel) return null;
+        var badge = Badge(index);
+        siblingIndex = badge?.root != null ? badge.root.transform.GetSiblingIndex() : panel.childCount;
+        return panel;
     }
 
     /// <summary>Shows an occupied slot. A null badge text hides the badge.</summary>

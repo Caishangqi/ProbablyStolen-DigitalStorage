@@ -83,8 +83,15 @@ PRE_BUTTON_RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
     *DATA_RESOURCE_FILES,
     *SEARCH_RESOURCE_FILES[1:],
 )
-RESOURCE_FILES = (*PRE_BUTTON_RESOURCE_FILES, *(f"Textures/{name}.png" for name in BUTTON_ASSETS))
+# Textures of the stack display module and its pages; an installation without them has the pre-stacking layout.
+STACKING_RESOURCE_FILES = ("Textures/Items/module_type_stack_display.png", "Textures/button_stack.png",
+    "Textures/button_add.png", "Textures/annotation_square.png", "Textures/window_frame.png",
+    "Textures/button_sample_attributes.png")
+PRE_STACKING_RESOURCE_FILES = (*PRE_BUTTON_RESOURCE_FILES,
+    *(f"Textures/{name}.png" for name in BUTTON_ASSETS if f"Textures/{name}.png" not in STACKING_RESOURCE_FILES))
+RESOURCE_FILES = (*PRE_STACKING_RESOURCE_FILES, *STACKING_RESOURCE_FILES)
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
+PRE_STACKING_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *PRE_STACKING_RESOURCE_FILES)
 PRE_BUTTON_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *PRE_BUTTON_RESOURCE_FILES)
 HISTORICAL_RESOURCE_FILES = tuple(name for name in PRE_BUTTON_RESOURCE_FILES if name not in DATA_RESOURCE_FILES)
 PRE_DATA_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *HISTORICAL_RESOURCE_FILES)
@@ -108,6 +115,7 @@ RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LE
 # Each known installation layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
     ("current", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("pre-stacking-current", PRE_STACKING_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("pre-button-current", PRE_BUTTON_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("pre-data-current", PRE_DATA_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous-api", PREVIOUS_API_FILES, CURRENT_PLATFORM_ASSEMBLY),
@@ -347,7 +355,7 @@ def validate_package_directory(
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES, PREVIOUS_API_FILES, PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PRE_STACKING_CURRENT_FILES, PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES, PREVIOUS_API_FILES, PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break
