@@ -1,5 +1,4 @@
 using System;
-using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using UnityEngine;
@@ -7,14 +6,14 @@ using UnityEngine.UI;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Modules;
 
-/// <summary>Displays the borrowed native module panel and its registered stage.</summary>
+/// <summary>Displays the borrowed native module panel.</summary>
 internal sealed class TerminalModulesScreen : SubScreen
 {
     private ModuleBayHost? _bayHost;
     private IDisposable? _layoutChanges;
     private MachineryPanel? _panel;
     private LayoutElement? _holderLayout;
-    private CustomUIElement? _status;
+    private CustomUIElement? _unavailableMessage;
 
     internal TerminalModulesScreen(TerminalWindowHost window) : base(window) { }
     internal override string UnavailableKey => "terminal_modules_unavailable";
@@ -31,15 +30,15 @@ internal sealed class TerminalModulesScreen : SubScreen
         SetHolderSize();
         _bayHost = new ModuleBayHost(Window.WriteDiagnostic);
         if (!_bayHost.Show(panel, row, holder)) return false;
-        builder.AddLabel(string.Empty);
-        _status = builder.Last;
-        RefreshStatus();
+        builder.AddLabel(Window.Text.Get(UnavailableKey));
+        _unavailableMessage = builder.Last;
+        RefreshAvailability();
         _layoutChanges = ModuleBayExpansionHooks.Api?.SubscribeLayoutChanged((item, _) =>
         {
             if (!ReferenceEquals(item, Window.Terminal)) return;
             ResetNaturalSize(panel);
             SetHolderSize();
-            RefreshStatus();
+            RefreshAvailability();
             Window.FitSubScreenContent(this);
         });
         return true;
@@ -60,14 +59,12 @@ internal sealed class TerminalModulesScreen : SubScreen
         _holderLayout.minHeight = _holderLayout.preferredHeight = _panel.heightPixels * scale;
     }
 
-    private void RefreshStatus()
+    private void RefreshAvailability()
     {
-        if (_status == null) return;
-        ModuleBayState? state = ModuleBayExpansionHooks.Api?.GetState(Window.Terminal);
-        _status.SetText(state?.Available == true
-            ? string.Format(Window.Text.Get("terminal_modules_stage"), state.Stage, state.MaximumStage,
-                state.Definition!.Stage(state.Stage).Layout.AvailableCells)
-            : Window.Text.Get(UnavailableKey));
+        if (_unavailableMessage == null) return;
+        // Querying the state also locks a bay whose layout does not match its recorded stage.
+        var state = ModuleBayExpansionHooks.Api?.GetState(Window.Terminal);
+        _unavailableMessage.root.SetActive(state?.Available != true);
     }
 
     internal override void Dispose()
@@ -78,7 +75,7 @@ internal sealed class TerminalModulesScreen : SubScreen
         _bayHost = null;
         _holderLayout = null;
         _panel = null;
-        _status = null;
+        _unavailableMessage = null;
         base.Dispose();
     }
 }

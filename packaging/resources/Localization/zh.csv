@@ -1,19 +1,19 @@
 terminal_name,终端
 terminal_desc,访问存储网络中的物品.
 terminal_storage_title,终端
-terminal_storage_drag_hint,将拖动的 {0} 个堆叠放入「{1}」. 松开鼠标尝试存入; 拒收物品留在原处.
-terminal_storage_drag_rejected,当前拖动物品无法存入. 请使用整堆拖动, 并检查物品支持状态、容量和网络; 物品保留在原处.
-terminal_storage_whole_stack_only,拖入目前需要整个堆叠. 所选部分数量未存入, 物品保留在原处.
+terminal_storage_drag_hint,松开鼠标，将拖动的 {0} 个堆叠存入「{1}」。无法存入的物品留在原处。
+terminal_storage_drag_rejected,无法存入拖动的物品。请拖动整个堆叠，并检查物品状态、剩余容量和网络连接。物品留在原处。
+terminal_storage_whole_stack_only,请拖动整个堆叠。选中的部分物品未存入，仍留在原处。
 terminal_diagnostics_name,终端诊断日志
-terminal_diagnostics_desc,将限量的 UI 层级和拖拽事件写入 Player.log. 不记录物品名称或保存状态.
+terminal_diagnostics_desc,将界面层级和拖动操作的诊断信息写入 Player.log，并限制日志量。不记录物品名称或保存状态。
 debug_item_identity_log_name,物品身份日志
-debug_item_identity_log_desc,"调试用. 开启后, 点击终端格子会把其中物品的完整身份 (含标签与特征取值) 写入 Player.log, 并记录同种物品在堆叠规则下仍分开的原因. 日志量很大, 平时请保持关闭."
+debug_item_identity_log_desc,调试用。点击终端格子时，将物品的完整身份写入 Player.log，包括标签和特征取值，并记录同种物品在堆叠规则下仍分开显示的原因。日志量很大，平时请保持关闭。
 terminal_storage_search_placeholder,搜索物品
 config_section_terminal_search,终端搜索
 terminal_search_keyboard_name,拼音键盘
 terminal_search_keyboard_desc,用于拼音搜索的键盘布局.
 terminal_search_pinyin_mode_name,拼音搜索
-terminal_search_pinyin_mode_desc,自动模式仅在中文语言下启用拼音; 开启和关闭会覆盖语言设置.
+terminal_search_pinyin_mode_desc,自动模式仅在游戏语言为中文时启用拼音搜索。选择开启或关闭时，不受游戏语言影响。
 terminal_search_pinyin_mode_option_auto,自动
 terminal_search_pinyin_mode_option_on,开启
 terminal_search_pinyin_mode_option_off,关闭
@@ -40,7 +40,7 @@ terminal_search_descriptions_desc,搜索简短描述、完整描述和风味文�
 terminal_search_identifiers_name,标识符搜索模式
 terminal_search_identifiers_desc,搜索物品标识符.
 terminal_search_highlighting_name,搜索语法高亮
-terminal_search_highlighting_desc,为查询语法着色,不改变原始输入.
+terminal_search_highlighting_desc,为搜索语法着色，输入内容保持原样。
 terminal_storage_loading,正在加载库存...
 terminal_storage_offline,网络离线
 terminal_storage_empty,没有匹配物品
@@ -48,11 +48,11 @@ terminal_storage_invalid_amount,请输入正整数数量.
 terminal_storage_no_items,没有可取出的物品.
 terminal_storage_insufficient_power,电力不足.
 terminal_storage_target_rejected,玩家库存无法接收完整堆叠.
-terminal_storage_unsupported_item,此物品状态不受安全支持.
-terminal_storage_commit_failed,转移已停止, 已确认数量: {0}. 请核对保留的物品和恢复提示.
+terminal_storage_unsupported_item,无法存储此物品的当前状态。
+terminal_storage_commit_failed,转移已停止，已确认转移数量: {0}。请核对保留的物品，并查看恢复提示。
 terminal_storage_extracted,已取出 {0} 件物品.
 terminal_storage_inserted,已存入 {0} 个物品.
-terminal_storage_capacity_rejected,没有完整的受支持堆叠可以放入.
+terminal_storage_capacity_rejected,没有可以整堆存入的受支持物品。
 storage_cell_not_empty,拆出存储组件前必须先清空存储元件.
 storage_cell_bytes_used,已用格子: {0} / {1}.
 storage_cell_types_used,已用类型: {0} / {1}.
@@ -91,16 +91,16 @@ storage_pages_panel,存储空间
 modules_panel,模块
 cells_panel,存储元件
 network_power_controller_name,控制器耗电
-network_power_controller_desc,每次原生夜间结算为接入网络的控制器扣除的游戏功率单位. 默认: 3.
+network_power_controller_desc,每晚结算时，接入网络的控制器消耗的游戏功率单位。默认: 3。
 network_power_drive_name,驱动器耗电
-network_power_drive_desc,每次原生夜间结算为每台接入的驱动器扣除的游戏功率单位. 默认: 2.
+network_power_drive_desc,每晚结算时，每台接入网络的驱动器消耗的游戏功率单位。默认: 2。
 network_power_terminal_name,终端耗电
-network_power_terminal_desc,每次原生夜间结算为每台接入的终端扣除的游戏功率单位. 默认: 1.
+network_power_terminal_desc,每晚结算时，每台接入网络的终端消耗的游戏功率单位。默认: 1。
 network_tooltip_state,网络状态: {0}
 network_tooltip_drive_slots,驱动器已占用槽位: {0}/{1}
-network_module_stats_scope,原生模块属性当前不改变本网络耗电, 也不提供数字吞吐或质量加成.
+network_module_stats_scope,模块属性不影响存储网络耗电，也不提供物品吞吐或质量加成。
 network_status_online,在线
-network_status_unpowered,离线 (未供电)
+network_status_unpowered,未供电，网络离线
 network_status_no_controller,无控制器
 network_status_controller_conflict,控制器冲突
 cell_storage_partition_invalid,分区设置无效, 已停用
@@ -127,23 +127,23 @@ terminal_size_tall,高
 terminal_size_full,全屏
 config_section_terminal_view,终端显示
 terminal_view_sort_name,排序方式
-terminal_view_sort_desc,终端物品的排序依据. 也可以用终端左侧的按钮切换, 切换后会记住.
+terminal_view_sort_desc,终端物品的排序依据。也可用终端左侧按钮切换，设置会自动保存。
 terminal_view_direction_name,排序方向
-terminal_view_direction_desc,升序或降序. 也可以用终端左侧的按钮切换, 切换后会记住.
+terminal_view_direction_desc,按升序或降序排列。也可用终端左侧按钮切换，设置会自动保存。
 terminal_view_size_name,终端高度
-terminal_view_size_desc,终端窗口占屏幕高度的比例. 也可以用终端左侧的按钮切换, 切换后会记住.
+terminal_view_size_desc,终端窗口占屏幕高度的比例。也可用终端左侧按钮切换，设置会自动保存。
 partition_view_size_name,分区窗口高度
-partition_view_size_desc,元件分区窗口占屏幕高度的比例. 也可以用分区窗口左侧的按钮切换, 切换后会记住.
+partition_view_size_desc,元件分区窗口占屏幕高度的比例。也可用分区窗口左侧按钮切换，设置会自动保存。
 terminal_hint_title,操作
 terminal_hint_left,左键: 取出 1 件
-terminal_hint_right,右键: 取出该格一半的件数 (不会拆分物品)
+terminal_hint_right,右键: 取出该格一半的件数
 terminal_hint_shift,Shift+左键: 取出全部
 config_section_power,网络耗电
 config_section_debug,调试
 debug_show_cell_pages_name,双击存储元件时显示存储页
 debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其中的存储页; 关闭时只显示存储组件. 存储页始终锁定, 物品只能通过终端存取.
 config_section_vendors,商人
-upper_engineer_daily_chance_name,上层区工程师每日来访概率 (%)
+upper_engineer_daily_chance_name,上层区工程师每日来访概率 %
 upper_engineer_daily_chance_desc,每天生成顾客时上层区工程师加入队伍的概率. 范围 0-100. 默认: 25. 设为 0 则不再来访.
 upper_engineer_name,上层区工程师
 upper_engineer_greet_1,上层区的数据中心又换了一批存储设备. 淘汰下来的零件扔了可惜.
@@ -160,25 +160,25 @@ cell_storage_bytes,已用 {0}/{1} 字节
 cell_storage_types,{0}/{1} 种物品
 cell_storage_partition_include,白名单 · {0}/{1} 条规则
 cell_storage_partition_exclude,黑名单 · {0}/{1} 条规则
-cell_storage_schema,存储格式 v{0}（最新 v{1}）
-cell_storage_migration_refused,待迁移：需要先取出部分物品
-cell_storage_migration_failed,迁移失败：请不要存档，退出后重新载入
+cell_storage_schema,存储格式 v{0}，最新为 v{1}
+cell_storage_migration_refused,待迁移: 需要先取出部分物品
+cell_storage_migration_failed,迁移失败: 请不要存档，退出后重新载入
 cell_storage_compaction_blocked,空页回收失败，元件仍可使用
-cell_storage_locked,已锁定：请先安装模组 {0} 载入并保存此存档，再升级
-cell_storage_schema_too_new,需要更新模组：本模组支持到存储格式 v{0}
-cell_storage_rollback_failed,页面清理失败：请不要存档，退出后重新载入
+cell_storage_locked,已锁定: 请先安装模组 {0} 载入并保存此存档，再升级
+cell_storage_schema_too_new,需要更新模组: 本模组支持到存储格式 v{0}
+cell_storage_rollback_failed,页面清理失败: 请不要存档，退出后重新载入
 cell_storage_type_limit_invalid,种类上限设置无效，元件已停用
 terminal_storage_reject_capacity,存储元件的剩余字节不足以放入此物品。
 terminal_storage_reject_quota,此物品种类已用完它在存储元件中的均分容量。
 terminal_storage_reject_read_only,此存储元件在迁移完成前只能取出物品。
-terminal_storage_reject_partition_unknown,存储元件的分区无法判定此物品：规则用到了尚未知道的属性。
+terminal_storage_reject_partition_unknown,无法判断此物品是否符合分区规则: 规则中有尚未得知的属性。
 terminal_storage_reject_partition_invalid,存储元件的分区设置无效，请在元件工作台中重新应用。
 partition_field_item,物品
 partition_field_type,类型
 partition_field_legality,合法性
 partition_field_stolen,赃物状态
 partition_field_heat,赃物热度
-partition_field_feature,特征：{0}
+partition_field_feature,特征: {0}
 partition_unit_percent,%
 workbench_name,元件工作台
 workbench_desc,配置存储元件分区并装卸元件模块。无需供电或接入网络。
@@ -196,18 +196,18 @@ workbench_reject_schema,此元件需要先用旧版本模组升级。
 workbench_reject_unavailable,此元件当前不可用。
 workbench_reject_not_owned,此元件不归你所有。
 module_type_limit_name,种类上限模块
-module_type_limit_desc,提高存储元件的种类上限。在元件工作台中安装到元件。
+module_type_limit_desc,提高存储元件的种类上限。请在元件工作台中安装。
 module_equal_distribution_name,均分模块
-module_equal_distribution_desc,让存储元件的容量在各种类之间均分。每个元件限一个。在元件工作台中安装到元件。
+module_equal_distribution_desc,将存储元件的容量按物品种类均分。每个元件限装一个，请在元件工作台中安装。
 module_quality_common,普通
 module_quality_rare,稀有
 module_quality_epic,史诗
-module_type_limit_effect,{0}：种类上限 +{1}，+{2}%
-module_type_limit_invalid,无法读取的模块：不生效
+module_type_limit_effect,{0}: 种类上限 +{1}，+{2}%
+module_type_limit_invalid,无法读取的模块: 不生效
 module_refusal_notinworkbench,只能在元件工作台中装卸元件模块
-module_refusal_limitreached,该元件已装入此类模块的最大数量
+module_refusal_limitreached,此元件安装的这类模块已达上限
 module_refusal_typesexceedlimit,取出 {0} 种物品后才能拆除此模块
-module_refusal_bytesexceedcapacity,请取出足够物品以释放 {0} 字节后再拆除此模块
+module_refusal_bytesexceedcapacity,请先取出物品，腾出 {0} 字节后再拆除此模块
 module_refusal_cellunavailable,元件存储当前不可用
 module_refusal_housingonly,请先装入存储组件
 module_refusal_restoring,元件仍在载入，请稍后再试
@@ -215,32 +215,32 @@ partition_title,元件分区
 partition_status,{0}/{1} 条规则
 partition_mode_whitelist,白名单
 partition_mode_blacklist,黑名单
-partition_mode_button,模式：{0}
+partition_mode_button,模式: {0}
 partition_empty_list_note,空列表接受所有物品。
 partition_clear,清除当前元件的全部分区规则
 partition_hint_title,操作
-partition_hint_left,左键：配置
-partition_hint_right,右键：清除
-partition_hint_middle,中键：复制
+partition_hint_left,左键: 配置
+partition_hint_right,右键: 清除
+partition_hint_middle,中键: 复制
 partition_warning_nevermatches,这些条件永远不会匹配。
 partition_warning_covered,另一条规则已经覆盖了这条规则的匹配范围。
 partition_duplicate_found,已有相同的规则。
 partition_full,已达到 {0} 条规则的上限。
 partition_sample_unsupported,此物品不能作为样本。
 partition_invalid_draft,这项修改无法保存，已撤回。
-partition_conflict,分区已在别处被修改，已显示元件上保存的内容。
+partition_conflict,分区已在别处修改，现已显示元件保存的内容。
 partition_failed,保存失败，修改已撤回，原分区仍然生效。
-partition_repaired,已移除损坏的分区数据（{0} 条规则）。其余部分照常生效，下一次修改时一并保存。
-partition_rule_name,规则名称（可选）
+partition_repaired,已移除损坏的分区数据，共 {0} 条规则。其余规则仍然生效，下次修改时会一并保存。
+partition_rule_name,规则名称，可留空
 partition_all_conditions,满足以下全部条件
 partition_condition_count,{0} 项
 partition_remove_condition_tip,删除此条件
 partition_search_value,搜索…
 partition_add_condition,添加条件
-partition_summary_label,匹配：{0}
+partition_summary_label,匹配: {0}
 partition_sample_attributes,样本属性
 partition_back,返回
-partition_not_saved,未保存：{0}
+partition_not_saved,未保存: {0}
 partition_op_yes,是
 partition_op_no,否
 partition_choose,请选择…
@@ -288,15 +288,15 @@ partition_issue_invalidvalue,有值无效。
 partition_issue_duplicateruleid,规则重复。
 partition_issue_invalidslot,规则位置无效。
 partition_issue_unknownmode,未知模式。
-cell_storage_type_modules,种类上限模块：{0} 个
+cell_storage_type_modules,种类上限模块: {0} 个
 cell_storage_equal_distribution,均分
 cell_storage_expansion,模块舱扩展 {0}/{1}
 integration_customerstocking_section,顾客上货助手
-integration_state_incompatible,未生效: 另一个模组的这个版本不兼容. 原因见游戏日志.
-integration_state_not_running,未生效: 另一个模组没有运行.
-integration_state_unverified,另一个模组的这个版本尚未与数字存储一起测试过. 此选项默认关闭, 可以手动开启尝试.
+integration_state_incompatible,未启用: 此版本的联动模组不兼容，原因见游戏日志。
+integration_state_not_running,未启用: 联动模组未运行。
+integration_state_unverified,此版本的联动模组尚未与数字存储一起测试。此选项默认关闭，可手动开启尝试。
 integration_customerstocking_label,从数字网络取货
-integration_customerstocking_tooltip,一键上货时也可以从其扫描范围内 (店铺, 打烊后区域, 飞船) 的在线数字网络取货. 离线网络和散放的元件不会被取货. 取出和放回都像终端一样经过网络. 上货助手开启「跳过机器内物品」时, 网络中的货也会被跳过, 因为驱动器属于机器.
+integration_customerstocking_tooltip,一键上货时，也可从上货助手扫描范围内的在线数字网络取货，范围包括店铺、打烊后区域和飞船。离线网络和散放的元件不会用于取货。取出和放回都经过网络，与终端存取相同。驱动器属于机器，上货助手开启「跳过机器内物品」时，也会跳过网络中的货物。
 terminal_dock_title,功能
 terminal_button_current_tip,当前终端: {0}
 terminal_button_functions_tip,功能选择
@@ -306,29 +306,28 @@ terminal_button_diagnostics_rail_tip,诊断测试按钮. 只写一行日志.
 terminal_button_diagnostics_picker_tip,打开诊断测试页
 terminal_back,返回终端
 terminal_modules_unavailable,模块面板不可用
-terminal_modules_stage,等级 {0}/{1} | 可用 {2} 格
 terminal_page_unavailable,该页面无法打开
 terminal_diagnostics_view_text,诊断测试视图. 用于检查视图切换, 不读取或修改物品.
 terminal_diagnostics_screen_text,诊断测试页. 按返回回到终端.
 terminal_test_view_name,终端测试视图
 terminal_test_view_desc,在终端中加入一个占位视图和测试按钮, 用于检查视图切换. 仅供测试.
 module_stack_display_name,堆叠显示模块
-module_stack_display_desc,让存储终端按你设置的规则把物品合并显示. 安装在终端的模块槽中.
+module_stack_display_desc,按你设置的规则合并显示终端中的物品。安装在终端的模块槽中。
 terminal_button_stacking_tip,堆叠显示规则
 terminal_tooltip_total_units,共 {0} 个
 stacking_marker_color,堆叠标记颜色
 stacking_marker_placeholder,#RRGGBB
-stacking_marker_color_tip,"输入 #RGB 或 #RRGGBB, 或点击色块."
-stacking_marker_invalid,"请输入 #RGB 或 #RRGGBB 格式的颜色, 仍使用之前的颜色."
+stacking_marker_color_tip,输入 #RGB 或 #RRGGBB 格式的颜色，也可点击色块选择。
+stacking_marker_invalid,颜色格式无效，请输入 #RGB 或 #RRGGBB。仍使用之前的颜色。
 stacking_info_title,堆叠显示模块
-stacking_info_kinds,堆叠种类: {0}
-stacking_info_rules,受到的堆叠规则:
+stacking_info_kinds,合并的物品种类: {0}
+stacking_info_rules,生效的堆叠规则:
 stacking_info_rule,"    {0}"
 stacking_conditions,满足以下条件
 stacking_rule_count,{0} 项
 stacking_enable,启用合并显示
 stacking_scope_hint,对当前终端的所有物品生效.
-stacking_config_unreadable,"无法读取这些堆叠设置. 设置保持原样, 物品按未合并显示."
+stacking_config_unreadable,无法读取堆叠设置。设置保持原样，物品分开显示。
 stacking_saved_immediately,修改立即保存.
 stacking_save_failed,"修改未能保存, 仍使用之前的规则."
 stacking_remove_rule_tip,删除此规则
@@ -338,20 +337,20 @@ stacking_search,搜索属性...
 stacking_field_absent,当前无物品具有此属性
 stacking_mode_match,匹配
 stacking_mode_ignore,忽略
-stacking_summary_disabled,堆叠：已关闭
-stacking_summary_exact,堆叠：精确 (只合并完全相同的物品)
-stacking_summary_ignored,堆叠：忽略 {0}
+stacking_summary_disabled,堆叠: 已关闭
+stacking_summary_exact,堆叠: 只合并完全相同的物品
+stacking_summary_ignored,堆叠: 忽略 {0}
 stacking_summary_separator,、
-stacking_note_match_alone,"单独使用""匹配""不会改变结果, 需要与""忽略""规则一起使用."
-stacking_note_derived_alone,"价格组成不同时, 只忽略估价不会改变结果."
-stacking_note_value_still_compared,"这项属性也会影响估价; 不同时忽略估价时, 估价不同的物品仍会分开."
-stacking_note_container_first_only,"合并后的容器内容可能各不相同, 悬停只显示第一件."
+stacking_note_match_alone,单独使用「匹配」不会改变合并结果，需要配合「忽略」规则使用。
+stacking_note_derived_alone,价格组成不同时，只忽略估价仍会分开显示。
+stacking_note_value_still_compared,此属性也会影响估价。若要合并估价不同的物品，还需忽略估价。
+stacking_note_container_first_only,合并的容器可能装有不同物品，悬停提示只显示第一件容器的内容。
 stacking_field_appraised_value,估价
 stacking_field_appraised_value_desc,物品提示中显示的预估价值.
 stacking_field_price_composition,价格组成
-stacking_field_price_composition_desc,基础价值、购入价和折扣等纯经济修正.
+stacking_field_price_composition_desc,基础价值、购入价，以及折扣等只影响价格的修正。
 stacking_field_metal_purity,金属纯度
-stacking_field_metal_purity_desc,"金属锭的纯度, 只限已鉴定的纯度."
+stacking_field_metal_purity_desc,金属锭已鉴定的纯度。
 stacking_field_container_content,容器内容
 stacking_field_container_content_desc,容器里装的物品.
 stacking_field_legality,合法性
