@@ -25,6 +25,15 @@ public sealed class PartitionFieldTests
     }
 
     [Test]
+    public void Registry_PreservesMenuOrderAndLiteralFeatureAliases()
+    {
+        Assert.That(Array.ConvertAll(System.Linq.Enumerable.ToArray(PartitionFieldRegistry.All), field => field.Id),
+            Is.EqualTo(new[] { "item", "type", "legality", "stolen", "heat" }));
+        Assert.That(PartitionFieldRegistry.Find("feature:A.b:c")!.Id, Is.EqualTo("feature:A.b:c"));
+        Assert.That(PartitionFieldRegistry.Find("ITEM"), Is.Null);
+    }
+
+    [Test]
     public void Registry_ResolvesExposedFeatureFieldsButNoInternalData()
     {
         var feature = PartitionFieldRegistry.Find(PartitionFieldRegistry.FeatureField("rare_find"));

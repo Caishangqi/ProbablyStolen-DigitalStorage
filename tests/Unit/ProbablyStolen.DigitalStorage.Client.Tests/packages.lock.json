@@ -110,6 +110,7 @@
       "probablystolen.digitalstorage.client": {
         "type": "Project",
         "dependencies": {
+          "ProbablyStolen.DigitalStorage.Api.Core": "[1.0.0, )",
           "ProbablyStolen.DigitalStorage.Common": "[1.0.0, )"
         }
       },

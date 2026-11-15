@@ -86,5 +86,22 @@ public sealed class TerminalRegistryTests
         Assert.That(entry.TerminalId, Is.EqualTo("storage"));
     }
 
+    [Test]
+    public void ArbitraryNamesRemainDistinctAndButtonsKeepRegistrationOrder()
+    {
+        var registry = New();
+        registry.AddTerminal(Storage());
+        Assert.That(registry.AddTerminal(View("a.b")), Is.True);
+        Assert.That(registry.AddTerminal(View("a_b")), Is.True);
+        Assert.That(registry.AddTerminal(View("A:b")), Is.True);
+        registry.AddAction(Action("a.b"));
+        registry.AddAction(Action("a_b"));
+        registry.Freeze();
+        Assert.That(registry.Find("a.b")!.TerminalName, Is.EqualTo("a.b"));
+        Assert.That(registry.Find("a_b")!.TerminalName, Is.EqualTo("a_b"));
+        Assert.That(registry.Find("A:b")!.TerminalName, Is.EqualTo("A:b"));
+        Assert.That(registry.Buttons.Select(entry => entry.Button.Id), Is.EqualTo(new[] { "a.b", "a_b" }));
+    }
+
     private TerminalRegistry New() => new(new MemoryConfig(), _log.Add);
 }

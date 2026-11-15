@@ -21,7 +21,7 @@ public sealed class ProjectGraphTests
             ["Api.Core"] = new HashSet<string>(StringComparer.Ordinal),
             ["Api"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core" },
             ["Common"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core" },
-            ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "Common" },
+            ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Common" },
             ["Platform"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Api", "Common", "Client" },
             // Compat reaches Digital Storage only through the public API, so it can move into a bridge mod unchanged.
             ["Compat"] = new HashSet<string>(StringComparer.Ordinal) { "Api.Core", "Api" },

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
@@ -131,25 +132,39 @@ public static class PartitionFieldRegistry
         PartitionOperator.Lt, PartitionOperator.Le, PartitionOperator.Range
     };
 
-    private static readonly PartitionField[] Fixed =
+    private static readonly Registry<PartitionField> Fixed = CreateFixed();
+    private static readonly IReadOnlyList<PartitionField> Ordered = Array.AsReadOnly(new[]
     {
-        new(Item, PartitionFieldKind.ItemId, "partition_field_item", null, EqualityOps),
-        new(Type, PartitionFieldKind.TypeSet, "partition_field_type", null,
-            new[] { PartitionOperator.Contains, PartitionOperator.NotContains }),
-        new(Legality, PartitionFieldKind.Enum, "partition_field_legality", null, EqualityOps, LegalityValues),
-        new(Stolen, PartitionFieldKind.Bool, "partition_field_stolen", null, EqualityOps),
-        new(Heat, PartitionFieldKind.Number, "partition_field_heat", "partition_unit_percent", NumberOps)
-    };
+        Fixed.GetRequired(Key(Item)), Fixed.GetRequired(Key(Type)), Fixed.GetRequired(Key(Legality)),
+        Fixed.GetRequired(Key(Stolen)), Fixed.GetRequired(Key(Heat))
+    });
+
+    private static Registry<PartitionField> CreateFixed()
+    {
+        var registry = new Registry<PartitionField>(Identifier.Parse("digital_storage:partition_fields"));
+        foreach (var field in new PartitionField[]
+        {
+            new(Item, PartitionFieldKind.ItemId, "partition_field_item", null, EqualityOps),
+            new(Type, PartitionFieldKind.TypeSet, "partition_field_type", null,
+                new[] { PartitionOperator.Contains, PartitionOperator.NotContains }),
+            new(Legality, PartitionFieldKind.Enum, "partition_field_legality", null, EqualityOps, LegalityValues),
+            new(Stolen, PartitionFieldKind.Bool, "partition_field_stolen", null, EqualityOps),
+            new(Heat, PartitionFieldKind.Number, "partition_field_heat", "partition_unit_percent", NumberOps)
+        }) registry.Register(Key(field.Id), field);
+        registry.Freeze();
+        return registry;
+    }
+
+    private static Identifier Key(string id) => new("digital_storage", id);
 
     /// <summary>Gets the fixed fields in menu order.</summary>
-    public static IReadOnlyList<PartitionField> All => Fixed;
+    public static IReadOnlyList<PartitionField> All => Ordered;
 
     /// <summary>Gets a field by identifier, including <c>feature:&lt;id&gt;</c> fields, or null.</summary>
     public static PartitionField? Find(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
-        foreach (var field in Fixed)
-            if (string.Equals(field.Id, id, StringComparison.Ordinal)) return field;
+        if (Identifier.TryParse("digital_storage:" + id, out var key) && Fixed.TryGetValue(key, out var field)) return field;
         return IsFeature(id!) ? new PartitionField(id!, PartitionFieldKind.Bool, "partition_field_feature", null, EqualityOps) : null;
     }
 

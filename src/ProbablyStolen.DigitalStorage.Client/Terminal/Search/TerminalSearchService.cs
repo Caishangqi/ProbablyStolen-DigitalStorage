@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 
@@ -182,16 +183,29 @@ public sealed class SearchFieldProvider
 /// <summary>Explicit registration point for search matchers, fields and prefix providers.</summary>
 public sealed class SearchMatcherRegistry
 {
-    private readonly Dictionary<string, Func<string, string, bool>> _matchers = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, SearchFieldProvider> _fields = new(StringComparer.Ordinal);
+    private readonly Registry<(int Order, Func<string, string, bool> Match)> _matchers = new(Identifier.Parse("digital_storage:search_matchers"));
+    private readonly Registry<(int Order, SearchFieldProvider Provider)> _fields = new(Identifier.Parse("digital_storage:search_fields"));
     private readonly Dictionary<char, string> _prefixes = new();
     internal Func<string, string, bool>? Matcher { get; private set; }
-    internal IReadOnlyDictionary<string, SearchFieldProvider> Fields => _fields;
+    internal IEnumerable<SearchFieldProvider> Fields => _fields.Entries.OrderBy(entry => entry.Value.Order)
+        .Select(entry => entry.Value.Provider);
+    internal bool TryGetField(string id, out SearchFieldProvider provider)
+    {
+        if (_fields.TryGetValue(RegistryKey.For(id), out var field)) { provider = field.Provider; return true; }
+        provider = null!;
+        return false;
+    }
     internal IReadOnlyDictionary<char, string> Prefixes => _prefixes;
-    private readonly Dictionary<string, Func<SearchDocument, IEnumerable<string>>> _documentFields = new(StringComparer.Ordinal);
+    private readonly Registry<(int Order, string Id, Func<SearchDocument, IEnumerable<string>> Capture)> _documentFields = new(Identifier.Parse("digital_storage:search_document_fields"));
     private bool _sealed;
 
-    internal void Seal() => _sealed = true;
+    internal void Seal()
+    {
+        _matchers.Freeze();
+        _fields.Freeze();
+        _documentFields.Freeze();
+        _sealed = true;
+    }
 
     private void EnsureOpen()
     {
@@ -206,16 +220,16 @@ public sealed class SearchMatcherRegistry
         if (capture == null) throw new ArgumentNullException(nameof(capture));
         RegisterField(new SearchFieldProvider(id,
             document => document.AddonFields.TryGetValue(id, out var values) ? values : Array.Empty<string>(), mode));
-        _documentFields.Add(id, capture);
+        _documentFields.Register(RegistryKey.For(id), (_documentFields.Count, id, capture));
     }
 
     internal SearchDocument PrepareDocument(SearchDocument document)
     {
         if (_documentFields.Count == 0) return document;
-        var fields = document.AddonFields.Where(pair => !_documentFields.ContainsKey(pair.Key))
+        var fields = document.AddonFields.Where(pair => !_documentFields.TryGetValue(RegistryKey.For(pair.Key), out _))
             .Select(pair => new KeyValuePair<string, IEnumerable<string>>(pair.Key, pair.Value)).ToList();
-        foreach (var pair in _documentFields)
-            fields.Add(new KeyValuePair<string, IEnumerable<string>>(pair.Key, pair.Value(document)));
+        foreach (var pair in _documentFields.Entries.OrderBy(entry => entry.Value.Order))
+            fields.Add(new KeyValuePair<string, IEnumerable<string>>(pair.Value.Id, pair.Value.Capture(document)));
         return new SearchDocument(document.Name, document.Identifier, document.TagNames, document.ItemTypes,
             document.Descriptions, fields);
     }
@@ -226,8 +240,10 @@ public sealed class SearchMatcherRegistry
         EnsureOpen();
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Matcher id is required.", nameof(id));
         if (matcher == null) throw new ArgumentNullException(nameof(matcher));
-        if (!_matchers.TryAdd(id, matcher)) throw new InvalidOperationException("Duplicate search matcher id: " + id);
-        Matcher = (source, query) => _matchers.Values.Any(candidate => candidate(source, query));
+        var key = RegistryKey.For(id);
+        if (_matchers.TryGetValue(key, out _)) throw new InvalidOperationException("Duplicate search matcher id: " + id);
+        _matchers.Register(key, (_matchers.Count, matcher));
+        Matcher = (source, query) => _matchers.Entries.OrderBy(entry => entry.Value.Order).Any(candidate => candidate.Value.Match(source, query));
     }
 
     /// <summary>Registers one searchable document field by stable id.</summary>
@@ -235,7 +251,9 @@ public sealed class SearchMatcherRegistry
     {
         EnsureOpen();
         if (provider == null) throw new ArgumentNullException(nameof(provider));
-        if (!_fields.TryAdd(provider.Id, provider)) throw new InvalidOperationException("Duplicate search field id: " + provider.Id);
+        var key = RegistryKey.For(provider.Id);
+        if (_fields.TryGetValue(key, out _)) throw new InvalidOperationException("Duplicate search field id: " + provider.Id);
+        _fields.Register(key, (_fields.Count, provider));
     }
 
     /// <summary>Associates a punctuation prefix with a previously registered field.</summary>
@@ -244,7 +262,7 @@ public sealed class SearchMatcherRegistry
         EnsureOpen();
         if (!char.IsPunctuation(prefix) && !char.IsSymbol(prefix) || prefix == '-' || prefix == '|' || prefix == '"' || prefix == '\\') throw new ArgumentException("Prefix must be a punctuation character.", nameof(prefix));
         if (string.IsNullOrWhiteSpace(fieldId)) throw new ArgumentException("Field id is required.", nameof(fieldId));
-        if (!_fields.ContainsKey(fieldId)) throw new InvalidOperationException("Unknown search field id: " + fieldId);
+        if (!_fields.TryGetValue(RegistryKey.For(fieldId), out _)) throw new InvalidOperationException("Unknown search field id: " + fieldId);
         if (!_prefixes.TryAdd(prefix, fieldId)) throw new InvalidOperationException("Duplicate search prefix: " + prefix);
     }
 }
@@ -363,7 +381,7 @@ public sealed class TerminalSearchService
         var result = new Dictionary<char, string>();
         foreach (var pair in _registry.Prefixes)
         {
-            if (_registry.Fields.TryGetValue(pair.Value, out var provider) && provider.Mode(_configuration) != SearchMode.Disabled)
+            if (_registry.TryGetField(pair.Value, out var provider) && provider.Mode(_configuration) != SearchMode.Disabled)
                 result.Add(pair.Key, pair.Value);
         }
         return result;
@@ -374,11 +392,11 @@ public sealed class TerminalSearchService
         if (term.FieldId == null)
         {
             if (matchText(document.Name, term.Value)) return true;
-            foreach (var provider in _registry.Fields.Values)
+            foreach (var provider in _registry.Fields)
                 if (provider.Mode(_configuration) == SearchMode.Enabled && Any(provider.Values(document))) return true;
             return false;
         }
-        if (term.EmptyPrefix || !_registry.Fields.TryGetValue(term.FieldId, out var field) ||
+        if (term.EmptyPrefix || !_registry.TryGetField(term.FieldId, out var field) ||
             field.Mode(_configuration) == SearchMode.Disabled) return false;
         return Any(field.Values(document));
 

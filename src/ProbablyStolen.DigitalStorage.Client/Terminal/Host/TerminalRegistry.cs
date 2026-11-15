@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Host;
@@ -16,8 +17,8 @@ public sealed class TerminalRegistry
 
     private readonly IConfigManager _config;
     private readonly Action<string> _diagnostic;
-    private readonly List<TerminalDefinition> _terminals = new();
-    private readonly List<RegisteredButton> _buttons = new();
+    private readonly Registry<TerminalDefinition> _terminals = new(Identifier.Parse("digital_storage:terminals"));
+    private readonly Registry<RegisteredButton> _buttonRegistry = new(Identifier.Parse("digital_storage:terminal_buttons"));
     private bool _frozen;
 
     /// <summary>Creates an empty registry.</summary>
@@ -43,7 +44,7 @@ public sealed class TerminalRegistry
     public IReadOnlyList<TerminalDefinition> Terminals { get; private set; } = Array.Empty<TerminalDefinition>();
 
     /// <summary>Gets the buttons in registration order.</summary>
-    public IReadOnlyList<RegisteredButton> Buttons => _buttons;
+    public IReadOnlyList<RegisteredButton> Buttons => _buttonRegistry.RegistrationEntries.Select(entry => entry.Value).ToArray();
 
     /// <summary>Gets the storage view; available after <see cref="Freeze"/>.</summary>
     public TerminalDefinition StorageTerminal =>
@@ -60,8 +61,8 @@ public sealed class TerminalRegistry
             return false;
         }
 
-        _terminals.Add(definition);
-        Terminals = _terminals.OrderBy(terminal => terminal.Order)
+        _terminals.Register(RegistryKey.For(definition.TerminalName), definition);
+        Terminals = _terminals.Entries.Select(entry => entry.Value).OrderBy(terminal => terminal.Order)
             .ThenBy(terminal => terminal.TerminalName, StringComparer.Ordinal).ToArray();
         return true;
     }
@@ -87,24 +88,28 @@ public sealed class TerminalRegistry
         EnsureOpen();
         if (Find(DefaultTerminalName) == null)
             throw new InvalidOperationException("The default terminal must be registered before freezing.");
+        _terminals.Freeze();
+        _buttonRegistry.Freeze();
         _frozen = true;
     }
 
     /// <summary>Gets a view by name, or null.</summary>
     public TerminalDefinition? Find(string terminalName) =>
-        _terminals.FirstOrDefault(terminal => string.Equals(terminal.TerminalName, terminalName, StringComparison.Ordinal));
+        terminalName == null ? null : _terminals.GetValueOrDefault(RegistryKey.For(terminalName));
 
     private bool AddButton(TerminalButton button, int order, ActionPlacement placement, string? terminalId,
         Func<TerminalContext, bool> isVisible)
     {
         EnsureOpen();
-        if (_buttons.Any(entry => string.Equals(entry.Button.Id, button.Id, StringComparison.Ordinal)))
+        var key = RegistryKey.For(button.Id);
+        if (_buttonRegistry.TryGetValue(key, out _))
         {
             _diagnostic($"terminal_registry refused=button id={button.Id} reason=duplicate");
             return false;
         }
 
-        _buttons.Add(new RegisteredButton(button, order, placement, terminalId, isVisible));
+        var entry = new RegisteredButton(button, order, placement, terminalId, isVisible);
+        _buttonRegistry.Register(key, entry);
         return true;
     }
 

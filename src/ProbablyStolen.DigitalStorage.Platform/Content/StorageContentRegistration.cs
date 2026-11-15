@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 using ProbablyStolen.DigitalStorage.Platform.Client;
@@ -12,7 +14,8 @@ internal sealed class StorageContentRegistration : IDisposable
 {
     private readonly ModLog _log;
     private readonly ItemContentService _service;
-    private readonly KeyValuePair<string, Func<GameItem>>[] _factories;
+    private readonly RegistryManager _manager = new();
+    private readonly Registry<FactoryBinding> _factories;
     private ModItemDirectory? _directory;
     private bool _enabled;
     private bool _disposed;
@@ -25,23 +28,41 @@ internal sealed class StorageContentRegistration : IDisposable
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _service = service ?? throw new ArgumentNullException(nameof(service));
-        var factories = new List<KeyValuePair<string, Func<GameItem>>>
+        var registryId = Identifier.Parse("digital_storage:item_factories");
+        _manager.NewRegistry += e => e.Create<FactoryBinding>(registryId);
+        var deferred = DeferredRegister<FactoryBinding>.Create(_manager, registryId);
+        var order = 0;
+        void Add(string id, Func<GameItem> factory)
         {
-            new(TerminalItem.ItemId, () => Create(terminal.Create)),
-            new(DriveItem.ItemId, () => Create(drive.Create)),
-            new(ControllerItem.ItemId, () => Create(controller.Create)),
-            new(MaterialItem.ItemId, () => Create(housing.Create)),
-            new(CellWorkbenchItem.ItemId, () => Create(workbench.Create)),
-            new(CellUpgradeInventory.TypeLimitId, () => Create(modules.CreateTypeLimit)),
-            new(CellUpgradeInventory.EqualDistributionId, () => Create(modules.CreateEqualDistribution))
-        };
+            var index = order++;
+            deferred.Register<FactoryBinding>(id,
+                () => new FactoryBinding(id, index, factory));
+        }
+        Add(TerminalItem.ItemId, () => Create(terminal.Create));
+        Add(DriveItem.ItemId, () => Create(drive.Create));
+        Add(ControllerItem.ItemId, () => Create(controller.Create));
+        Add(MaterialItem.ItemId, () => Create(housing.Create));
+        Add(CellWorkbenchItem.ItemId, () => Create(workbench.Create));
+        Add(CellUpgradeInventory.TypeLimitId, () => Create(modules.CreateTypeLimit));
+        Add(CellUpgradeInventory.EqualDistributionId, () => Create(modules.CreateEqualDistribution));
         foreach (var tier in StorageCellTier.All)
         {
             Func<GameItem> createComponent = () => Create(() => component.Create(tier));
-            factories.Add(new(tier.ComponentId, createComponent));
-            factories.Add(new(tier.CellId, () => Create(() => cell.Create(tier, createComponent))));
+            Add(tier.ComponentId, createComponent);
+            Add(tier.CellId, () => Create(() => cell.Create(tier, createComponent)));
         }
-        _factories = factories.ToArray();
+        _manager.CreateRegistries();
+        _manager.RegisterEntries();
+        _manager.RegisterDataRegistries();
+        _factories = _manager.Get<FactoryBinding>(registryId);
+    }
+
+    private sealed class FactoryBinding
+    {
+        internal FactoryBinding(string id, int order, Func<GameItem> factory) { Key = id; Order = order; Value = factory; }
+        internal string Key { get; }
+        internal int Order { get; }
+        internal Func<GameItem> Value { get; }
     }
 
     private GameItem Create(Func<GameItem> factory)
@@ -99,8 +120,9 @@ internal sealed class StorageContentRegistration : IDisposable
         }
 
         // Native Add can remove another directory's entry. Preflight the entire group first.
-        foreach (var binding in _factories)
+        foreach (var entry in _factories.Entries.OrderBy(entry => entry.Value.Order))
         {
+            var binding = entry.Value;
             var ownedHere = ReferenceEquals(_directory, directory) &&
                 directory.factoryDictionary.TryGetValue(binding.Key, out var local) && ReferenceEquals(local, binding.Value);
             if ((DirectoryMaster.Has<GameItem>(binding.Key) &&
@@ -112,11 +134,12 @@ internal sealed class StorageContentRegistration : IDisposable
             }
         }
 
-        var added = new List<KeyValuePair<string, Func<GameItem>>>();
+        var added = new List<FactoryBinding>();
         try
         {
-            foreach (var binding in _factories)
+            foreach (var entry in _factories.Entries.OrderBy(entry => entry.Value.Order))
             {
+                var binding = entry.Value;
                 if (directory.factoryDictionary.TryGetValue(binding.Key, out var existing) && ReferenceEquals(existing, binding.Value))
                 {
                     continue;
@@ -159,6 +182,7 @@ internal sealed class StorageContentRegistration : IDisposable
         _enabled = false;
         _disposed = true;
         ModHook.OnModItemDirectoryInit -= Register;
+        _manager.Dispose();
         // Native types may already be referenced by saved or placed items; keep them registered.
     }
 }
