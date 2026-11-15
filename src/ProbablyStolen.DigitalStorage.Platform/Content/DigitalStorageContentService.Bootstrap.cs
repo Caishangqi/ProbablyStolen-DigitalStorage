@@ -47,11 +47,17 @@ internal sealed partial class DigitalStorageContentService
                 accepted.SelectMany(batch => batch.Entries), DataCodecs(accepted).Values.Select(value => value.Declaration));
             foreach (var batch in accepted) batch.Manager.ReleaseStagedEntries();
             _unavailable = !builtin && accepted.Length == 0;
+            var definitions = _manager.Get<ModuleBayDefinition>(Identifier.Parse(DefinitionRegistryId));
+            var bindings = _unavailable ? null : _manager.Get<ModuleBayBinding>(Identifier.Parse(BindingRegistryId)).Entries
+                .ToDictionary(entry => entry.Value.NativeItemId, entry => (entry.Value, definitions.GetRequired(entry.Value.DefinitionId)),
+                    StringComparer.Ordinal);
             _frozen = true;
+            _bindingsByItem = bindings;
         }
         catch
         {
             _unavailable = true;
+            _bindingsByItem = null;
             _manager.Dispose();
             foreach (var batch in batches) batch.Dispose();
             throw;
@@ -142,15 +148,8 @@ internal sealed partial class DigitalStorageContentService
         if (source.RegistryId.HasValue) AddData(batch, source.RegistryId.Value, source.EntryId, source.Json, codecs);
         else if (source.Kind == ModuleBayJsonKind.Definition) AddData(batch, Identifier.Parse(DefinitionRegistryId), null, source.Json, codecs);
         else
-        {
-            var fallbackSeen = false;
             foreach (var json in ModuleBayJsonDecoder.BindingEntries(source.Json))
-            {
-                if (fallbackSeen) throw new FormatException("Standard-machine fallback must be the final binding.");
                 AddData(batch, Identifier.Parse(BindingRegistryId), null, json, codecs);
-                fallbackSeen = ((ModuleBayBinding)batch.Entries[batch.Entries.Count - 1].Value).IsStandardMachineTagFallback;
-            }
-        }
     }
 
     private void ValidateCandidates(Batch[] batches)

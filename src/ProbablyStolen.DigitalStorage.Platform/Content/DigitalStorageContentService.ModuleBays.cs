@@ -5,9 +5,7 @@ using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Api;
-using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -15,34 +13,19 @@ internal sealed partial class DigitalStorageContentService
 {
     private readonly ApiThread _thread = new();
     private readonly ConditionalWeakTable<GameItem, BaySession> _baySessions = new();
-    private readonly ConditionalWeakTable<GameItem, object> _managedItems = new();
     private readonly ConditionalWeakTable<GameItem, KitSession> _kitSessions = new();
-    private Action _recoveryWarning = () => { };
-    private bool _recoveryWarningPending;
     internal bool IsMainThread => _thread.IsMain;
     internal const string StageTag = "MODULE_UPGRADE_STAGE_INT";
     internal const string KitId = "module_bay_expansion_kit";
 
-    internal void SetRecoveryWarning(Action warning) => _recoveryWarning = warning;
-    internal void WarnIfRecoveryNeeded()
-    {
-        if (!_recoveryWarningPending) return;
-        try { _recoveryWarning(); }
-        catch { }
-    }
+    /// <summary>
+    /// Gets whether this service owns the item's module bay: only items with an exact binding published at the freeze,
+    /// this mod's products included. Only the item identifier is read, so the answer is the same on every thread.
+    /// </summary>
+    internal bool IsManaged(GameItem? item) => item != null && IsManagedId(item.identifier);
 
-    internal bool IsManaged(GameItem? item)
-    {
-        if (item == null || _disposed) return false;
-        if (!_thread.IsMain) return _managedItems.TryGetValue(item, out _);
-        var managed = TryBinding(item, out _, out _) || IsBuiltinItemId(item.identifier);
-        if (managed) _managedItems.GetValue(item, _ => new object());
-        return managed;
-    }
-
-    internal static bool IsBuiltinItemId(string identifier) => identifier == TerminalItem.ItemId ||
-        identifier == DriveItem.ItemId || identifier == ControllerItem.ItemId ||
-        StorageCellTier.FromCellId(identifier) != null || identifier == MaterialItem.ItemId;
+    internal bool IsManagedId(string? identifier) =>
+        identifier != null && _bindingsByItem?.ContainsKey(identifier) == true;
 
     internal int MaximumStage(GameItem item)
     {
@@ -58,30 +41,29 @@ internal sealed partial class DigitalStorageContentService
         if (!_thread.IsMain) return new ModuleBayState(false, 0, null, "main thread required");
         if (item == null) throw new ArgumentNullException(nameof(item));
         if (!TryBinding(item, out var binding, out var definition))
-        {
-            var missing = _baySessions.GetOrCreateValue(item);
-            ProtectUnavailable(item, missing, "module bay definition unavailable");
-            return new ModuleBayState(false, ReadStage(item), null, missing.Failure);
-        }
+            return new ModuleBayState(false, ReadStage(item), null, "module bay definition unavailable");
         var stage = ReadStage(item);
         var session = _baySessions.GetOrCreateValue(item);
         var maximum = binding.MaximumStage ?? definition.Stages.Count - 1;
-        if (stage < 0 || stage > maximum)
-            return Unavailable(item, session, stage, definition, maximum, "invalid recorded stage");
         if (session.Transaction.IsLocked || session.Failure != null)
             return new ModuleBayState(false, stage, definition, session.Failure ?? "module bay locked", maximum);
+        // Resolved before any check so that every later failure can lock the bay it found.
+        GameGridInventory? bay = null;
         try
         {
             var provider = _manager.Get<IModuleBayProvider>(Identifier.Parse(ProviderRegistryId)).GetRequired(binding.ProviderId);
-            if (!provider.TryGetInventory(item, out var bay))
-                return Unavailable(item, session, stage, definition, maximum, "module inventory unavailable");
+            if (!provider.TryGetInventory(item, out var found))
+                return Unavailable(item, session, stage, definition, maximum, "module inventory unavailable", null);
+            bay = found;
+            if (stage < 0 || stage > maximum)
+                return Unavailable(item, session, stage, definition, maximum, "invalid recorded stage", bay);
             var layout = definition.Stage(stage).Layout;
             if (!Matches(bay, layout))
             {
                 if (!SaveManager.IsDecoding && bay.childItems.Count > 0)
-                    return Unavailable(item, session, stage, definition, maximum, "existing module layout differs from recorded stage");
+                    return Unavailable(item, session, stage, definition, maximum, "existing module layout differs from recorded stage", bay);
                 if (!ChildrenFit(bay, layout))
-                    return Unavailable(item, session, stage, definition, maximum, "module coordinates do not fit recorded stage");
+                    return Unavailable(item, session, stage, definition, maximum, "module coordinates do not fit recorded stage", bay);
                 bay.SetShape(string.Concat(layout.Rows), layout.Width);
                 item.contentWindow?.Validate();
             }
@@ -89,7 +71,7 @@ internal sealed partial class DigitalStorageContentService
         }
         catch (Exception error)
         {
-            return Unavailable(item, session, stage, definition, maximum, "layout restore failed: " + error.GetType().Name);
+            return Unavailable(item, session, stage, definition, maximum, "layout restore failed: " + error.GetType().Name, bay);
         }
     }
 
@@ -110,7 +92,7 @@ internal sealed partial class DigitalStorageContentService
             if (!TryProvider(binding, item, out var provider, out var reason) || !provider.TryGetInventory(item, out var bay))
                 return new ModuleBayState(false, stage, definition, reason ?? "module inventory unavailable", maximum);
             if (!Matches(bay, definition.Stage(stage).Layout) || !ChildrenFit(bay, definition.Stage(stage).Layout))
-                return Unavailable(item, session, stage, definition, maximum, "actual module layout does not match recorded stage");
+                return Unavailable(item, session, stage, definition, maximum, "actual module layout does not match recorded stage", bay);
             return new ModuleBayState(true, stage, definition, null, maximum);
         }
         catch (Exception error)
@@ -186,26 +168,15 @@ internal sealed partial class DigitalStorageContentService
     private static ModuleBayChangeResult Failed(ModuleBayState state, string reason) =>
         ModuleBayChangeResult.Failed(ModuleBayChangeStatus.Unavailable, Math.Max(0, state.Stage), reason);
 
-    private ModuleBayState Unavailable(GameItem item, BaySession session, int stage, ModuleBayDefinition definition, int maximum, string reason)
-    {
-        ProtectUnavailable(item, session, reason);
-        return new ModuleBayState(false, stage, definition, reason, maximum);
-    }
-
-    private void ProtectUnavailable(GameItem item, BaySession session, string reason)
+    /// <summary>Records the failure and locks the bay the item's provider returned; without one there is nothing to lock.</summary>
+    private ModuleBayState Unavailable(GameItem item, BaySession session, int stage, ModuleBayDefinition definition, int maximum,
+        string reason, GameGridInventory? bay)
     {
         session.Failure = reason;
-        _recoveryWarningPending = true;
-        try
-        {
-            GameGridInventory? bay = CellUpgradeInventory.Bay(item);
-            if (bay == null && item.IsTag(MachineHelper.STANDARD_MACHINE_TAG))
-                bay = MachineHelper.GetBodyStorage(item, 1) as GameGridInventory;
-            bay?.LockInv();
-        }
+        try { bay?.LockInv(); }
         catch { }
         Report(item, reason);
-        if (!SaveManager.IsDecoding) WarnIfRecoveryNeeded();
+        return new ModuleBayState(false, stage, definition, reason, maximum);
     }
 
     private void Report(GameItem item, string reason)

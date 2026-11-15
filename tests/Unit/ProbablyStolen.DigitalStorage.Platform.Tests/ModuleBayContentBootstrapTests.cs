@@ -141,8 +141,7 @@ public sealed class ModuleBayContentBootstrapTests
         ("digital_storage.item_storage_cell_16k", "vanilla_standard", "cell", 1),
         ("digital_storage.item_storage_cell_64k", "vanilla_standard", "cell", 1),
         ("digital_storage.item_storage_cell_256k", "vanilla_standard", "cell", 2),
-        ("digital_storage.item_cell_housing", "vanilla_standard", "cell", 2),
-        ("*", "vanilla_standard", "native_standard", 2)
+        ("digital_storage.item_cell_housing", "vanilla_standard", "cell", 2)
     };
 
     private static string Profile(string name, int count) =>
@@ -168,7 +167,7 @@ public sealed class ModuleBayContentBootstrapTests
                 var maximum = i == index && mutation == "maximum" ? 0 : entry.Maximum;
                 if (i == index && mutation == "maximum" && entry.Maximum == 0) maximum = 1;
                 batch.RegisterBinding(new ModuleBayBinding(entry.Item, "digital_storage:" + definition,
-                    "digital_storage:" + provider, maximum, entry.Item == "*"));
+                    "digital_storage:" + provider, maximum));
             }
         });
     }
@@ -181,7 +180,7 @@ public sealed class ModuleBayContentBootstrapTests
         service.Bootstrap(true);
         Assert.That(service.IsUnavailable, Is.False);
         Assert.That(service.ModuleBays.Entries, Has.Count.EqualTo(2));
-        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(10));
+        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(9));
         Assert.That(service.GetRegistry<IModuleBayProvider>(Identifier.Parse(DigitalStorageContentService.ProviderRegistryId)).Entries, Has.Count.EqualTo(2));
         foreach (var expected in BuiltinBindings)
         {
@@ -189,8 +188,20 @@ public sealed class ModuleBayContentBootstrapTests
             Assert.That(actual.DefinitionId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Definition)));
             Assert.That(actual.ProviderId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Provider)));
             Assert.That(actual.MaximumStage, Is.EqualTo(expected.Maximum));
-            Assert.That(actual.IsStandardMachineTagFallback, Is.EqualTo(expected.Item == "*"));
         }
+    }
+
+    [TestCase("vanilla.machine")]
+    [TestCase("other_mod.machine")]
+    public void Bootstrap_LeavesUnboundItemsUnmanaged(string nativeItemId)
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        service.Bootstrap(true);
+        Assert.That(service.TryBinding(nativeItemId, out _, out _), Is.False);
+        Assert.That(service.TryBinding("digital_storage.storage_terminal", out var binding, out var definition), Is.True);
+        Assert.That(binding.MaximumStage, Is.EqualTo(10));
+        Assert.That(definition.Stages, Has.Count.EqualTo(11));
     }
 
     private static IEnumerable<TestCaseData> InvalidBindings()
@@ -222,23 +233,79 @@ public sealed class ModuleBayContentBootstrapTests
         Assert.That(service.IsUnavailable, Is.True);
     }
 
+    private static void RegisterExternalMachine(DigitalStorageContentService service) =>
+        service.RegisterBatch("test_mod", batch =>
+        {
+            batch.RegisterProvider(new MemoryProvider());
+            batch.RegisterDefinition(new ModuleBayDefinition("test_mod:bay", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
+            batch.RegisterBinding(new ModuleBayBinding("test_mod.machine", "test_mod:bay", "test_mod:provider"));
+        });
+
     [Test]
-    public void Decoder_RejectsFallbackBeforeExactBinding()
+    public void IsManagedId_ManagesOnlyPublishedBindingsOnEveryThread()
     {
-        const string json = "{\"format_version\":1,\"bindings\":[{\"native_item_id\":\"*\",\"definition_id\":\"digital_storage:vanilla_standard\",\"provider_id\":\"digital_storage:native_standard\",\"standard_machine_tag_fallback\":true},{\"native_item_id\":\"item\",\"definition_id\":\"digital_storage:vanilla_standard\",\"provider_id\":\"digital_storage:native_standard\"}]}";
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(json, ModuleBayJsonKind.Bindings)));
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        RegisterExternalMachine(service);
+        Assert.That(service.IsManagedId("digital_storage.storage_terminal"), Is.False);
+        Assert.That(service.IsManagedId("test_mod.machine"), Is.False);
+        service.Bootstrap(true);
+        var ids = new[] { "digital_storage.storage_terminal", "test_mod.machine", "vanilla.machine", "*" };
+        var expected = new[] { true, true, false, false };
+        Assert.That(ids.Select(service.IsManagedId), Is.EqualTo(expected));
+        var offThread = System.Threading.Tasks.Task.Run(() => ids.Select(service.IsManagedId).ToArray()).Result;
+        Assert.That(offThread, Is.EqualTo(expected));
+        service.Dispose();
+        Assert.That(service.IsManagedId("digital_storage.storage_terminal"), Is.False);
     }
 
-    [TestCase("digital_storage.storage_terminal", true)]
-    [TestCase("digital_storage.storage_drive", true)]
-    [TestCase("digital_storage.storage_network_controller", true)]
-    [TestCase("digital_storage.item_storage_cell_1k", true)]
-    [TestCase("digital_storage.item_cell_housing", true)]
-    [TestCase("vanilla.machine", false)]
-    public void BuiltinItemIds_ProtectOnlyKnownProductsWhenUnavailable(string id, bool expected)
+
+
+    [Test]
+    public void TryBinding_ResolvesTheSameItemsAsIsManagedId()
     {
-        Assert.That(DigitalStorageContentService.IsBuiltinItemId(id), Is.EqualTo(expected));
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        RegisterExternalMachine(service);
+        service.Bootstrap(true);
+        foreach (var entry in service.ModuleBayBindings.Entries)
+        {
+            Assert.That(service.IsManagedId(entry.Value.NativeItemId), Is.True);
+            Assert.That(service.TryBinding(entry.Value.NativeItemId, out var binding, out _), Is.True);
+            Assert.That(binding, Is.SameAs(entry.Value));
+        }
     }
+
+    [Test]
+    public void IsManagedId_ManagesNothingWithoutBuiltinContent()
+    {
+        using var failed = new DigitalStorageContentService();
+        RegisterBuiltin(failed, terminalCount: 10);
+        RegisterExternalMachine(failed);
+        Assert.Throws<InvalidOperationException>((Action)(() => failed.Bootstrap(true)));
+        Assert.That(failed.IsManagedId("digital_storage.storage_terminal"), Is.False);
+        Assert.That(failed.IsManagedId("test_mod.machine"), Is.False);
+        Assert.That(failed.TryBinding("digital_storage.storage_terminal", out _, out _), Is.False);
+
+        using var discarded = new DigitalStorageContentService();
+        RegisterBuiltin(discarded);
+        RegisterExternalMachine(discarded);
+        discarded.Bootstrap(true);
+        discarded.DiscardOwner("digital_storage");
+        Assert.That(discarded.IsManagedId("digital_storage.storage_terminal"), Is.False);
+        Assert.That(discarded.IsManagedId("test_mod.machine"), Is.False);
+        Assert.That(discarded.TryBinding("test_mod.machine", out _, out _), Is.False);
+    }
+
+    [Test]
+    public void Decoder_RejectsUnknownBindingProperty()
+    {
+        const string binding = "{\"native_item_id\":\"item\",\"definition_id\":\"digital_storage:vanilla_standard\",\"provider_id\":\"digital_storage:native_standard\",\"extra\":true}";
+        const string json = "{\"format_version\":1,\"bindings\":[" + binding + "]}";
+        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(json, ModuleBayJsonKind.Bindings)));
+        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.BindingEntries(json)));
+    }
+
 
     [TestCase(false)]
     [TestCase(true)]

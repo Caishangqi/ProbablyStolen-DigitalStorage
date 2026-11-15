@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -201,15 +202,17 @@ def _definition(value: Any, source: Path) -> tuple[str, list[dict[str, Any]]]:
 
 
 def _native_item(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value or value != value.strip() or any(ord(character) < 32 for character in value):
+    if not isinstance(value, str) or not value or value != value.strip() or any(unicodedata.category(character) == "Cc" for character in value):
         raise ModuleBayDataError(f"{label} must be a stable non-empty native item id")
     return value
 
 
 def _binding(value: Any, source: Path) -> dict[str, Any]:
     binding = _object(value, "binding")
-    _properties(binding, {"native_item_id", "definition_id", "provider_id"}, {"max_stage", "standard_machine_tag_fallback"})
+    _properties(binding, {"native_item_id", "definition_id", "provider_id"}, {"max_stage"})
     native = _native_item(binding["native_item_id"], "native_item_id")
+    if native == "*":
+        raise ModuleBayDataError("wildcard bindings are not supported; bind each native item id exactly")
     definition_id = _identifier(binding["definition_id"], "definition_id")
     provider_id = _identifier(binding["provider_id"], "provider_id")
     if provider_id not in BUILTIN_PROVIDERS:
@@ -219,12 +222,7 @@ def _binding(value: Any, source: Path) -> dict[str, Any]:
         max_stage = _integer(max_stage, "max_stage")
         if max_stage < 0:
             raise ModuleBayDataError("max_stage must not be negative")
-    fallback = binding.get("standard_machine_tag_fallback", False)
-    if not isinstance(fallback, bool):
-        raise ModuleBayDataError("standard_machine_tag_fallback must be a boolean")
-    if (native == "*") != fallback:
-        raise ModuleBayDataError("wildcard binding must explicitly be the standard-machine fallback")
-    return {"native": native, "definition": definition_id, "provider": provider_id, "max_stage": max_stage, "fallback": fallback}
+    return {"native": native, "definition": definition_id, "provider": provider_id, "max_stage": max_stage}
 
 
 def validate_registry_data(resources_root: Path, path_validator: Callable[[Path], Path]) -> None:
@@ -264,8 +262,7 @@ def validate_registry_data(resources_root: Path, path_validator: Callable[[Path]
                 bindings.append(_binding(item, source))
 
     seen_native: set[str] = set()
-    fallback_index: int | None = None
-    for index, binding in enumerate(bindings):
+    for binding in bindings:
         if binding["native"] in seen_native:
             raise ModuleBayDataError(f"duplicate native binding: {binding['native']}")
         seen_native.add(binding["native"])
@@ -275,34 +272,27 @@ def validate_registry_data(resources_root: Path, path_validator: Callable[[Path]
         maximum = binding["max_stage"]
         if maximum is not None and maximum >= len(stages):
             raise ModuleBayDataError(f"binding max_stage exceeds definition stages: {binding['native']}")
-        if binding["fallback"]:
-            if fallback_index is not None or index != len(bindings) - 1:
-                raise ModuleBayDataError("standard-machine fallback must be the final binding")
-            fallback_index = index
 
     required_profiles = {"digital_storage:terminal", "digital_storage:vanilla_standard"}
     missing_profiles = required_profiles - definitions.keys()
     if missing_profiles:
         raise ModuleBayDataError(f"missing builtin definitions: {sorted(missing_profiles)}")
     required_bindings = {
-        "digital_storage.storage_terminal": ("digital_storage:terminal", "digital_storage:native_standard", 10, False),
-        "digital_storage.storage_drive": ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, False),
-        "digital_storage.storage_network_controller": ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, False),
-        "digital_storage.item_storage_cell_1k": ("digital_storage:vanilla_standard", "digital_storage:cell", 0, False),
-        "digital_storage.item_storage_cell_4k": ("digital_storage:vanilla_standard", "digital_storage:cell", 0, False),
-        "digital_storage.item_storage_cell_16k": ("digital_storage:vanilla_standard", "digital_storage:cell", 1, False),
-        "digital_storage.item_storage_cell_64k": ("digital_storage:vanilla_standard", "digital_storage:cell", 1, False),
-        "digital_storage.item_storage_cell_256k": ("digital_storage:vanilla_standard", "digital_storage:cell", 2, False),
-        "digital_storage.item_cell_housing": ("digital_storage:vanilla_standard", "digital_storage:cell", 2, False),
-        "*": ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, True),
+        "digital_storage.storage_terminal": ("digital_storage:terminal", "digital_storage:native_standard", 10),
+        "digital_storage.storage_drive": ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
+        "digital_storage.storage_network_controller": ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
+        "digital_storage.item_storage_cell_1k": ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
+        "digital_storage.item_storage_cell_4k": ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
+        "digital_storage.item_storage_cell_16k": ("digital_storage:vanilla_standard", "digital_storage:cell", 1),
+        "digital_storage.item_storage_cell_64k": ("digital_storage:vanilla_standard", "digital_storage:cell", 1),
+        "digital_storage.item_storage_cell_256k": ("digital_storage:vanilla_standard", "digital_storage:cell", 2),
+        "digital_storage.item_cell_housing": ("digital_storage:vanilla_standard", "digital_storage:cell", 2),
     }
     binding_map = {item["native"]: item for item in bindings}
     for native, expected in required_bindings.items():
         actual = binding_map.get(native)
-        if actual is None or (actual["definition"], actual["provider"], actual["max_stage"], actual["fallback"]) != expected:
+        if actual is None or (actual["definition"], actual["provider"], actual["max_stage"]) != expected:
             raise ModuleBayDataError(f"missing or incorrect builtin binding: {native}")
-    if fallback_index != len(bindings) - 1:
-        raise ModuleBayDataError("standard-machine fallback must be the final binding")
 
     for definition_id, expected in EXPECTED_PROFILE_COUNTS.items():
         actual = tuple(stage["available"] for stage in definitions[definition_id])

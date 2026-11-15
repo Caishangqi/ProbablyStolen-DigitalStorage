@@ -15,7 +15,7 @@ public static class ModuleBayExpansionHooks
     /// <summary>Gets the active module bay API, or null when the mod is stopped.</summary>
     public static IModuleBayApi? Api => _service;
 
-    /// <summary>Gets whether a native mutation must be refused before reading any game objects.</summary>
+    /// <summary>Gets whether a managed module bay operation must be refused because it runs off the main thread.</summary>
     public static bool RejectsThread => _service != null && !_service.IsMainThread;
 
     internal static IDisposable Attach(DigitalStorageContentService service)
@@ -50,9 +50,8 @@ public static class ModuleBayExpansionHooks
         kit.canItemTargetItemFunc = TargetRules.OrWith(kit.canItemTargetItemFunc, CanUseManagedKit);
         kit.onItemTargetItemFunc = (source, target) =>
         {
-            if (RejectsThread) return;
-            if (IsManaged(target)) _service!.TryUseKit(target, source);
-            else action?.Invoke(source, target);
+            if (!IsManaged(target)) action?.Invoke(source, target);
+            else if (!RejectsThread) _service!.TryUseKit(target, source);
         };
     }
 

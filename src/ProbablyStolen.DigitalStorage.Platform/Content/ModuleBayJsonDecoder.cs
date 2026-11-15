@@ -43,7 +43,7 @@ internal static class ModuleBayJsonDecoder
         foreach (var token in Array(root, "bindings"))
         {
             var binding = Object(token, "binding");
-            Properties(binding, new[] { "native_item_id", "definition_id", "provider_id" }, "max_stage", "standard_machine_tag_fallback");
+            Properties(binding, new[] { "native_item_id", "definition_id", "provider_id" }, "max_stage");
             var entry = (JObject)binding.DeepClone();
             entry.Add("format_version", 1);
             result.Add(entry.ToString(Formatting.None));
@@ -60,10 +60,10 @@ internal static class ModuleBayJsonDecoder
     internal static ModuleBayBinding DecodeBindingEntry(string json)
     {
         var binding = Load(json, "module bay binding"); RejectCommentsAndTrailing(json);
-        Properties(binding, new[] { "format_version", "native_item_id", "definition_id", "provider_id" }, "max_stage", "standard_machine_tag_fallback");
+        Properties(binding, new[] { "format_version", "native_item_id", "definition_id", "provider_id" }, "max_stage");
         Version(binding);
         return new ModuleBayBinding(Text(binding, "native_item_id"), Text(binding, "definition_id"), Text(binding, "provider_id"),
-            OptionalInteger(binding, "max_stage"), OptionalBoolean(binding, "standard_machine_tag_fallback"));
+            OptionalInteger(binding, "max_stage"));
     }
 
     internal static ModuleBayJsonContribution DecodeContent(string json, ModuleBayJsonKind kind)
@@ -77,12 +77,10 @@ internal static class ModuleBayJsonDecoder
             Version(root);
             foreach (var token in Array(root, "bindings"))
             {
-                if (contribution.Bindings.Any(value => value.IsStandardMachineTagFallback))
-                    throw Error(token, "standard-machine fallback must be the final binding");
                 var binding = Object(token, "binding");
-                Properties(binding, new[] { "native_item_id", "definition_id", "provider_id" }, "max_stage", "standard_machine_tag_fallback");
+                Properties(binding, new[] { "native_item_id", "definition_id", "provider_id" }, "max_stage");
                 contribution.Bindings.Add(new ModuleBayBinding(Text(binding, "native_item_id"), Text(binding, "definition_id"),
-                    Text(binding, "provider_id"), OptionalInteger(binding, "max_stage"), OptionalBoolean(binding, "standard_machine_tag_fallback")));
+                    Text(binding, "provider_id"), OptionalInteger(binding, "max_stage")));
             }
         }
         else
@@ -239,12 +237,6 @@ internal static class ModuleBayJsonDecoder
         return number;
     }
     private static int? OptionalInteger(JObject obj, string name) => obj[name] == null || obj[name]!.Type == JTokenType.Null ? null : Integer(obj, name);
-    private static bool OptionalBoolean(JObject obj, string name)
-    {
-        if (obj[name] == null) return false;
-        if (obj[name]!.Type != JTokenType.Boolean) throw Error(obj[name]!, name + " must be a boolean");
-        return (bool)obj[name]!;
-    }
     private static FormatException Error(JToken token, string message)
     {
         var line = (token as IJsonLineInfo)?.LineNumber ?? 0;

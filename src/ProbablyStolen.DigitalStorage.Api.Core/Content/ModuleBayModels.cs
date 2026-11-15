@@ -231,21 +231,18 @@ public sealed class ModuleBayBinding
     /// <param name="definitionId">The referenced definition identifier.</param>
     /// <param name="providerId">The stable provider identifier.</param>
     /// <param name="maximumStage">An optional maximum supported stage.</param>
-    /// <param name="standardMachineTagFallback">Whether this is the explicit STANDARD_MACHINE_TAG fallback.</param>
-    public ModuleBayBinding(string nativeItemId, string definitionId, string providerId, int? maximumStage = null, bool standardMachineTagFallback = false)
+    public ModuleBayBinding(string nativeItemId, string definitionId, string providerId, int? maximumStage = null)
     {
         if (string.IsNullOrWhiteSpace(nativeItemId) || !string.Equals(nativeItemId, nativeItemId.Trim(), StringComparison.Ordinal)
             || nativeItemId.Any(char.IsControl)) throw new ArgumentException("Native item id must be a stable non-empty value.", nameof(nativeItemId));
+        if (nativeItemId == "*") throw new ArgumentException("Wildcard bindings are not supported; bind each native item id exactly.", nameof(nativeItemId));
         if (!Identifier.TryParse(definitionId, out var parsedDefinition)) throw new ArgumentException("Definition id must be a valid identifier.", nameof(definitionId));
         if (!Identifier.TryParse(providerId, out var parsedProvider)) throw new ArgumentException("Provider id must be a valid identifier.", nameof(providerId));
         if (maximumStage < 0) throw new ArgumentOutOfRangeException(nameof(maximumStage));
-        if (standardMachineTagFallback && nativeItemId != "*") throw new ArgumentException("The standard-machine fallback uses native item id '*'.", nameof(nativeItemId));
-        if (!standardMachineTagFallback && nativeItemId == "*") throw new ArgumentException("Wildcard bindings must explicitly enable the standard-machine fallback.", nameof(standardMachineTagFallback));
         NativeItemId = nativeItemId;
         DefinitionId = parsedDefinition;
         ProviderId = parsedProvider;
         MaximumStage = maximumStage;
-        IsStandardMachineTagFallback = standardMachineTagFallback;
     }
 
     /// <summary>Gets the stable native item identifier.</summary>
@@ -259,9 +256,6 @@ public sealed class ModuleBayBinding
 
     /// <summary>Gets the optional maximum stage.</summary>
     public int? MaximumStage { get; }
-
-    /// <summary>Gets whether this is the explicit STANDARD_MACHINE_TAG fallback.</summary>
-    public bool IsStandardMachineTagFallback { get; }
 }
 
 /// <summary>Describes the outcome category of a module-bay change.</summary>

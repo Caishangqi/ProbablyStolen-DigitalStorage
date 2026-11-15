@@ -17,9 +17,8 @@ internal static class CanExpandModulePatch
 {
     private static bool Prefix(GameItem item, ref bool __result)
     {
-        if (ModuleBayExpansionHooks.RejectsThread) { __result = false; return false; }
         if (!ModuleBayExpansionHooks.IsManaged(item)) return true;
-        __result = ModuleBayExpansionHooks.CanExpand(item);
+        __result = !ModuleBayExpansionHooks.RejectsThread && ModuleBayExpansionHooks.CanExpand(item);
         return false;
     }
 }
@@ -30,9 +29,8 @@ internal static class ExpandModulePatch
 {
     private static bool Prefix(GameItem item)
     {
-        if (ModuleBayExpansionHooks.RejectsThread) return false;
         if (!ModuleBayExpansionHooks.IsManaged(item)) return true;
-        ModuleBayExpansionHooks.Expand(item);
+        if (!ModuleBayExpansionHooks.RejectsThread) ModuleBayExpansionHooks.Expand(item);
         return false;
     }
 }
@@ -64,8 +62,7 @@ internal static class LoadUpgradePatch
     private static bool Prefix(GameItem item)
     {
         if (!ModuleBayExpansionHooks.IsManaged(item)) return true;
-        if (ModuleBayExpansionHooks.RejectsThread) return false;
-        ModuleBayExpansionHooks.Initialize(item);
+        if (!ModuleBayExpansionHooks.RejectsThread) ModuleBayExpansionHooks.Initialize(item);
         return false;
     }
 }

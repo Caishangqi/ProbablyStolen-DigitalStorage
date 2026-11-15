@@ -54,13 +54,6 @@
       "definition_id": "digital_storage:vanilla_standard",
       "provider_id": "digital_storage:cell",
       "max_stage": 2
-    },
-    {
-      "native_item_id": "*",
-      "definition_id": "digital_storage:vanilla_standard",
-      "provider_id": "digital_storage:native_standard",
-      "max_stage": 2,
-      "standard_machine_tag_fallback": true
     }
   ]
 }

@@ -202,6 +202,7 @@ public sealed class ModuleBayRegistryTests
         Assert.That(binding.DefinitionId, Is.EqualTo(Identifier.Parse("sample:bay")));
         Assert.That(binding.ProviderId, Is.EqualTo(Identifier.Parse("sample:provider")));
         AssertThrows<ArgumentException>(() => new ModuleBayBinding("native", "bad", "sample:provider"));
+        AssertThrows<ArgumentException>(() => new ModuleBayBinding("*", "sample:bay", "sample:provider"));
         AssertThrows<ArgumentOutOfRangeException>(() => new ModuleBayBinding("native", "sample:bay", "sample:provider", -1));
     }
 

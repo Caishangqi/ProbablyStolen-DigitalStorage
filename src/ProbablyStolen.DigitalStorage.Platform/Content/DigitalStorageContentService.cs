@@ -24,6 +24,10 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     private bool _frozen;
     private bool _disposed;
     private bool _unavailable = true;
+    // The published bindings and their definitions by native item id, or null until the freeze, after disposal and
+    // whenever builtin content is unavailable. A published dictionary is never mutated; the field is only replaced with
+    // null, so any thread may read it unlocked.
+    private volatile Dictionary<string, (ModuleBayBinding Binding, ModuleBayDefinition Definition)>? _bindingsByItem;
 
     internal DigitalStorageContentService(Action<string>? diagnostic = null)
     {
@@ -137,21 +141,23 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     {
         if (_disposed) return;
         _disposed = true;
+        _bindingsByItem = null;
         _manager.Dispose();
         foreach (var batch in _batches) batch.Dispose();
         _batches.Clear(); _sources.Clear(); _dataSources.Clear(); _listeners.Clear();
     }
 
-    private bool TryBinding(GameItem item, out ModuleBayBinding binding, out ModuleBayDefinition definition)
+    private bool TryBinding(GameItem item, out ModuleBayBinding binding, out ModuleBayDefinition definition) =>
+        TryBinding(item.identifier, out binding, out definition);
+
+    /// <summary>Only exact item bindings are managed, so other mods' machines keep their native module bays.</summary>
+    internal bool TryBinding(string nativeItemId, out ModuleBayBinding binding, out ModuleBayDefinition definition)
     {
         binding = null!; definition = null!;
-        if (!_frozen || _unavailable) return false;
-        var entries = _manager.Get<ModuleBayBinding>(Identifier.Parse(BindingRegistryId)).Entries;
-        var found = entries.FirstOrDefault(x => x.Value.NativeItemId == item.identifier).Value;
-        if (found == null && item.IsTag("STANDARD_MACHINE_TAG")) found = entries.FirstOrDefault(x => x.Value.IsStandardMachineTagFallback).Value;
-        if (found == null) return false;
-        binding = found;
-        return _manager.Get<ModuleBayDefinition>(Identifier.Parse(DefinitionRegistryId)).TryGetValue(binding.DefinitionId, out definition!);
+        var bindings = _bindingsByItem;
+        if (bindings == null || !bindings.TryGetValue(nativeItemId, out var found)) return false;
+        (binding, definition) = found;
+        return true;
     }
     private ModuleBayBinding FindBinding(GameItem item) { TryBinding(item, out var binding, out _); return binding; }
     private bool TryProvider(ModuleBayBinding binding, GameItem item, out IModuleBayProvider provider, out string? reason)
@@ -164,7 +170,6 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     private void Notify(GameItem item, ModuleBayState state) { foreach (var listener in _listeners.ToArray()) try { listener(item, state); } catch { } }
     private static Identifier BindingKey(ModuleBayBinding binding)
     {
-        if (binding.IsStandardMachineTagFallback) return Identifier.Parse("digital_storage:binding/standard_machine_tag");
         var encoded = string.Concat(binding.NativeItemId.Select(character => ((int)character).ToString("x4", System.Globalization.CultureInfo.InvariantCulture)));
         return Identifier.Parse("digital_storage:binding/utf16_" + encoded);
     }
@@ -178,7 +183,11 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     }
     private void InvalidateOwner(string owner)
     {
-        if (owner == "digital_storage") _unavailable = true;
+        if (owner == "digital_storage")
+        {
+            _unavailable = true;
+            _bindingsByItem = null;
+        }
         _invalidOwners.Add(owner);
         foreach (var batch in _batches.Where(batch => batch.Owner == owner)) batch.Dispose();
         _batches.RemoveAll(batch => batch.Owner == owner);
@@ -211,25 +220,24 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
         var providers = builtin.SelectMany(batch => batch.Providers).Select(provider => provider.Id).ToHashSet();
         foreach (var id in new[] { "digital_storage:native_standard", "digital_storage:cell" })
             if (!providers.Contains(Identifier.Parse(id))) throw new InvalidOperationException("Builtin provider is missing: " + id);
-        var required = new Dictionary<string, (string Definition, string Provider, int Maximum, bool Fallback)>(StringComparer.Ordinal)
+        var required = new Dictionary<string, (string Definition, string Provider, int Maximum)>(StringComparer.Ordinal)
         {
-            ["digital_storage.storage_terminal"] = ("digital_storage:terminal", "digital_storage:native_standard", 10, false),
-            ["digital_storage.storage_drive"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, false),
-            ["digital_storage.storage_network_controller"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, false),
-            ["digital_storage.item_storage_cell_1k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0, false),
-            ["digital_storage.item_storage_cell_4k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0, false),
-            ["digital_storage.item_storage_cell_16k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 1, false),
-            ["digital_storage.item_storage_cell_64k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 1, false),
-            ["digital_storage.item_storage_cell_256k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 2, false),
-            ["digital_storage.item_cell_housing"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 2, false),
-            ["*"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2, true)
+            ["digital_storage.storage_terminal"] = ("digital_storage:terminal", "digital_storage:native_standard", 10),
+            ["digital_storage.storage_drive"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
+            ["digital_storage.storage_network_controller"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
+            ["digital_storage.item_storage_cell_1k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
+            ["digital_storage.item_storage_cell_4k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
+            ["digital_storage.item_storage_cell_16k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 1),
+            ["digital_storage.item_storage_cell_64k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 1),
+            ["digital_storage.item_storage_cell_256k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 2),
+            ["digital_storage.item_cell_housing"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 2)
         };
         foreach (var item in required)
         {
             var binding = builtin.SelectMany(batch => batch.Bindings).SingleOrDefault(value => value.NativeItemId == item.Key);
             if (binding == null || binding.DefinitionId != Identifier.Parse(item.Value.Definition)
                 || binding.ProviderId != Identifier.Parse(item.Value.Provider)
-                || binding.MaximumStage != item.Value.Maximum || binding.IsStandardMachineTagFallback != item.Value.Fallback)
+                || binding.MaximumStage != item.Value.Maximum)
                 throw new InvalidOperationException("Builtin binding is missing or incorrect: " + item.Key);
         }
     }

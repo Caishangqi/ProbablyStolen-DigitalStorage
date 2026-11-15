@@ -153,6 +153,27 @@ class ModuleBayDataValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ModuleBayDataError, "duplicate path"):
             validate_registry_data(self.root, plain_path)
 
+    def test_unknown_binding_property_is_rejected(self):
+        bindings = self.valid_bindings()
+        bindings["bindings"][0]["extra"] = True
+        self.write_fixture(self.valid_definition(), bindings)
+        with self.assertRaisesRegex(ModuleBayDataError, "unknown properties"):
+            validate_registry_data(self.root, plain_path)
+
+    def test_native_item_id_rejects_c1_control_characters(self):
+        bindings = self.valid_bindings()
+        bindings["bindings"][0]["native_item_id"] = "fixture\x85machine"
+        self.write_fixture(self.valid_definition(), bindings)
+        with self.assertRaisesRegex(ModuleBayDataError, "native item id"):
+            validate_registry_data(self.root, plain_path)
+
+    def test_wildcard_binding_is_rejected(self):
+        bindings = self.valid_bindings()
+        bindings["bindings"][0]["native_item_id"] = "*"
+        self.write_fixture(self.valid_definition(), bindings)
+        with self.assertRaisesRegex(ModuleBayDataError, "wildcard"):
+            validate_registry_data(self.root, plain_path)
+
     def test_reparse_point_is_rejected_before_reading(self):
         self.write_fixture(self.valid_definition(), self.valid_bindings())
         original = Path.lstat
