@@ -157,6 +157,37 @@ public sealed class NativeItemIdentityReaderTests
         Assert.That(unusable.Identity, Is.Not.EqualTo(counterfeit.Identity));
     }
 
+    [Test]
+    public void Read_OneConditionAsFakeAndReal_IsReadByValue()
+    {
+        // Ingot purity and water purity assign one shared ItemConditionList entry to both conditions.
+        var shared = new Condition { OnActivateActionId = "purity" };
+        var sharedItem = ItemWithConditions(shared, shared);
+        var copiedItem = ItemWithConditions(new Condition { OnActivateActionId = "purity" },
+            new Condition { OnActivateActionId = "purity" });
+
+        var sharedResult = NativeItemIdentityReader.Read(sharedItem);
+        var copiedResult = NativeItemIdentityReader.Read(copiedItem);
+
+        Assert.That((sharedResult.Status, sharedResult.Failure),
+            Is.EqualTo((NativeItemIdentityReadStatus.Success, NativeItemIdentityFailure.None)));
+        Assert.That(sharedResult.Identity, Is.EqualTo(copiedResult.Identity));
+    }
+
+    private static DoubleItem ItemWithConditions(Condition fake, Condition real)
+    {
+        var root = CreateItem("ingot", 1);
+        root.Features.Add(new Feature("purity", "")
+        {
+            OwnerUniqueId = 1,
+            FakeCondition = fake,
+            RealCondition = real,
+            UseCondition = true,
+            PrivateFields = PrivateFields("display")
+        });
+        return root;
+    }
+
     private static DoubleItem ItemWithConditionAction(string action)
     {
         var root = CreateItem("injector", 1);

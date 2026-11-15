@@ -319,7 +319,9 @@ internal sealed class NativeItemIdentityReader
             return null;
         }
 
-        using var visit = Enter(condition);
+        // Conditions are shared definitions: the game assigns one ItemConditionList entry to both the fake and the real
+        // condition of a feature (IngotPurityHelper.SetPurity, WaterFeatureHelper.GetConditionFromPurity) and to many
+        // items. They hold no children and are copied by value here, so a repeated reference is not a shared graph.
         // Conditions such as "counterfeitInjector" name an activation action (ItemConditionList); the action ID
         // is part of the identity, so items with different actions stay separate types.
         return new CanonicalIdentityCondition(condition.Display, condition.Identifier, condition.ModValue,
