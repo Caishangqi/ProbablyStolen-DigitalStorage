@@ -1,8 +1,11 @@
-0.5.1
+0.5.5
 
-[list]
-[*] Added support for Customer Stocking 1.6.3. When enabled, one-click stocking can also use items from online digital networks within its scan range.
-[*] Added a Customer Stocking option to the settings. It appears when both mods are enabled and starts enabled for the verified version. Offline networks and cells outside a drive are not used.
-[*] Customer Stocking's "skip machine contents" option also skips items in digital networks because drives count as machines.
-[*] Fixed open terminals failing to update item counts after one-click stocking takes items from the digital network.
-[/list]
+- The terminal's module bay now supports 10 upgrades with the vanilla module bay expansion kit, reaching 255 usable cells. Vanilla machines still allow 2 upgrades, and storage cells keep their existing tier limits.
+- The Modules page fits its window to the module bay and shows the current stage, upgrade limit and usable cell count. Returning to the terminal restores the previous window size and position.
+- Added the content.v1 extension API. Other mods can define module bays and item bindings through C# registration or JSON resources, and contribute entries to shared registries.
+- Fixed a method overload ambiguity that prevented the mod from starting.
+- Fixed duplicate window drag components and repeated partition control registration, addressing the CanvasGroup and duplicate control ID warnings in the log.
+- Terminal and partition buttons no longer take keyboard focus or interfere with the game's native navigation.
+- Added dedicated API tests and registration regression tests covering JSON loading, cross-mod contributions and failure isolation.
+
+Note: If loading reports a module bay recovery failure, do not overwrite the save. Close the game, restore the required mods or content definitions, then load again.
