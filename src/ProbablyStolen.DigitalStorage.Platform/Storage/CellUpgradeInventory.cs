@@ -112,14 +112,8 @@ internal static class CellUpgradeInventory
     /// <summary>Gets the recorded expansion stage.</summary>
     internal static int Stage(GameItem item) => item.GetTagReadonly(StageTag).GetInt();
 
-    /// <summary>Gives the bay the shape of the recorded stage; unknown stages keep the base shape.</summary>
-    internal static void ApplyShape(GameItem cell)
-    {
-        var bay = Bay(cell);
-        var stage = Stage(cell);
-        if (bay == null || stage <= 0 || stage > ModuleBayExpansion.MaxNativeStage) return;
-        bay.SetShape(ModuleBayExpansion.Shape(stage), ModuleBayExpansion.Width);
-    }
+    /// <summary>Restores the cell's registered module layout without changing its inventory nodes.</summary>
+    internal static void ApplyShape(GameItem cell) => ModuleBayExpansionHooks.Initialize(cell);
 
     /// <summary>Gets whether a cell sits in a cell workbench.</summary>
     internal static bool InWorkbench(GameItem cell) => cell.parentInventory?.identifier == WorkbenchSlotId;

@@ -24,6 +24,8 @@ internal abstract class SubScreen : ITerminalBackHandler
     /// <summary>The status message key shown on the view when this page cannot be opened.</summary>
     internal virtual string UnavailableKey => DefaultUnavailableKey;
 
+    internal virtual bool FitsContent => false;
+
     /// <summary>The terminal window this page belongs to.</summary>
     protected TerminalWindowHost Window { get; }
 

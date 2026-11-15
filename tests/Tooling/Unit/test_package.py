@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from typing import Sequence
 from unittest.mock import patch
 
 
+REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.package import *
 from digital_storage_tools.package import _REPARSE_POINT
 
@@ -49,7 +51,11 @@ class PackageValidationTests(unittest.TestCase):
                 continue
             path = self.package_directory / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(f"synthetic {name}".encode("ascii"))
+            source = REPOSITORY / "packaging/resources" / name if name.startswith("Data/") else None
+            if source is not None and source.is_file():
+                shutil.copyfile(source, path)
+            else:
+                path.write_bytes(f"synthetic {name}".encode("ascii"))
         (self.package_directory / "manifest.xml").write_bytes(
             manifest_text(platform_assembly, [name for name in names if name.endswith(".dll")]).encode("utf-8")
         )
@@ -96,6 +102,15 @@ class PackageValidationTests(unittest.TestCase):
                 self._write_layout(names, other_assembly)
                 with self.assertRaisesRegex(PackageValidationError, "load order"):
                     validate_package_directory(self.package_directory, require_current_metadata=False)
+
+    def test_historical_api_and_search_layouts_exclude_data(self) -> None:
+        for names, resources in ((PREVIOUS_API_FILES, HISTORICAL_RESOURCE_FILES),
+                                 (PREVIOUS_SEARCH_FILES, tuple(n for n in HISTORICAL_RESOURCE_FILES if n not in WORKBENCH_RESOURCE_FILES))):
+            with self.subTest(names=names):
+                self.assertEqual(names, ("manifest.xml", *CORE_ASSEMBLIES, *resources))
+                self.assertTrue(set(names).isdisjoint(DATA_RESOURCE_FILES))
+                self._write_layout(names, CURRENT_PLATFORM_ASSEMBLY)
+                self.assertEqual([entry["name"] for entry in validate_package_directory(self.package_directory, False)], list(names))
 
     def test_manifest_listing_both_platform_names_is_rejected(self) -> None:
         path = self.package_directory / "manifest.xml"

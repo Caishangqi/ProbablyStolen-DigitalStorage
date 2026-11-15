@@ -52,7 +52,7 @@ public static class CellPageRestore
         {
             // Tags are restored before this postfix and children after it, so the expanded bay shape must be in place
             // before saved modules are put back into its extra cells, even when the pages failed to restore.
-            if (item != null) CellUpgradeInventory.ApplyShape(item);
+            if (item != null) ModuleBayExpansionHooks.Initialize(item);
         }
         catch (Exception error)
         {

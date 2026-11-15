@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ProbablyStolen.DigitalStorage.Api;
+using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
@@ -40,8 +42,10 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageVendors _vendors;
     private readonly TerminalSearchComposition _search;
     private readonly ItemTypeBackfill _typeBackfill;
+    private readonly DigitalStorageContentService _contentApi;
     private readonly DigitalStorageRuntime _runtime;
     private IntegrationHost? _integrations;
+    private IDisposable? _moduleBayHooks;
     private bool _runtimeExposed;
     private IDisposable? _localeRegistration;
     private readonly PinyinLifecycleCoordinator _pinyinLifecycle;
@@ -54,9 +58,10 @@ public sealed class PlatformComposition : IDisposable
         ItemAppearance appearance,
         StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
-        DigitalStorageRuntime runtime)
+        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime)
     {
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _contentApi = contentApi ?? throw new ArgumentNullException(nameof(contentApi));
         _events = events;
         _settings = settings;
         _vendors = vendors;
@@ -80,6 +85,9 @@ public sealed class PlatformComposition : IDisposable
 
     /// <summary>Gets the public API entry; valid until the composition is disposed.</summary>
     public IDigitalStorageRuntime Runtime => _runtime;
+
+    /// <summary>Gets the content.v1 registration and read-only API for this lifecycle.</summary>
+    public IDigitalStorageContentBootstrap ContentBootstrap => _contentApi;
 
     /// <summary>
     /// Discovers the integration plugins among <paramref name="pluginTypes"/> and keeps those whose mod is enabled.
@@ -150,9 +158,15 @@ public sealed class PlatformComposition : IDisposable
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
+        var contentApi = new DigitalStorageContentService(message => log.Warning(message));
+        contentApi.SetRecoveryWarning(() => CustomUIManager.Window("digital_storage.module_restore_warning",
+                text.Get("module_restore_failed_title"), CustomUIManager.LAYER_PAPER)
+            .AddWarning(text.Get("module_restore_failed_body"))
+            .AddCloseButton(() => CustomUIManager.Instance.CloseWindow("digital_storage.module_restore_warning"))
+            .Show());
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
-            message => log.Error(message), ItemValueAdjustment.Adjust);
+            message => log.Error(message), (state, price) => ItemValueAdjustment.Adjust(state, price, contentApi.MaximumStage));
         var itemContent = new ItemContentService(contentSynchronization, () =>
         {
             search.Service.UpdateConfiguration(search.Service.Configuration);
@@ -180,6 +194,7 @@ public sealed class PlatformComposition : IDisposable
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             networkTooltipPresenter, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
+            contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
                 () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))));
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
@@ -196,9 +211,16 @@ public sealed class PlatformComposition : IDisposable
             return;
         }
 
+        _contentApi.RegisterBatch("digital_storage", batch =>
+        {
+            batch.RegisterProvider(new NativeStandardModuleBayProvider());
+            batch.RegisterProvider(new CellModuleBayProvider());
+        });
+        _contentApi.SubmitIndex("digital_storage", "Data/registries.json");
         _isEnabled = true;
         try
         {
+            _moduleBayHooks = ModuleBayExpansionHooks.Attach(_contentApi);
             _content.Enable();
             _vendors.Enable();
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
@@ -211,9 +233,11 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _health.Run;
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
+            ModHook.OnGameLoadedLate += _contentApi.WarnIfRecoveryNeeded;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             ExposeRuntime(_runtime);
+            ExposeContent(_contentApi);
             // Subscribed before the integrations, so a plugin ending a stopped run finds no cells of the previous game.
             ModHook.OnGameLoadedInit += _runtime.OnGameLoading;
             if (_integrations != null)
@@ -258,6 +282,7 @@ public sealed class PlatformComposition : IDisposable
         _health.Detach();
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
+        ModHook.OnGameLoadedLate -= _contentApi.WarnIfRecoveryNeeded;
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
@@ -270,6 +295,10 @@ public sealed class PlatformComposition : IDisposable
         }
 
         if (_runtimeExposed) ExposeRuntime(null);
+        ExposeContent(null);
+        _moduleBayHooks?.Dispose();
+        _moduleBayHooks = null;
+        _contentApi.Dispose();
         _vendors.Dispose();
         _content.Dispose();
         _itemContent.Dispose();
@@ -339,9 +368,49 @@ public sealed class PlatformComposition : IDisposable
         }
 
         _assetsReady = true;
+        LoadContentAssets();
         _search.MarkAssetsReady();
         _settings.RefreshSectionNames();
         ValidateResources();
+    }
+
+    private void LoadContentAssets()
+    {
+        try
+        {
+            foreach (var ownerGroup in _contentApi.Sources.GroupBy(source => source.Owner, StringComparer.Ordinal))
+            {
+                try
+                {
+                    foreach (var source in ownerGroup)
+                        _contentApi.LoadSource(source, ModHelper.ReadModFileText(source.Owner, source.Path));
+                }
+                catch (Exception error)
+                {
+                    _contentApi.DiscardOwner(ownerGroup.Key);
+                    if (ownerGroup.Key == _modId) throw;
+                    _log.Warning($"Digital Storage: content from {ownerGroup.Key} was excluded ({error.GetType().Name}: {error.Message}).");
+                }
+            }
+            _contentApi.Bootstrap(builtin: true);
+            _log.Log("Digital Storage: content.v1 registries frozen.");
+        }
+        catch (Exception error)
+        {
+            _log.Error($"Digital Storage: module bay content is unavailable ({error.GetType().Name}: {error.Message}).");
+        }
+    }
+
+    private void ExposeContent(IDigitalStorageContentApi? content)
+    {
+        try
+        {
+            ModHelper.Expose(_modId, DigitalStorageContentKeys.ContentServiceKey, content);
+        }
+        catch (Exception error)
+        {
+            _log.Warning($"Digital Storage: content.v1 could not be {(content == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
+        }
     }
 
     private void ValidateResources()

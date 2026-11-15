@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "profiles": [
+    { "path": "Data/module_bays/vanilla_standard.json" },
+    { "path": "Data/module_bays/terminal.json" }
+  ],
+  "bindings": [
+    { "path": "Data/module_bays/bindings.json" }
+  ]
+}

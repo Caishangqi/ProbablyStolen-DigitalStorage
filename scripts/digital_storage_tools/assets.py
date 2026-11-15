@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Sequence
 
+from .module_bay_data import ModuleBayDataError, validate_registry_data
+
 REPOSITORY = Path(__file__).resolve().parents[2]
 # Source dimensions are deliberate: the 47px drive gains transparent right/bottom edges.
 ASSETS = {
@@ -176,6 +178,8 @@ def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSE
 def check_assets(output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
     for name in names:
         check_image(output, name)
+    if tuple(names) == tuple(ASSETS):
+        validate_registry_data(output, plain_path)
 
 
 def read_localization(path: Path) -> dict[str, str]:
@@ -397,7 +401,7 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_button_functions_tip", "terminal_view_storage", "terminal_view_diagnostics",
         "terminal_button_diagnostics_rail", "terminal_button_diagnostics_rail_tip",
         "terminal_button_diagnostics_picker", "terminal_button_diagnostics_picker_tip", "terminal_back",
-        "terminal_modules_unavailable", "terminal_page_unavailable", "terminal_diagnostics_view_text",
+        "terminal_modules_unavailable", "terminal_modules_stage", "module_restore_failed_title", "module_restore_failed_body", "terminal_page_unavailable", "terminal_diagnostics_view_text",
         "terminal_diagnostics_screen_text", "terminal_test_view_name", "terminal_test_view_desc",
         "workbench_info_mode", "workbench_info_rules", "workbench_info_types", "workbench_info_count",
         "partition_condition_count", "partition_remove_condition_tip", "partition_search_value",
@@ -469,7 +473,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         check_assets(args.output_dir, args.items)
         if args.check and tuple(args.items) == tuple(ASSETS):
             check_content(REPOSITORY, args.output_dir)
-    except (ContentValidationError, OSError) as error:
+    except (ContentValidationError, ModuleBayDataError, OSError) as error:
         print(f"Content error: {error}", file=sys.stderr)
         return 1
     print(f"[PASS] {len(args.items)} runtime PNGs validated.")

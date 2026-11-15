@@ -223,7 +223,11 @@ class GameWorkflowTests(unittest.TestCase):
             if name == "manifest.xml":
                 shutil.copyfile(REPOSITORY_ROOT / "packaging/manifest.xml", path)
             else:
-                path.write_bytes(b"synthetic workflow package file")
+                source = REPOSITORY_ROOT / "packaging/resources" / name if name.startswith("Data/") else None
+                if source is not None and source.is_file():
+                    shutil.copyfile(source, path)
+                else:
+                    path.write_bytes(b"synthetic workflow package file")
         result = self.run_workflow(WORKFLOW_TEST_BUILD="1", WORKFLOW_TEST_VALIDATE_PACKAGE=str(package))
         self.assertFalse(result["failed"])
         self.assertEqual(["package.ps1", "deploy.ps1", "launch"], result["events"])

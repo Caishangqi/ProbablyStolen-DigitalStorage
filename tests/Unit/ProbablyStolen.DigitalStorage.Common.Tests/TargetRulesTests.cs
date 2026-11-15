@@ -58,6 +58,24 @@ public sealed class TargetRulesTests
         Assert.That(composed("kit", ForeignMachine), Is.False);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void OrWith_StandardMachineRefusalSurvivesEitherWrapperOrder(bool wrapperFirst)
+    {
+        Func<string, string, bool> rejectMachine = (tool, target) => target != ForeignMachine && Native(tool, target);
+        Func<string, string, bool> composed;
+        if (wrapperFirst) composed = TargetRules.OrWith(rejectMachine, CellRule);
+        else
+        {
+            var prior = TargetRules.OrWith(Native, CellRule);
+            composed = (tool, target) => target != ForeignMachine && prior(tool, target);
+        }
+
+        Assert.That(composed("kit", Machine), Is.True);
+        Assert.That(composed("kit", Cell), Is.True);
+        Assert.That(composed("kit", ForeignMachine), Is.False);
+    }
+
     [Test]
     public void OrWith_ReturnsTheRuleWhenThereIsNoPreviousChain()
     {

@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "bindings": [
+    {
+      "native_item_id": "digital_storage.storage_terminal",
+      "definition_id": "digital_storage:terminal",
+      "provider_id": "digital_storage:native_standard",
+      "max_stage": 10
+    },
+    {
+      "native_item_id": "digital_storage.storage_drive",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:native_standard",
+      "max_stage": 2
+    },
+    {
+      "native_item_id": "digital_storage.storage_network_controller",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:native_standard",
+      "max_stage": 2
+    },
+    {
+      "native_item_id": "digital_storage.item_storage_cell_1k",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 0
+    },
+    {
+      "native_item_id": "digital_storage.item_storage_cell_4k",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 0
+    },
+    {
+      "native_item_id": "digital_storage.item_storage_cell_16k",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 1
+    },
+    {
+      "native_item_id": "digital_storage.item_storage_cell_64k",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 1
+    },
+    {
+      "native_item_id": "digital_storage.item_storage_cell_256k",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 2
+    },
+    {
+      "native_item_id": "digital_storage.item_cell_housing",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:cell",
+      "max_stage": 2
+    },
+    {
+      "native_item_id": "*",
+      "definition_id": "digital_storage:vanilla_standard",
+      "provider_id": "digital_storage:native_standard",
+      "max_stage": 2,
+      "standard_machine_tag_fallback": true
+    }
+  ]
+}

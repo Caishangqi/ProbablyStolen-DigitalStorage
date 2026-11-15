@@ -47,6 +47,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private GameGridInventory? _bay;
     private IDisposable? _configSubscription;
     private Vector2? _sizeBeforeSubScreen;
+    private Vector2? _positionBeforeSubScreen;
     private bool _closing;
     private bool _rebuilding;
 
@@ -367,6 +368,12 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     {
         if (_viewHost == null || _subHost == null) return;
         _currentView?.Suspend();
+        if (_window != null)
+        {
+            _sizeBeforeSubScreen ??= _window.Rect.sizeDelta;
+            _positionBeforeSubScreen ??= _window.Rect.anchoredPosition;
+            _window.root.GetComponent<NativeWindowSizer>()?.SetLeftExtent(0f);
+        }
         _viewHost.gameObject.SetActive(false);
         _dock?.SetShown(false);
         _subHost.gameObject.SetActive(true);
@@ -409,10 +416,13 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _subScreen = null;
         if (_closing || _viewHost == null || _subHost == null) return;
         if (_sizeBeforeSubScreen is { } size && _window != null) _window.SetSize(size.x, size.y);
+        if (_positionBeforeSubScreen is { } position && _window != null) _window.Rect.anchoredPosition = position;
         _sizeBeforeSubScreen = null;
+        _positionBeforeSubScreen = null;
         _subHost.gameObject.SetActive(false);
         _viewHost.gameObject.SetActive(true);
         _dock?.SetShown(true);
+        _window?.root.GetComponent<NativeWindowSizer>()?.SetLeftExtent(TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap);
         _currentView?.OnReturnFromSubScreen();
     }
 
@@ -424,9 +434,12 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         return true;
     }
 
-    /// <summary>
-    /// The window takes the larger of its own size and the size the page needs, and gets its own size back on return.
-    /// </summary>
+    internal void FitSubScreenContent(SubScreen screen)
+    {
+        if (ReferenceEquals(_subScreen, screen) && !_closing) FitSubScreen();
+    }
+
+    /// <summary>Measures the active page and restores the view's baseline when the page is closed.</summary>
     private void FitSubScreen()
     {
         if (_window == null || _subHost == null) return;
@@ -436,9 +449,10 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         LayoutRebuilder.ForceRebuildLayoutImmediate(_subHost);
         var content = _window.ContentRoot.rect.size;
         var needed = new Vector2(LayoutUtility.GetPreferredWidth(_subHost), LayoutUtility.GetPreferredHeight(_subHost));
-        var extra = Vector2.Max(Vector2.zero, needed - content);
-        _window.SetSize(baseline.x + extra.x, baseline.y + extra.y);
-        if (extra != Vector2.zero) _diagnostics?.Record("sub_screen", $"grown={extra.x:0}x{extra.y:0}");
+        var chrome = _window.Rect.rect.size - content;
+        var width = SubScreenMetrics.GetLength(baseline.x, needed.x, chrome.x, _subScreen?.FitsContent == true);
+        var height = SubScreenMetrics.GetLength(baseline.y, needed.y, chrome.y, _subScreen?.FitsContent == true);
+        _window.SetSize(width, height);
     }
 
     /// <inheritdoc />
@@ -505,6 +519,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
             _bay = null;
             _sizeBeforeSubScreen = null;
+            _positionBeforeSubScreen = null;
             NativeWindowLayer.Detach(_window);
             // Destroyed with the root at the end of the frame; until then its LateUpdate must not rebuild into it.
             if (_dock != null) _dock.enabled = false;

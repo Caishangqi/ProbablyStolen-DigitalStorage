@@ -26,6 +26,12 @@ internal sealed class NativeWindowSizer : MonoBehaviour
         Apply();
     }
 
+    internal void SetLeftExtent(float extent)
+    {
+        _leftExtent = Mathf.Max(0f, extent);
+        Apply();
+    }
+
     private void LateUpdate() => Apply();
 
     private void Apply()

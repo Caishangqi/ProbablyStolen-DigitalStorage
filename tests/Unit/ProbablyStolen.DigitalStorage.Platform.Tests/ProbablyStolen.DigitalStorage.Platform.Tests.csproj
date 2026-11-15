@@ -15,7 +15,15 @@
   <ItemGroup Condition="'$(DigitalStorageManagedDirectory)' != ''">
     <Reference Include="Assembly-CSharp">
       <HintPath>$(DigitalStorageManagedDirectory)\Assembly-CSharp.dll</HintPath>
-      <Private>false</Private>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(DigitalStorageManagedDirectory)\UnityEngine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(DigitalStorageManagedDirectory)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 

@@ -252,7 +252,9 @@ internal static class NativeItemContentInitialization
 /// </summary>
 internal static class ItemValueAdjustment
 {
-    internal static long Adjust(IItemContentState state, long baseValue)
+    internal static long Adjust(IItemContentState state, long baseValue) => Adjust(state, baseValue, null);
+
+    internal static long Adjust(IItemContentState state, long baseValue, Func<GameItem, int>? readMaximumStage)
     {
         if (state is not NativeItemContentState native) return baseValue;
         var item = native.Item;
@@ -264,9 +266,11 @@ internal static class ItemValueAdjustment
         }
 
         if (item.identifier == CellUpgradeInventory.EqualDistributionId) return baseValue;
-        var stage = CellUpgradeInventory.Stage(item);
         var tier = StorageCellTier.FromCellId(item.identifier);
-        var maxStage = tier == null ? ModuleBayExpansion.MaxNativeStage : ModuleBayExpansion.MaxStage(tier);
+        if (tier == null && item.identifier != MaterialItem.ItemId && !item.IsTag(MachineHelper.STANDARD_MACHINE_TAG)) return baseValue;
+        var stage = CellUpgradeInventory.Stage(item);
+        var maxStage = readMaximumStage != null ? readMaximumStage(item)
+            : tier == null ? ModuleBayExpansion.MaxNativeStage : ModuleBayExpansion.MaxStage(tier);
         return ItemContentPriceRules.WithExpansion(baseValue, stage, maxStage, ItemPrices.ExpansionStage);
     }
 }

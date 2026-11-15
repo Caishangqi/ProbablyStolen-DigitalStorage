@@ -24,6 +24,7 @@ class ContentAssetTests(unittest.TestCase):
         self.source = self.root / "source"
         self.output = self.root / "runtime"
         self.source.mkdir()
+        shutil.copytree(REPOSITORY / "packaging/resources/Data", self.output / "Data")
         self.Image = image_api()
         for name, (size, _) in ASSETS.items():
             image = self.Image.new("RGBA", size, (27, 43, 83, 255))
@@ -62,7 +63,7 @@ class ContentAssetTests(unittest.TestCase):
         (self.source / "item_storage_cell_1k.png").unlink()
         with self.assertRaises(ContentValidationError):
             prepare_assets(self.source, self.output)
-        self.assertFalse(self.output.exists())
+        self.assertFalse((self.output / "Textures").exists())
 
     def test_missing_runtime_check_does_not_repair(self):
         prepare_assets(self.source, self.output)

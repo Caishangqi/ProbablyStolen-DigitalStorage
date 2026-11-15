@@ -1,84 +1,80 @@
+using System;
+using System.Runtime.CompilerServices;
+using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
-/// <summary>
-/// Lets the native module bay expansion kit work on storage cells without giving cells the standard machine tag,
-/// which other native code reads (turbo boosters, module bay restore by storage index). Called from Harmony patches in
-/// the mod assembly.
-/// </summary>
+/// <summary>Forwards native hooks to the module bay service owned by the enabled composition.</summary>
 public static class ModuleBayExpansionHooks
 {
-    /// <summary>
-    /// Lets a new kit also target storage cells, keeping its native machine rule, and never target a terminal, whose
-    /// module bay is already the kit's last stage. The terminal exclusion here only covers the rules present now;
-    /// <see cref="RefusesTarget"/> enforces it on the final result.
-    /// </summary>
+    private static DigitalStorageContentService? _service;
+    private static readonly ConditionalWeakTable<GameItem, object> Kits = new();
+
+    /// <summary>Gets the active module bay API, or null when the mod is stopped.</summary>
+    public static IModuleBayApi? Api => _service;
+
+    /// <summary>Gets whether a native mutation must be refused before reading any game objects.</summary>
+    public static bool RejectsThread => _service != null && !_service.IsMainThread;
+
+    internal static IDisposable Attach(DigitalStorageContentService service)
+    {
+        if (_service != null) throw new InvalidOperationException("A module bay service is already attached.");
+        _service = service ?? throw new ArgumentNullException(nameof(service));
+        return new Registration(service);
+    }
+
+    /// <summary>Gets whether the native operation belongs to the enabled module bay service.</summary>
+    public static bool IsManaged(GameItem? item) => _service?.IsManaged(item) == true;
+
+    /// <summary>Restores a bound item's recorded layout without moving its module items.</summary>
+    public static void Initialize(GameItem item)
+    {
+        if (IsManaged(item)) _service!.Initialize(item);
+    }
+
+    /// <summary>Checks the bound item's next stage without mutating it.</summary>
+    public static bool CanExpand(GameItem item) => _service?.CanExpand(item).Succeeded == true;
+
+    /// <summary>Applies one stage without consuming a tool or adding value.</summary>
+    public static void Expand(GameItem item) => _service?.Expand(item);
+
+    /// <summary>Wraps native tool rules while retaining the complete previous delegate chain for other targets.</summary>
     public static void ExtendKit(GameItem kit)
     {
         if (kit == null) return;
-        kit.mayItemTargetItemFunc = TargetRules.Unless<GameItem, GameItem>(
-            TargetRules.OrWith<GameItem, GameItem>(kit.mayItemTargetItemFunc, CanExpandCell), IsTerminal);
-        kit.canItemTargetItemFunc = TargetRules.Unless<GameItem, GameItem>(
-            TargetRules.OrWith<GameItem, GameItem>(kit.canItemTargetItemFunc, CanExpandCell), IsTerminal);
+        Kits.GetValue(kit, _ => new object());
+        var action = kit.onItemTargetItemFunc;
+        kit.mayItemTargetItemFunc = TargetRules.OrWith(kit.mayItemTargetItemFunc, CanUseManagedKit);
+        kit.canItemTargetItemFunc = TargetRules.OrWith(kit.canItemTargetItemFunc, CanUseManagedKit);
+        kit.onItemTargetItemFunc = (source, target) =>
+        {
+            if (RejectsThread) return;
+            if (IsManaged(target)) _service!.TryUseKit(target, source);
+            else action?.Invoke(source, target);
+        };
     }
 
-    /// <summary>
-    /// Handles the kit's expansion where the native method must not run: a cell expands its own bay, and a terminal is
-    /// left unchanged (its kit targeting is refused already; this is the fallback). Returns false for other items.
-    /// </summary>
-    public static bool HandleExpansion(GameItem item) => IsTerminal(item) || ExpandCell(item);
-
-    /// <summary>
-    /// Gets whether the native load-time reshape (<c>MachineHelper.LoadUpgrade</c>, run for every decoded item) must
-    /// skip this item. Terminals keep their full bay; their stage tag is neither read nor changed.
-    /// </summary>
-    public static bool SkipsUpgradeLoad(GameItem item) => IsTerminal(item);
-
-    /// <summary>
-    /// Gets whether <paramref name="source"/> must not target <paramref name="target"/>: the kit on a terminal. Checked
-    /// on the final <c>GameItem.MayTarget</c>/<c>CanTarget</c> result, because the game ORs every rule on the kit's
-    /// delegate chain (<c>InvokeAllReduce</c> with <c>BoolReduceOR</c>) and another mod may append a machine rule after
-    /// <see cref="ExtendKit"/>. Without this, the kit would still be consumed and add value to the terminal while
-    /// <see cref="HandleExpansion"/> leaves its bay unchanged.
-    /// </summary>
-    public static bool RefusesTarget(GameItem? source, GameItem? target) =>
-        source?.identifier == KitId && IsTerminal(target);
-
-    // ModuleDirectory registers the kit under this id (Add("module_bay_expansion_kit", ...)).
-    private const string KitId = "module_bay_expansion_kit";
-
-    private static bool IsTerminal(GameItem? item) => item?.identifier == TerminalItem.ItemId;
-
-    /// <summary>
-    /// Expands a cell's own module bay. Returns false for any other item so the native method runs; for a cell it
-    /// always returns true, because the native method would reshape the inventory at storage index 1, which is a page.
-    /// </summary>
-    public static bool ExpandCell(GameItem item)
+    /// <summary>Refuses invalid managed kit operations even when another rule was appended with OR semantics.</summary>
+    public static bool RefusesTarget(GameItem? source, GameItem? target)
     {
-        var tier = item == null ? null : StorageCellTier.FromCellId(item.identifier);
-        if (tier == null) return false;
-        var cell = item!;
-        var bay = CellUpgradeInventory.Bay(cell);
-        var previousStage = CellUpgradeInventory.Stage(cell);
-        if (bay == null || !ModuleBayExpansion.Fits(previousStage + 1, tier)) return true;
-        ModuleBayExpansion.Apply(previousStage, tier,
-            (shape, width) => bay.SetShape(shape, width),
-            stage => cell.ModifyTag(CellUpgradeInventory.StageTag, state => state.Enable().SetInt(stage)),
-            () => cell.contentWindow?.Validate());
-        return true;
+        if (source == null || target == null || !Kits.TryGetValue(source, out _) || !IsManaged(target)) return false;
+        return RejectsThread || !_service!.CanUseKit(target, source);
     }
 
-    private static bool CanExpandCell(GameItem source, GameItem target)
+    private static bool CanUseManagedKit(GameItem source, GameItem target) =>
+        !RejectsThread && source?.identifier == DigitalStorageContentService.KitId && target != null &&
+        IsManaged(target) && !target.IsTag(MachineHelper.STANDARD_MACHINE_TAG) && _service!.CanUseKit(target, source);
+
+    private sealed class Registration : IDisposable
     {
-        var tier = target == null ? null : StorageCellTier.FromCellId(target.identifier);
-        // The native kit is consumed and adds value after ExpandModule whatever happens there, so every condition
-        // ExpandCell needs is checked here, before the kit can be used at all.
-        return tier != null && GeneralHelper.IsItemOwned(target) && GeneralHelper.IsItemOwned(source) &&
-            !CellHealth.IsUnavailable(target!) && CellPages.IsComplete(target!) && CellUpgradeInventory.Bay(target!) != null &&
-            ModuleBayExpansion.CanExpand(CellUpgradeInventory.Stage(target!), tier);
+        private DigitalStorageContentService? _owned;
+        internal Registration(DigitalStorageContentService service) => _owned = service;
+        public void Dispose()
+        {
+            if (ReferenceEquals(_service, _owned)) _service = null;
+            _owned = null;
+        }
     }
 }

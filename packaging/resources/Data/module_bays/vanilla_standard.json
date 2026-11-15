@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "id": "digital_storage:vanilla_standard",
+  "stages": [
+    {
+      "level": 0,
+      "key": "base",
+      "layout": {
+        "type": "pattern",
+        "rows": [
+          "1000001",
+          "0001000",
+          "0011100",
+          "0001000",
+          "1000001"
+        ]
+      }
+    },
+    {
+      "level": 1,
+      "key": "expansion_01",
+      "layout": {
+        "type": "pattern",
+        "rows": [
+          "1000001",
+          "0000000",
+          "0000000",
+          "0000000",
+          "1000001"
+        ]
+      }
+    },
+    {
+      "level": 2,
+      "key": "expansion_02",
+      "layout": {
+        "type": "pattern",
+        "rows": [
+          "0000000",
+          "0000000",
+          "0000000",
+          "0000000",
+          "0000000"
+        ]
+      }
+    }
+  ]
+}

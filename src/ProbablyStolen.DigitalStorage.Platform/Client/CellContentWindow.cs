@@ -66,6 +66,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         var window = MachineHelper.CreateMachineryWindow(true, new[] { 0, 2, 1 }, component, pages, modules);
         host.SetContentWindow(window);
         SetupModuleBay(bay);
+        ModuleBayExpansionHooks.Initialize(host);
         // The hidden panel preserves the module bay's save position while the workbench draws it.
         // Reset the component panel's stretched size as SyncPages does.
         modules.SetHidden(true);

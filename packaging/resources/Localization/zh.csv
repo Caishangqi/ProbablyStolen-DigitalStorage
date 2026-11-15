@@ -320,6 +320,9 @@ terminal_button_diagnostics_picker,页
 terminal_button_diagnostics_picker_tip,打开诊断测试页
 terminal_back,返回终端
 terminal_modules_unavailable,模块面板不可用
+terminal_modules_stage,等级 {0}/{1} | 可用 {2} 格
+module_restore_failed_title,模块仓不可用
+module_restore_failed_body,模块仓未能恢复记录的布局. 已保留物品和阶段记录并锁定模块变更. 请勿保存本局游戏. 关闭游戏并恢复所需的内容定义后重新读档.
 terminal_page_unavailable,该页面无法打开
 terminal_diagnostics_view_text,诊断测试视图. 用于检查视图切换, 不读取或修改物品.
 terminal_diagnostics_screen_text,诊断测试页. 按返回回到终端.

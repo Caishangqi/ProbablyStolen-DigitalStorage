@@ -99,7 +99,7 @@ class NUnitRunnerTests(unittest.TestCase):
             sources = root / "tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests"
             sources.mkdir(parents=True)
             for name in ("CanonicalFilterKeyCodecTests.cs", "ItemContentSynchronizationTests.cs",
-                         "NativeItemIdentityReaderTests.cs", "UnreviewedTests.cs"):
+                         "NativeItemIdentityReaderTests.cs", "ModuleBayContentBootstrapTests.cs", "UnreviewedTests.cs"):
                 (sources / name).write_text("", encoding="utf-8")
             command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                        str(root / "scripts/test.ps1"), "-Target", "Platform", "-GameDirectory", str(game)]

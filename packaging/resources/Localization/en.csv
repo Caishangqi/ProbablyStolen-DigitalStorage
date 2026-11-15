@@ -320,6 +320,9 @@ terminal_button_diagnostics_picker,P
 terminal_button_diagnostics_picker_tip,Open the diagnostic test page
 terminal_back,Back to the terminal
 terminal_modules_unavailable,Module panel unavailable
+terminal_modules_stage,Stage {0}/{1} | {2} available cells
+module_restore_failed_title,Module bay unavailable
+module_restore_failed_body,A module bay could not restore its recorded layout. Its items and recorded stage were retained and module changes are locked. Do not save this session. Close the game and restore the required content definitions before loading again.
 terminal_page_unavailable,This page cannot be opened
 terminal_diagnostics_view_text,Diagnostic test view. Used to check view switching; it does not read or change items.
 terminal_diagnostics_screen_text,Diagnostic test page. Press Back to return to the terminal.

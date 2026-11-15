@@ -57,7 +57,7 @@ internal sealed class TerminalItem
         try
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
-            _windows.Attach(item, fullModuleBay: true);
+            _windows.Attach(item);
             var storage = new StorageTerminalServices(_text, _view,
                 () => _networkPower.ReadTerminalInventory(item),
                 (entry, amount) => _networkPower.ExtractToPlayer(item, entry.Key, amount),

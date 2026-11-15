@@ -31,6 +31,7 @@ class ContentContractTests(unittest.TestCase):
         self.output = self.root / "resources"
         for name in ("Localization", "Search", "Licenses"):
             shutil.copytree(REPOSITORY / "packaging/resources" / name, self.output / name)
+        shutil.copytree(REPOSITORY / "packaging/resources/Data", self.output / "Data")
 
     def test_tier_vendor_value_and_resource_wiring(self):
         vendor = (self.platform / "Content/StorageVendors.cs").read_text(encoding="utf-8")
@@ -186,7 +187,7 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("_windows.Attach(item, bays, drivePriority: true)", drive)
         self.assertNotIn("configurePartitions:", drive)
         self.assertNotIn("new CellPartitionSource(slots[index])", drive)
-        self.assertIn("_windows.Attach(item, fullModuleBay: true)", terminal)
+        self.assertIn("_windows.Attach(item);", terminal)
         scanner = (original / "Network/NativeNetworkScanner.cs").read_text(encoding="utf-8")
         self.assertIn("FindAdjacentType<GameItem>()", scanner)
         self.assertIn("ReferenceEquals(item.parentInventory, parentInventory)", scanner)

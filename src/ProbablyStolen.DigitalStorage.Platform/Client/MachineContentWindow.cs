@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -25,14 +24,10 @@ internal sealed class MachineContentWindow
     }
 
     internal void Attach(GameItem machine, GridPixelElement? cellBays = null,
-        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false,
-        bool fullModuleBay = false)
+        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false)
     {
         var battery = new GameSlotInventory();
-        // A full bay opens all 7x5 cells, the native kit's last stage, and keeps them on load (terminals).
-        var modules = fullModuleBay
-            ? new GameGridInventory(ModuleBayExpansion.Shape(ModuleBayExpansion.MaxNativeStage), ModuleBayExpansion.Width)
-            : new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
+        var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
         var power = MachineHelper.PowerPanel(battery);
         var priority = drivePriority ? new DrivePriorityWindow(machine) : null;
         var panels = new List<MachineryPanel>
@@ -74,6 +69,7 @@ internal sealed class MachineContentWindow
         }
 
         MachineHelper.SetupModuleBay(modules, machine);
+        ModuleBayExpansionHooks.Initialize(machine);
         machine.mayStackItemFunc = (_, _) => false;
         machine.maxSlotAmountItemFunc = (_, _, _) => 1;
         _events.AttachMachine(machine);
@@ -108,8 +104,7 @@ internal sealed class MachineContentWindow
 
         public void RestoreModules()
         {
-            // Also covered by the LoadUpgrade patch; checked here too so a terminal keeps its full bay without it.
-            if (!ModuleBayExpansionHooks.SkipsUpgradeLoad(_machine)) MachineHelper.LoadUpgrade(_machine);
+            MachineHelper.LoadUpgrade(_machine);
             MachineHelper.OnLoad(_machine);
         }
     }

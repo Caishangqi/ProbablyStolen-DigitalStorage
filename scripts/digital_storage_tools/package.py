@@ -13,6 +13,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 
+from .assets import plain_path
+from .module_bay_data import ModuleBayDataError, validate_registry_data
+
 
 EXPECTED_ID = "digital_storage"
 EXPECTED_NAME = "Digital Storage"
@@ -66,14 +69,24 @@ SEARCH_RESOURCE_FILES = (
     "Licenses/pinyin-data-LICENSE.txt",
     "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
 )
+DATA_RESOURCE_FILES = (
+    "Data/registries.json",
+    "Data/module_bays/vanilla_standard.json",
+    "Data/module_bays/terminal.json",
+    "Data/module_bays/bindings.json",
+)
 RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
     *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
       for prefix in ("item_storage_cell", "cell_component")),
     *WORKBENCH_RESOURCE_FILES,
-    *SEARCH_RESOURCE_FILES,
+    SEARCH_RESOURCE_FILES[0],
+    *DATA_RESOURCE_FILES,
+    *SEARCH_RESOURCE_FILES[1:],
 )
 CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
-PREVIOUS_API_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *RESOURCE_FILES)
+HISTORICAL_RESOURCE_FILES = tuple(name for name in RESOURCE_FILES if name not in DATA_RESOURCE_FILES)
+PRE_DATA_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *HISTORICAL_RESOURCE_FILES)
+PREVIOUS_API_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *HISTORICAL_RESOURCE_FILES)
 PREVIOUS_SEARCH_FILES = tuple(name for name in PREVIOUS_API_FILES if name not in WORKBENCH_RESOURCE_FILES)
 # An installation made before the Platform assembly rename has the current 13 file layout with the old
 # Platform DLL name. Deployment must still recognize it so upgrade and removal stay safe.
@@ -93,6 +106,7 @@ RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LE
 # Each known installation layout pins the single Platform DLL name that its manifest must declare.
 KNOWN_LAYOUTS = (
     ("current", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
+    ("pre-data-current", PRE_DATA_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous-api", PREVIOUS_API_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous-search", PREVIOUS_SEARCH_FILES, CURRENT_PLATFORM_ASSEMBLY),
     ("previous21", PREVIOUS_TIER_FILES, CURRENT_PLATFORM_ASSEMBLY),
@@ -311,7 +325,7 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         raise PackageValidationError(f"Could not inspect package tree: {error}") from error
     names = layouts["current"]
     if not require_current_metadata:
-        for candidate_names in (PREVIOUS_API_FILES, PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
+        for candidate_names in (PRE_DATA_CURRENT_FILES, PREVIOUS_API_FILES, PREVIOUS_SEARCH_FILES, PREVIOUS_TIER_FILES, RENAMED_PLATFORM_TIER_FILES, PREVIOUS_CURRENT_FILES, RENAMED_PLATFORM_FILES, layouts["legacy"], layouts["previous"]):
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break
@@ -319,6 +333,12 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         missing = sorted(set(names) - actual_names)
         extra = sorted(actual_names - set(names))
         raise PackageValidationError(f"Package file allowlist mismatch; missing={missing}, extra={extra}; directories={sorted(actual_directories)}.")
+
+    try:
+        if "Data/registries.json" in names:
+            validate_registry_data(candidate, plain_path)
+    except (ModuleBayDataError, OSError, ValueError) as error:
+        raise PackageValidationError(f"Invalid module-bay data: {error}") from error
 
     _validate_manifest(candidate / "manifest.xml", _layout_assemblies(names), require_current_metadata)
     inventory: list[dict[str, object]] = []
