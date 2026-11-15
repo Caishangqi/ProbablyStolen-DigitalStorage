@@ -1,5 +1,5 @@
 0.5.5
-
+Refactored the terminal and partition panel, and standardized the module expansion content to prepare for terminal module expansion in the next version.
 - The terminal's module bay now supports 10 upgrades with the vanilla module bay expansion kit, reaching 255 usable cells. Vanilla machines still allow 2 upgrades, and storage cells keep their existing tier limits.
 - The Modules page fits its window to the module bay and shows the current stage, upgrade limit and usable cell count. Returning to the terminal restores the previous window size and position.
 - Added the content.v1 extension API. Other mods can define module bays and item bindings through C# registration or JSON resources, and contribute entries to shared registries.
@@ -7,5 +7,5 @@
 - Fixed duplicate window drag components and repeated partition control registration, addressing the CanvasGroup and duplicate control ID warnings in the log.
 - Terminal and partition buttons no longer take keyboard focus or interfere with the game's native navigation.
 - Added dedicated API tests and registration regression tests covering JSON loading, cross-mod contributions and failure isolation.
-
-Note: If loading reports a module bay recovery failure, do not overwrite the save. Close the game, restore the required mods or content definitions, then load again.
+- Module bay expansion now manages only this mod's items and items other mods explicitly register. Vanilla machines and other mods' machines keep their native behavior.
+- A module bay that fails to restore is logged, and locked when its inventory can be reached; no warning window is shown.
