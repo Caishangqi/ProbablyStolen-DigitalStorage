@@ -337,8 +337,9 @@ def validate_package_directory(package_directory: Path, require_current_metadata
         extra = sorted(actual_names - set(names))
         raise PackageValidationError(f"Package file allowlist mismatch; missing={missing}, extra={extra}; directories={sorted(actual_directories)}.")
 
+    # An earlier package only needs its ownership checked before replacement; its data follows that version's schema.
     try:
-        if "Data/registries.json" in names:
+        if require_current_metadata and "Data/registries.json" in names:
             validate_registry_data(candidate, plain_path)
     except (ModuleBayDataError, OSError, ValueError) as error:
         raise PackageValidationError(f"Invalid module-bay data: {error}") from error

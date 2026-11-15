@@ -84,6 +84,15 @@ class PackageValidationTests(unittest.TestCase):
         inventory = validate_package_directory(self.package_directory)
         self.assertEqual(len(inventory), len(CURRENT_FILES))
 
+    def test_earlier_package_data_schema_is_checked_only_for_current_packages(self) -> None:
+        path = self.package_directory / "Data/module_bays/bindings.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["bindings"][0]["obsolete_field"] = True
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(len(validate_package_directory(self.package_directory, require_current_metadata=False)), len(CURRENT_FILES))
+        with self.assertRaisesRegex(PackageValidationError, "Invalid module-bay data"):
+            validate_package_directory(self.package_directory)
+
     def test_mod_version_must_not_be_empty(self) -> None:
         self._set_mod_version("")
         with self.assertRaisesRegex(PackageValidationError, "ModVersion must not be empty"):
