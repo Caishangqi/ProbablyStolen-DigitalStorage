@@ -1,11 +1,16 @@
-0.5.5
-Refactored the terminal and partition panel, and standardized the module expansion content to prepare for terminal module expansion in the next version.
-- The terminal's module bay now supports 10 upgrades with the vanilla module bay expansion kit, reaching 255 usable cells. Vanilla machines still allow 2 upgrades, and storage cells keep their existing tier limits.
-- The Modules page fits its window to the module bay and shows the current stage, upgrade limit and usable cell count. Returning to the terminal restores the previous window size and position.
-- Added the content.v1 extension API. Other mods can define module bays and item bindings through C# registration or JSON resources, and contribute entries to shared registries.
-- Fixed a method overload ambiguity that prevented the mod from starting.
-- Fixed duplicate window drag components and repeated partition control registration, addressing the CanvasGroup and duplicate control ID warnings in the log.
-- Terminal and partition buttons no longer take keyboard focus or interfere with the game's native navigation.
-- Added dedicated API tests and registration regression tests covering JSON loading, cross-mod contributions and failure isolation.
-- Module bay expansion now manages only this mod's items and items other mods explicitly register. Vanilla machines and other mods' machines keep their native behavior.
-- A module bay that fails to restore is logged, and locked when its inventory can be reached; no warning window is shown.
+0.5.8
+Reworked the terminal and partition panels and added the terminal Stack Display Module.
+- New Stack Display Module (2x2), which Dr. Jackson and the Upper-Level Engineer may sell. Put it in a terminal's module bay and a stack button appears on the storage view rail.
+- On the stacking rules page you can tell the terminal to ignore some differences between items, such as what a container holds, the estimated value or metal purity, so those items share one slot. The attributes you can pick come from the items the terminal actually stores, and each terminal keeps its own rules.
+- Merged slots carry a stack mark whose color you choose on the rules page. Hovering one lists below the item tooltip how many kinds it merges and which rules apply.
+- You can take items straight out of a merged slot: left click takes 1, right click takes half, Shift+left click takes everything.
+- Terminal badges now show pieces, and tooltips of stackable items show the total count. Taking items out never splits a piece.
+- The terminal's module bay can be upgraded 10 times with the vanilla module bay expansion kit, up to 255 slots. Vanilla machines still take 2 upgrades, and storage cell limits are unchanged.
+- The Modules page sizes its window to the module bay and shows the current stage, the upgrade limit and the usable slots. Going back to the terminal restores the window's size and position.
+- The partition page's Add Condition and Sample Attributes buttons are now icons.
+- Terminal and partition buttons no longer grab keyboard focus, so they stay out of the game's own key navigation.
+- Fixed bottled water, metal ingots and other items with water quality or purity not merging in the terminal and not matching partition rules.
+- Fixed an issue that stopped the mod from starting.
+- Module bay upgrades only apply to this mod's items and items other mods register. Vanilla machines and other mods' machines behave as before.
+- A module bay that fails to restore no longer opens a warning window. It is written to the log and locked when it can be found.
+- Mod authors can use the new content.v1 interface to define module bays and item bindings in C# or JSON.
