@@ -416,7 +416,7 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_button_functions_tip", "terminal_view_storage", "terminal_view_diagnostics",
         "terminal_button_diagnostics_rail_tip",
         "terminal_button_diagnostics_picker_tip", "terminal_back",
-        "terminal_modules_unavailable", "terminal_modules_stage", "module_restore_failed_title", "module_restore_failed_body", "terminal_page_unavailable", "terminal_diagnostics_view_text",
+        "terminal_modules_unavailable", "terminal_modules_stage", "terminal_page_unavailable", "terminal_diagnostics_view_text",
         "terminal_diagnostics_screen_text", "terminal_test_view_name", "terminal_test_view_desc",
         "workbench_info_mode", "workbench_info_rules", "workbench_info_types", "workbench_info_count",
         "partition_condition_count", "partition_remove_condition_tip", "partition_search_value",

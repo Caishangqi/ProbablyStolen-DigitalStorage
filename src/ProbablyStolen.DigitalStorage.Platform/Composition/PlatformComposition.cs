@@ -162,11 +162,6 @@ public sealed class PlatformComposition : IDisposable
         var cellHandler = new BasicCellHandler(text);
         var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
         var contentApi = new DigitalStorageContentService(message => log.Warning(message));
-        contentApi.SetRecoveryWarning(() => CustomUIManager.Window("digital_storage.module_restore_warning",
-                text.Get("module_restore_failed_title"), CustomUIManager.LAYER_PAPER)
-            .AddWarning(text.Get("module_restore_failed_body"))
-            .AddCloseButton(() => CustomUIManager.Instance.CloseWindow("digital_storage.module_restore_warning"))
-            .Show());
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
             message => log.Error(message), (state, price) => ItemValueAdjustment.Adjust(state, price, contentApi.MaximumStage));
@@ -236,7 +231,6 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _health.Run;
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
-            ModHook.OnGameLoadedLate += _contentApi.WarnIfRecoveryNeeded;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             ExposeRuntime(_runtime);
@@ -285,7 +279,6 @@ public sealed class PlatformComposition : IDisposable
         _health.Detach();
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
-        ModHook.OnGameLoadedLate -= _contentApi.WarnIfRecoveryNeeded;
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
