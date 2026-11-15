@@ -5,6 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
+using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
@@ -66,25 +67,16 @@ internal sealed partial class PartitionWindow
         builder.BeginRow(Gap, TextAnchor.MiddleLeft);
         FixWidth(builder.CurrentContainer.gameObject, BodyWidth);
         CustomUIElement? add = null;
-        builder.AddPointerButton(_text.Get("partition_add_condition"), () => OpenFieldPicker(add!, -1));
-        add = builder.Last;
-        SetSize(add, 140f, ControlHeight);
+        add = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Placeholder, false,
+            () => OpenFieldPicker(add!, -1), 140f, ControlHeight);
+        TerminalTooltipPresenter.SetText(add, _text.Get("partition_add_condition"));
         builder.AddFlexibleSpace();
-        builder.AddPointerButton(_text.Get("partition_sample_attributes"), () =>
+        var sample = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Placeholder, _showSample, () =>
         {
             _showSample = !_showSample;
             RefreshActiveDetail();
-        });
-        var sample = builder.Last;
-        SetSize(sample, 140f, ControlHeight);
-        if (sample.root.GetComponent<HorizontalLayoutGroup>() is { } sampleLayout)
-            sampleLayout.padding = new RectOffset(10, 22, 0, 0);
-        var arrow = PixelArrow.Add(sample.root.transform,
-            _showSample ? PixelArrow.Direction.Down : PixelArrow.Direction.Right, MachineryStyle.BUTTON_TEXT);
-        arrow.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-        var arrowRect = arrow.rectTransform;
-        arrowRect.anchorMin = arrowRect.anchorMax = arrowRect.pivot = new Vector2(1f, 0.5f);
-        arrowRect.anchoredPosition = new Vector2(-9f, 0f);
+        }, 140f, ControlHeight);
+        TerminalTooltipPresenter.SetText(sample, _text.Get("partition_sample_attributes"));
         builder.End();
 
         BuildSummary(builder, rule);
@@ -234,14 +226,13 @@ internal sealed partial class PartitionWindow
         }
 
         builder.AddFlexibleSpace();
-        builder.AddPointerButton(_text.Get("partition_remove_condition"), () =>
+        var delete = TerminalButtonView.AddIcon(builder, Icons, "button_delete", false, () =>
         {
             rule.Remove(index);
             SaveDetail();
             RefreshActiveDetail();
-        });
-        SetSize(builder.Last, ControlHeight, ControlHeight);
-        TerminalTooltipPresenter.SetText(builder.Last, _text.Get("partition_remove_condition_tip"));
+        }, ControlHeight);
+        TerminalTooltipPresenter.SetText(delete, _text.Get("partition_remove_condition_tip"));
         builder.End();
     }
 

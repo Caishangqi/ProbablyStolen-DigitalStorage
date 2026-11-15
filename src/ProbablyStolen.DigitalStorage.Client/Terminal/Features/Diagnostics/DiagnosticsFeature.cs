@@ -33,10 +33,10 @@ public static class DiagnosticsFeature
         if (log == null) throw new ArgumentNullException(nameof(log));
         registry.AddTerminal(new TerminalDefinition(TerminalName, 1000, "terminal_view_diagnostics",
             context => context.TestViewEnabled, createView));
-        var rail = new ButtonAppearance("terminal_button_diagnostics_rail", "terminal_button_diagnostics_rail_tip");
+        var rail = new ButtonAppearance("button_placeholder", "terminal_button_diagnostics_rail_tip");
         registry.AddAction(new TerminalAction(RailActionId, 0, ActionPlacement.Rail, TerminalName,
             context => context.TestViewEnabled, _ => rail, _ => log("diagnostics_rail pressed")));
-        var picker = new ButtonAppearance("terminal_button_diagnostics_picker", "terminal_button_diagnostics_picker_tip");
+        var picker = new ButtonAppearance("button_placeholder", "terminal_button_diagnostics_picker_tip");
         registry.AddAction(new TerminalAction(PickerActionId, 0, ActionPlacement.Picker, TerminalName,
             context => context.TestViewEnabled, _ => picker,
             context => context.Commands.SwitchToScreen(createScreen(context.Window))));

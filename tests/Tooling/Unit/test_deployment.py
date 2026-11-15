@@ -19,7 +19,7 @@ from unittest.mock import patch
 REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.deployment import *
 from digital_storage_tools.deployment import _REPARSE_POINT
-from digital_storage_tools.package import DATA_RESOURCE_FILES, PRE_DATA_CURRENT_FILES
+from digital_storage_tools.package import DATA_RESOURCE_FILES, PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES
 
 class DeploymentTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -161,10 +161,19 @@ class DeploymentTests(unittest.TestCase):
         self._install_layout(PRE_DATA_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
         before = self.installed_contents()
         changes = plan_deployment(self.package, self.game, self.target)
-        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"}, set(DATA_RESOURCE_FILES))
+        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"},
+                         set(CURRENT_FILES) - set(PRE_DATA_CURRENT_FILES))
         self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
         self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_DATA_CURRENT_FILES))
         self.assertEqual(self.installed_contents(), before)
+
+    def test_pre_button_layout_upgrade_and_removal_plans_are_exact(self) -> None:
+        self._install_layout(PRE_BUTTON_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
+        changes = plan_deployment(self.package, self.game, self.target)
+        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"},
+                         set(CURRENT_FILES) - set(PRE_BUTTON_CURRENT_FILES))
+        self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
+        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_BUTTON_CURRENT_FILES))
 
     def test_update_replaces_only_changed_owned_files(self) -> None:
         self._install_initial_package()

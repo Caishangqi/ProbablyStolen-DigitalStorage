@@ -19,7 +19,7 @@ public static class TerminalStyleFeature
         size =>
         {
             var name = size.ToString().ToLowerInvariant();
-            return new ButtonAppearance("terminal_button_size_" + name, "terminal_button_size_tip", "terminal_size_" + name);
+            return new ButtonAppearance("button_size_" + name, "terminal_button_size_tip", "terminal_size_" + name);
         });
 
     /// <summary>Registers the toggle after the modules button.</summary>

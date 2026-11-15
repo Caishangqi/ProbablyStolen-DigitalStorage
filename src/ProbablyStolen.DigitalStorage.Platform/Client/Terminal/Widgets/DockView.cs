@@ -21,6 +21,7 @@ internal sealed class DockView : MonoBehaviour
     private readonly List<RaycastResult> _hits = new();
     private readonly Dictionary<string, RectTransform> _buttons = new(StringComparer.Ordinal);
     private CustomUIWindow? _window;
+    private ButtonIcons? _icons;
     private ModText? _text;
     private VerticalButtonBar? _bar;
     private Func<TerminalContext>? _context;
@@ -29,7 +30,7 @@ internal sealed class DockView : MonoBehaviour
     private bool _dirty = true;
 
     /// <summary>Adds the dock to <paramref name="window"/>, left of its frame with the top edges aligned.</summary>
-    internal static DockView Create(CustomUIWindow window, ModText text, VerticalButtonBar bar,
+    internal static DockView Create(CustomUIWindow window, ModText text, ButtonIcons icons, VerticalButtonBar bar,
         Func<TerminalContext> context)
     {
         var dock = new GameObject("dock_left", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -53,11 +54,12 @@ internal sealed class DockView : MonoBehaviour
 
         var view = dock.gameObject.AddComponent<DockView>();
         view._window = window;
+        view._icons = icons;
         view._text = text;
         view._bar = bar;
         view._context = context;
         view._rail = rail;
-        view._flyout = new FlyoutView(window, text);
+        view._flyout = new FlyoutView(window, text, icons);
         return view;
     }
 
@@ -111,7 +113,7 @@ internal sealed class DockView : MonoBehaviour
 
     private void Rebuild()
     {
-        if (_window == null || _rail == null || _bar == null || _context == null || _text == null) return;
+        if (_window == null || _rail == null || _bar == null || _context == null || _text == null || _icons == null) return;
         var context = _context();
         var buttons = _bar.GetButtons(context);
         CustomUIBuilder.ClearContainer(_rail);
@@ -131,7 +133,7 @@ internal sealed class DockView : MonoBehaviour
         foreach (var state in buttons)
         {
             var id = state.Id;
-            var button = TerminalButtonView.Add(builder, _text, state, () => Press(id));
+            var button = TerminalButtonView.Add(builder, _text, _icons, state, () => Press(id));
             _buttons[id] = button.root.GetComponent<RectTransform>();
         }
 

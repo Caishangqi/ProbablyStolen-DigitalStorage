@@ -81,7 +81,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private object[] _messageArgs = Array.Empty<object>();
 
     private PartitionWindow(TerminalRegistry registry, ModText text, GameItem cell, ITerminalViewSettings view,
-        TerminalSearchService search, Action<string> log) : base(registry, text, view, () => false, () => false, log, null)
+        TerminalSearchService search, Action<string> log, ButtonIcons icons) : base(registry, text, view, () => false, () => false, log, null, icons)
     {
         _text = text;
         _view = view;
@@ -103,16 +103,21 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     /// <summary>Opens the editor for a cell, closing any other partition editor first.</summary>
     internal static void Open(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
-        Action<string> log)
+        Action<string> log, ButtonIcons icons)
     {
         if (CustomUIManager.Instance == null) return;
+        if (!icons.Ready)
+        {
+            icons.ShowUnavailable(text);
+            return;
+        }
         CloseCurrent();
         var registry = PartitionTerminalFeature.CreateRegistry((IConfigManager)view, log,
             owner => new PartitionTerminalView((PartitionWindow)owner),
             context => ((PartitionWindow)context.Window).DraftMode,
             context => ((PartitionWindow)context.Window).ToggleMode(),
             context => ((PartitionWindow)context.Window).ClearPartitions());
-        var window = new PartitionWindow(registry, text, cell, view, search, log);
+        var window = new PartitionWindow(registry, text, cell, view, search, log, icons);
         _current = window;
         window.Open();
     }

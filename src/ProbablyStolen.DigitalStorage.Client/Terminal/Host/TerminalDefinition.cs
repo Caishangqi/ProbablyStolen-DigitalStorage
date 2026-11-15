@@ -15,7 +15,16 @@ public sealed class TerminalDefinition
     /// <param name="createView">Creates the platform view for a platform window. Client code does not know either type.</param>
     public TerminalDefinition(string terminalName, int order, string translationKey,
         Func<TerminalContext, bool> isAvailable, Func<object, object> createView)
+        : this(terminalName, order, translationKey, "button_placeholder", isAvailable, createView)
     {
+    }
+
+    /// <summary>Creates a definition with an icon resource key.</summary>
+    public TerminalDefinition(string terminalName, int order, string translationKey, string iconKey,
+        Func<TerminalContext, bool> isAvailable, Func<object, object> createView)
+    {
+        IconKey = string.IsNullOrWhiteSpace(iconKey)
+            ? throw new ArgumentException("An icon key is required.", nameof(iconKey)) : iconKey;
         TerminalName = string.IsNullOrEmpty(terminalName)
             ? throw new ArgumentException("A terminal name is required.", nameof(terminalName))
             : terminalName;
@@ -35,6 +44,9 @@ public sealed class TerminalDefinition
 
     /// <summary>Gets the key of the display name.</summary>
     public string TranslationKey { get; }
+
+    /// <summary>Gets the icon resource key.</summary>
+    public string IconKey { get; }
 
     /// <summary>Gets whether the view can be used in a context.</summary>
     public Func<TerminalContext, bool> IsAvailable { get; }

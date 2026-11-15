@@ -77,10 +77,22 @@ public sealed class TerminalFeatureTests
         var first = new TerminalContext(Array.Empty<string>(), false, "partition", commands, firstWindow);
         var second = new TerminalContext(Array.Empty<string>(), false, "partition", commands, secondWindow);
 
+        var firstAppearance = action.Appearance(first);
+        var secondAppearance = action.Appearance(second);
+        Assert.That((firstAppearance.IconKey, firstAppearance.TooltipArgKey),
+            Is.EqualTo(("button_whitelist", "partition_mode_whitelist")));
+        Assert.That((secondAppearance.IconKey, secondAppearance.TooltipArgKey),
+            Is.EqualTo(("button_blacklist", "partition_mode_blacklist")));
+
         action.OnPress(first);
 
         Assert.That(modes[firstWindow], Is.EqualTo(Common.Domain.Storage.Partition.PartitionMode.Blacklist));
         Assert.That(modes[secondWindow], Is.EqualTo(Common.Domain.Storage.Partition.PartitionMode.Blacklist));
+        Assert.That((action.Appearance(first).IconKey, action.Appearance(first).TooltipArgKey),
+            Is.EqualTo(("button_blacklist", "partition_mode_blacklist")));
+        Assert.That((action.Appearance(second).IconKey, action.Appearance(second).TooltipArgKey),
+            Is.EqualTo((secondAppearance.IconKey, secondAppearance.TooltipArgKey)));
+        Assert.That(action.Appearance(first).TooltipKey, Is.EqualTo("partition_mode_button"));
     }
 
     [TestCase(PartitionMode.Whitelist)]
@@ -108,6 +120,9 @@ public sealed class TerminalFeatureTests
         var bar = new VerticalButtonBar(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
         var context = new TerminalContext(Array.Empty<string>(), false, "partition", new RecordingCommands(), firstWindow);
 
+        var clear = bar.GetButtons(context).Single(button => button.Id == PartitionTerminalFeature.ClearActionName).Appearance;
+        Assert.That(clear.IconKey, Is.EqualTo("button_clear"));
+        Assert.That(clear.TooltipKey, Is.EqualTo("partition_clear"));
         bar.Press(context, PartitionTerminalFeature.ClearActionName, false);
         bar.Press(context, PartitionTerminalFeature.ClearActionName, false);
 
@@ -152,6 +167,9 @@ public sealed class TerminalFeatureTests
     public void ModulesButton_OpensTheScreenForThisWindow()
     {
         var commands = new RecordingCommands();
+        var modules = _bar.GetButtons(Context()).Single(button => button.Id == ModulesFeature.ActionId).Appearance;
+        Assert.That(modules.IconKey, Is.EqualTo("button_modules"));
+        Assert.That(modules.TooltipKey, Is.EqualTo("terminal_button_modules_tip"));
         _bar.Press(Context(commands: commands), ModulesFeature.ActionId, false);
 
         Assert.That(commands.Calls, Is.EqualTo(new[] { "screen:modules-screen" }));
@@ -171,26 +189,58 @@ public sealed class TerminalFeatureTests
         Assert.That(commands.Calls, Is.EqualTo(new[] { "screen:diagnostics-screen" }));
     }
 
-    [TestCase(TerminalSortOrder.Name, "terminal_button_sort_name", "terminal_sort_name")]
-    [TestCase(TerminalSortOrder.Amount, "terminal_button_sort_amount", "terminal_sort_amount")]
-    public void SortAppearance_KeepsTheExistingKeys(TerminalSortOrder order, string label, string argument)
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase(" ")]
+    public void Appearance_RequiresAnIconKey(string? key)
+    {
+        Assert.Throws<ArgumentException>((Action)(() => _ = new ButtonAppearance(key!, "tooltip")));
+    }
+
+    [TestCase(TerminalSortOrder.Name, "button_sort_name", "terminal_sort_name")]
+    [TestCase(TerminalSortOrder.Amount, "button_sort_amount", "terminal_sort_amount")]
+    public void SortAppearance_UsesCurrentIconAndTooltip(TerminalSortOrder order, string iconKey, string argument)
     {
         var appearance = StorageTerminalFeature.SortBy.GetAppearance(order);
 
-        Assert.That(appearance.LabelKey, Is.EqualTo(label));
+        Assert.That(appearance.IconKey, Is.EqualTo(iconKey));
         Assert.That(appearance.TooltipKey, Is.EqualTo("terminal_button_sort_tip"));
         Assert.That(appearance.TooltipArgKey, Is.EqualTo(argument));
     }
 
-    [Test]
-    public void SizeAppearance_KeepsTheExistingKeysAndCyclesLikeBefore()
+    [TestCase(TerminalSortDirection.Ascending, "button_sort_ascending", "terminal_direction_asc")]
+    [TestCase(TerminalSortDirection.Descending, "button_sort_descending", "terminal_direction_desc")]
+    public void DirectionAppearance_UsesCurrentIconAndTooltip(TerminalSortDirection direction, string iconKey,
+        string argument)
     {
-        Assert.That(TerminalStyleFeature.TerminalStyle.Values,
-            Is.EqualTo(new[] { TerminalSize.Small, TerminalSize.Medium, TerminalSize.Tall, TerminalSize.Full }));
-        Assert.That(TerminalStyleFeature.TerminalStyle.GetAppearance(TerminalSize.Tall).LabelKey,
-            Is.EqualTo("terminal_button_size_tall"));
-        Assert.That(StorageTerminalFeature.SortDirection.GetAppearance(TerminalSortDirection.Descending).TooltipArgKey,
-            Is.EqualTo("terminal_direction_desc"));
+        var appearance = StorageTerminalFeature.SortDirection.GetAppearance(direction);
+
+        Assert.That(appearance.IconKey, Is.EqualTo(iconKey));
+        Assert.That(appearance.TooltipKey, Is.EqualTo("terminal_button_direction_tip"));
+        Assert.That(appearance.TooltipArgKey, Is.EqualTo(argument));
+    }
+
+    [TestCase(TerminalSize.Small, "button_size_small", "terminal_size_small")]
+    [TestCase(TerminalSize.Medium, "button_size_medium", "terminal_size_medium")]
+    [TestCase(TerminalSize.Tall, "button_size_tall", "terminal_size_tall")]
+    [TestCase(TerminalSize.Full, "button_size_full", "terminal_size_full")]
+    public void SizeAppearances_UseSameIconsAndTooltipsForBothWindows(TerminalSize size, string iconKey, string argument)
+    {
+        foreach (var setting in new[] { TerminalStyleFeature.TerminalStyle, PartitionTerminalFeature.ViewSize })
+        {
+            var appearance = setting.GetAppearance(size);
+            Assert.That(appearance.IconKey, Is.EqualTo(iconKey));
+            Assert.That(appearance.TooltipKey, Is.EqualTo("terminal_button_size_tip"));
+            Assert.That(appearance.TooltipArgKey, Is.EqualTo(argument));
+        }
+    }
+
+    [Test]
+    public void SizeSettings_KeepTheExistingCycle()
+    {
+        foreach (var setting in new[] { TerminalStyleFeature.TerminalStyle, PartitionTerminalFeature.ViewSize })
+            Assert.That(setting.Values,
+                Is.EqualTo(new[] { TerminalSize.Small, TerminalSize.Medium, TerminalSize.Tall, TerminalSize.Full }));
     }
 
     [Test]

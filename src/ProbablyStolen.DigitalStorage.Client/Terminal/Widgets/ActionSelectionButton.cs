@@ -13,8 +13,8 @@ public sealed class ActionSelectionButton : SelectionButton
     /// <summary>The button id.</summary>
     public const string ButtonId = "action_selection";
 
-    /// <summary>The label key.</summary>
-    public const string LabelKey = "terminal_button_functions";
+    /// <summary>The icon resource key.</summary>
+    public const string IconKey = "button_placeholder";
 
     /// <summary>The tooltip key.</summary>
     public const string TooltipKey = "terminal_button_functions_tip";
@@ -25,7 +25,7 @@ public sealed class ActionSelectionButton : SelectionButton
     }
 
     /// <inheritdoc />
-    public override ButtonAppearance GetAppearance(TerminalContext context) => new(LabelKey, TooltipKey);
+    public override ButtonAppearance GetAppearance(TerminalContext context) => new(IconKey, TooltipKey);
 
     /// <inheritdoc />
     public override IReadOnlyList<ButtonState> GetEntries(TerminalContext context) => Bar.GetPickerButtons(context);

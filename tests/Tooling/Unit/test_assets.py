@@ -11,7 +11,7 @@ from unittest.mock import patch
 REPOSITORY = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
 from digital_storage_tools.assets import (  # noqa: E402
-    ASSETS, ContentValidationError, check_assets, check_image, check_matches_source, image_api,
+    ASSETS, BUTTON_ASSETS, ContentValidationError, check_assets, check_image, check_matches_source, image_api,
     check_content, format_parameters, main, prepare_assets, read_localization, validate_write_root,
 )
 
@@ -32,7 +32,7 @@ class ContentAssetTests(unittest.TestCase):
             image.save(self.source / (name + ".png"))
 
     def runtime(self, name):
-        return self.output / "Textures" / "Items" / (name + ".png")
+        return self.output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png")
 
     def snapshot(self):
         return {p.relative_to(self.root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -50,6 +50,16 @@ class ContentAssetTests(unittest.TestCase):
         for name in ASSETS:
             if name != "drive":
                 self.assertEqual(self.runtime(name).read_bytes(), before[name + ".png"])
+
+    def test_button_image_requires_visible_pixels_and_rejects_old_sheet(self):
+        prepare_assets(self.source, self.output, ("button_delete",))
+        path = self.runtime("button_delete")
+        self.Image.new("RGBA", (16, 16), (0, 0, 0, 0)).save(path)
+        with self.assertRaisesRegex(ContentValidationError, "Empty button icon"):
+            check_image(self.output, "button_delete")
+        self.Image.new("RGBA", (48, 16), "white").save(path)
+        with self.assertRaisesRegex(ContentValidationError, "dimensions"):
+            check_image(self.output, "button_delete")
 
     def test_drive_keeps_rgba_including_transparent_rgb_and_zero_padding(self):
         prepare_assets(self.source, self.output)

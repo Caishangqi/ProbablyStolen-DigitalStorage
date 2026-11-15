@@ -111,22 +111,13 @@ terminal_storage_reject_type_limit,存储元件的物品种类已达上限。
 terminal_storage_reject_too_large,此物品尺寸过大, 无法放入存储元件.
 terminal_storage_reject_no_space,存储元件已满。
 cell_storage_unavailable,存储不可用
-terminal_button_modules,模
 terminal_button_modules_tip,打开模块面板
-terminal_button_sort_name,名
-terminal_button_sort_amount,量
 terminal_button_sort_tip,排序方式: {0}
 terminal_sort_name,名称
 terminal_sort_amount,数量
-terminal_button_direction_asc,升
-terminal_button_direction_desc,降
 terminal_button_direction_tip,排序方向: {0}
 terminal_direction_asc,升序
 terminal_direction_desc,降序
-terminal_button_size_small,小
-terminal_button_size_medium,中
-terminal_button_size_tall,高
-terminal_button_size_full,全
 terminal_button_size_tip,终端尺寸: {0}
 terminal_size_small,小
 terminal_size_medium,中
@@ -225,13 +216,10 @@ partition_mode_blacklist,黑名单
 partition_mode_button,模式：{0}
 partition_empty_list_note,空列表接受所有物品。
 partition_clear,清除当前元件的全部分区规则
-partition_tool_clear,清
 partition_hint_title,操作
 partition_hint_left,左键：配置
 partition_hint_right,右键：清除
 partition_hint_middle,中键：复制
-partition_tool_whitelist,白
-partition_tool_blacklist,黑
 partition_warning_nevermatches,这些条件永远不会匹配。
 partition_warning_covered,另一条规则已经覆盖了这条规则的匹配范围。
 partition_duplicate_found,已有相同的规则。
@@ -246,8 +234,7 @@ partition_all_conditions,满足以下全部条件
 partition_condition_count,{0} 项
 partition_remove_condition_tip,删除此条件
 partition_search_value,搜索…
-partition_add_condition,＋ 添加条件
-partition_remove_condition,×
+partition_add_condition,添加条件
 partition_summary_label,匹配：{0}
 partition_sample_attributes,样本属性
 partition_back,返回
@@ -310,13 +297,10 @@ integration_customerstocking_label,从数字网络取货
 integration_customerstocking_tooltip,一键上货时也可以从其扫描范围内 (店铺, 打烊后区域, 飞船) 的在线数字网络取货. 离线网络和散放的元件不会被取货. 取出和放回都像终端一样经过网络. 上货助手开启「跳过机器内物品」时, 网络中的货也会被跳过, 因为驱动器属于机器.
 terminal_dock_title,功能
 terminal_button_current_tip,当前终端: {0}
-terminal_button_functions,选
 terminal_button_functions_tip,功能选择
 terminal_view_storage,存储
 terminal_view_diagnostics,测试
-terminal_button_diagnostics_rail,测
 terminal_button_diagnostics_rail_tip,诊断测试按钮. 只写一行日志.
-terminal_button_diagnostics_picker,页
 terminal_button_diagnostics_picker_tip,打开诊断测试页
 terminal_back,返回终端
 terminal_modules_unavailable,模块面板不可用

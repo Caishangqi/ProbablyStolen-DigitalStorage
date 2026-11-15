@@ -31,13 +31,13 @@ public sealed class TerminalSelectionButton : SelectionButton
     public override ButtonAppearance GetAppearance(TerminalContext context)
     {
         var current = _registry.Find(context.CurrentTerminal) ?? _registry.StorageTerminal;
-        return new ButtonAppearance(current.TranslationKey, TooltipKey, current.TranslationKey);
+        return new ButtonAppearance(current.IconKey, TooltipKey, current.TranslationKey);
     }
 
     /// <inheritdoc />
     public override IReadOnlyList<ButtonState> GetEntries(TerminalContext context) =>
         _handler.InstalledTerminals(context).Select(terminal => new ButtonState(terminal.TerminalName,
-            new ButtonAppearance(terminal.TranslationKey, terminal.TranslationKey),
+            new ButtonAppearance(terminal.IconKey, terminal.TranslationKey),
             terminal.TerminalName == context.CurrentTerminal)).ToArray();
 
     /// <summary>

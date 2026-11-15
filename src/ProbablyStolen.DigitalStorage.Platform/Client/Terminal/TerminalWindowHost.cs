@@ -24,6 +24,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 {
     internal const string WindowId = "digital_storage_terminal_storage";
+    protected readonly ButtonIcons Icons;
     private readonly TerminalRegistry _registry;
     private readonly ITerminalViewSettings _settings;
     private readonly Func<bool> _testViewEnabled;
@@ -52,16 +53,17 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private bool _rebuilding;
 
     internal TerminalWindowHost(TerminalRegistry registry, StorageTerminalServices storage, ITerminalViewSettings settings,
-        Func<bool> testViewEnabled) : this(registry, storage.Text, settings, testViewEnabled, storage.DiagnosticsEnabled,
-        storage.WriteDiagnostic, null, storage.SubscribeNetwork)
+        Func<bool> testViewEnabled, ButtonIcons icons) : this(registry, storage.Text, settings, testViewEnabled, storage.DiagnosticsEnabled,
+        storage.WriteDiagnostic, null, icons, storage.SubscribeNetwork)
     {
     }
 
     internal TerminalWindowHost(TerminalRegistry registry, ModText text, ITerminalViewSettings settings,
         Func<bool> testViewEnabled, Func<bool> diagnosticsEnabled, Action<string> writeDiagnostic,
-        Func<IReadOnlyCollection<string>>? installedModules,
+        Func<IReadOnlyCollection<string>>? installedModules, ButtonIcons icons,
         Func<Action<NetworkChanged>, IDisposable>? subscribeNetwork = null)
     {
+        Icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -181,6 +183,11 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     internal virtual void Open()
     {
         if (CustomUIManager.Instance == null) return;
+        if (!Icons.Ready)
+        {
+            Icons.ShowUnavailable(Text);
+            return;
+        }
         if (_window != null && _window.IsAlive && _host != null)
         {
             _window.Show();
@@ -237,7 +244,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         var bar = new VerticalButtonBar(_registry, handler, WriteDiagnostic);
         _host = new TerminalHost(_registry, handler, bar, this, InstalledModules, _testViewEnabled, WriteDiagnostic, this);
         var host = _host;
-        _dock = DockView.Create(_window, Text, bar, () => host.Context);
+        _dock = DockView.Create(_window, Text, Icons, bar, () => host.Context);
     }
 
     private int CountRows()

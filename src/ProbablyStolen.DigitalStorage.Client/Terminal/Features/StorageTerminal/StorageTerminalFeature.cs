@@ -24,15 +24,15 @@ public static class StorageTerminalFeature
     public static readonly Setting<TerminalSortOrder> SortBy = new(SortByName,
         new[] { TerminalSortOrder.Name, TerminalSortOrder.Amount },
         order => order == TerminalSortOrder.Amount
-            ? new ButtonAppearance("terminal_button_sort_amount", "terminal_button_sort_tip", "terminal_sort_amount")
-            : new ButtonAppearance("terminal_button_sort_name", "terminal_button_sort_tip", "terminal_sort_name"));
+            ? new ButtonAppearance("button_sort_amount", "terminal_button_sort_tip", "terminal_sort_amount")
+            : new ButtonAppearance("button_sort_name", "terminal_button_sort_tip", "terminal_sort_name"));
 
     /// <summary>The sort direction of stored items.</summary>
     public static readonly Setting<TerminalSortDirection> SortDirection = new(SortDirectionName,
         new[] { TerminalSortDirection.Ascending, TerminalSortDirection.Descending },
         direction => direction == TerminalSortDirection.Descending
-            ? new ButtonAppearance("terminal_button_direction_desc", "terminal_button_direction_tip", "terminal_direction_desc")
-            : new ButtonAppearance("terminal_button_direction_asc", "terminal_button_direction_tip", "terminal_direction_asc"));
+            ? new ButtonAppearance("button_sort_descending", "terminal_button_direction_tip", "terminal_direction_desc")
+            : new ButtonAppearance("button_sort_ascending", "terminal_button_direction_tip", "terminal_direction_asc"));
 
     /// <summary>Registers the storage view, always available and first, with its sort buttons on the rail.</summary>
     /// <param name="registry">The registry.</param>

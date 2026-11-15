@@ -27,7 +27,7 @@ public static class PartitionTerminalFeature
         size =>
         {
             var name = size.ToString().ToLowerInvariant();
-            return new ButtonAppearance("terminal_button_size_" + name, "terminal_button_size_tip",
+            return new ButtonAppearance("button_size_" + name, "terminal_button_size_tip",
                 "terminal_size_" + name);
         });
 
@@ -58,11 +58,11 @@ public static class PartitionTerminalFeature
         registry.AddTerminal(new TerminalDefinition(TerminalName, 0, "partition_title", _ => true, createView));
         registry.AddAction(new TerminalAction(ModeActionName, 0, ActionPlacement.Rail, null, _ => true,
             context => new ButtonAppearance(readMode(context) == PartitionMode.Blacklist
-                ? "partition_tool_blacklist" : "partition_tool_whitelist", "partition_mode_button",
+                ? "button_blacklist" : "button_whitelist", "partition_mode_button",
                 readMode(context) == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist"),
             toggleMode));
         registry.AddSetting(ViewSize, 1, ActionPlacement.Rail, null);
         registry.AddAction(new TerminalAction(ClearActionName, 2, ActionPlacement.Rail, TerminalName, _ => true,
-            _ => new ButtonAppearance("partition_tool_clear", "partition_clear"), clear));
+            _ => new ButtonAppearance("button_clear", "partition_clear"), clear));
     }
 }

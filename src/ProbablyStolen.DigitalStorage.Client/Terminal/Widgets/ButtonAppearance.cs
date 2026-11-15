@@ -3,23 +3,23 @@ using System;
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 /// <summary>
-/// The label and tooltip of a button as localization keys, resolved by the platform.
+/// The icon and tooltip of a button, resolved by the platform.
 /// </summary>
 public sealed class ButtonAppearance
 {
     /// <summary>Creates an appearance.</summary>
-    /// <param name="labelKey">The key of the short button label.</param>
+    /// <param name="iconKey">The icon resource key.</param>
     /// <param name="tooltipKey">The key of the tooltip, which may take one argument.</param>
     /// <param name="tooltipArgKey">The key whose text fills the tooltip argument, or null.</param>
-    public ButtonAppearance(string labelKey, string tooltipKey, string? tooltipArgKey = null)
+    public ButtonAppearance(string iconKey, string tooltipKey, string? tooltipArgKey = null)
     {
-        LabelKey = string.IsNullOrEmpty(labelKey) ? throw new ArgumentException("A label key is required.", nameof(labelKey)) : labelKey;
+        IconKey = string.IsNullOrWhiteSpace(iconKey) ? throw new ArgumentException("An icon key is required.", nameof(iconKey)) : iconKey;
         TooltipKey = string.IsNullOrEmpty(tooltipKey) ? throw new ArgumentException("A tooltip key is required.", nameof(tooltipKey)) : tooltipKey;
         TooltipArgKey = tooltipArgKey;
     }
 
-    /// <summary>Gets the key of the short button label.</summary>
-    public string LabelKey { get; }
+    /// <summary>Gets the icon resource key.</summary>
+    public string IconKey { get; }
 
     /// <summary>Gets the key of the tooltip.</summary>
     public string TooltipKey { get; }

@@ -21,6 +21,7 @@ internal sealed class TerminalItem
     internal const int Height = 3;
     internal const string NameKey = "terminal_name";
     internal const string DescriptionKey = "terminal_desc";
+    private readonly ButtonIcons _icons;
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
@@ -35,8 +36,10 @@ internal sealed class TerminalItem
 
     internal TerminalItem(ModText text, ItemAppearance appearance, MachineContentWindow windows,
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, ModLog log, NativeNetworkEvents events,
-        TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled)
+        TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
+        ButtonIcons icons)
     {
+        _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _testViewEnabled = testViewEnabled ?? throw new ArgumentNullException(nameof(testViewEnabled));
@@ -67,7 +70,7 @@ internal sealed class TerminalItem
                 (source, amount) => _networkPower.CanStore(item, source, amount),
                 key => _networkPower.FindStoredSample(item, key),
                 _diagnosticsEnabled, message => _log.Log(message), _events.Subscribe, _search);
-            new TerminalWindow(_registry, storage, _view, _testViewEnabled).Attach(item);
+            new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
             new TerminalItemDrop(item, (source, amount) => _networkPower.CanStore(item, source, amount),
                 (source, amount) => _networkPower.StoreSingle(item, source, amount), message => _log.Log(message)).Attach();
             return item;

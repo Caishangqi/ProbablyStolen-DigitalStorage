@@ -37,7 +37,21 @@
     "Data/module_bays/bindings.json",
     "Licenses/PininSharp-LICENSE.txt",
     "Licenses/pinyin-data-LICENSE.txt",
-    "Licenses/Rime-Terra-Pinyin-LICENSE.txt"
+    "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
+    "Textures/button_sort_name.png",
+    "Textures/button_sort_amount.png",
+    "Textures/button_sort_ascending.png",
+    "Textures/button_sort_descending.png",
+    "Textures/button_size_small.png",
+    "Textures/button_size_medium.png",
+    "Textures/button_size_tall.png",
+    "Textures/button_size_full.png",
+    "Textures/button_modules.png",
+    "Textures/button_whitelist.png",
+    "Textures/button_blacklist.png",
+    "Textures/button_clear.png",
+    "Textures/button_delete.png",
+    "Textures/button_placeholder.png"
   ],
   "legacy": [
     "manifest.xml",

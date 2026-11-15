@@ -18,12 +18,14 @@ internal sealed class FlyoutView
     private const int Padding = TerminalWindowMetrics.DockPadding;
     private const int PanelGap = TerminalWindowMetrics.DockGap;
     private readonly CustomUIWindow _window;
+    private readonly ButtonIcons _icons;
     private readonly ModText _text;
     private RectTransform? _root;
 
-    internal FlyoutView(CustomUIWindow window, ModText text)
+    internal FlyoutView(CustomUIWindow window, ModText text, ButtonIcons icons)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
+        _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _text = text ?? throw new ArgumentNullException(nameof(text));
     }
 
@@ -64,7 +66,7 @@ internal sealed class FlyoutView
         for (var index = 0; index < entries.Count; index++)
         {
             var entry = entries[index];
-            var button = TerminalButtonView.Add(builder, _text, entry, () => select(entry.Id));
+            var button = TerminalButtonView.Add(builder, _text, _icons, entry, () => select(entry.Id));
             var rect = button.root.GetComponent<RectTransform>();
             button.root.GetComponent<LayoutElement>().ignoreLayout = true;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);

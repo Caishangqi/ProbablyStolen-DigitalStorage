@@ -52,7 +52,7 @@ public sealed class TerminalWidgetTests
         Assert.That(config.GetSetting(toggle.Setting), Is.EqualTo(Shade.Medium));
         Assert.That(config.Writes, Is.EqualTo(1));
         Assert.That(commands.Calls, Is.EqualTo(new[] { "setting:shade" }));
-        Assert.That(toggle.GetAppearance(Context()).LabelKey, Is.EqualTo("shade_medium"));
+        Assert.That(toggle.GetAppearance(Context()).IconKey, Is.EqualTo("shade_medium"));
     }
 
     [Test]

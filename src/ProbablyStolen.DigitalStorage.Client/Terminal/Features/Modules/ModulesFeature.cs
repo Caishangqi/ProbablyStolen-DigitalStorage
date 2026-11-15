@@ -19,7 +19,7 @@ public static class ModulesFeature
     {
         if (registry == null) throw new ArgumentNullException(nameof(registry));
         if (createScreen == null) throw new ArgumentNullException(nameof(createScreen));
-        var appearance = new ButtonAppearance("terminal_button_modules", "terminal_button_modules_tip");
+        var appearance = new ButtonAppearance("button_modules", "terminal_button_modules_tip");
         registry.AddAction(new TerminalAction(ActionId, 0, ActionPlacement.Rail, null, _ => true, _ => appearance,
             context => context.Commands.SwitchToScreen(createScreen(context.Window))));
     }

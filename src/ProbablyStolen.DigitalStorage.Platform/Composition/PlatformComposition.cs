@@ -26,6 +26,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 /// <summary>Owns native content registration and resource checks for one mod lifecycle.</summary>
 public sealed class PlatformComposition : IDisposable
 {
+    private readonly ButtonIcons _buttonIcons;
     private readonly ModLog _log;
     private readonly StartupStatusPresenter _statusPresenter;
     private readonly string _modId;
@@ -58,8 +59,9 @@ public sealed class PlatformComposition : IDisposable
         ItemAppearance appearance,
         StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
-        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime)
+        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons)
     {
+        _buttonIcons = buttonIcons;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _contentApi = contentApi ?? throw new ArgumentNullException(nameof(contentApi));
         _events = events;
@@ -134,6 +136,7 @@ public sealed class PlatformComposition : IDisposable
 
         var statusPresenter = new StartupStatusPresenter(identity!);
         var text = new ModText(identity!);
+        var buttonIcons = new ButtonIcons(message => log.Error(message));
         var appearance = new ItemAppearance(identity!);
         var componentDefinition = new StorageComponent();
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
@@ -182,9 +185,9 @@ public sealed class PlatformComposition : IDisposable
         var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message));
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, log, networkEvents, search.Service,
-            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView);
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons);
         var workbench = new CellWorkbenchItem(text, appearance,
-            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message)),
+            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
             message => log.Log(message));
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
@@ -196,7 +199,7 @@ public sealed class PlatformComposition : IDisposable
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
-                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))));
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -286,6 +289,7 @@ public sealed class PlatformComposition : IDisposable
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
+        _buttonIcons.Dispose();
         ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
         ModHook.OnGameLoadedInit -= _runtime.OnGameLoading;
         if (_integrations != null)
@@ -367,6 +371,7 @@ public sealed class PlatformComposition : IDisposable
             _log.Warning($"Digital Storage: mod integrations could not register ({error.GetType().Name}: {error.Message}).");
         }
 
+        _buttonIcons.Load(mod);
         _assetsReady = true;
         LoadContentAssets();
         _search.MarkAssetsReady();

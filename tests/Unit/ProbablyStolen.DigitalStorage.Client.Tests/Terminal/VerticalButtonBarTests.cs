@@ -173,15 +173,44 @@ public sealed class VerticalButtonBarTests
     }
 
     [Test]
-    public void TerminalSelection_LabelIsTheShownViewWithCurrentTerminalTooltip()
+    public void TerminalSelection_IconIsTheShownViewWithCurrentTerminalTooltip()
     {
         _testAvailable = true;
         Freeze();
         var appearance = _bar.GetButtons(Context("test")).Single(b => b.Id == TerminalSelectionButton.ButtonId).Appearance;
 
-        Assert.That(appearance.LabelKey, Is.EqualTo("test_name"));
+        Assert.That(appearance.IconKey, Is.EqualTo("button_placeholder"));
         Assert.That(appearance.TooltipKey, Is.EqualTo(TerminalSelectionButton.TooltipKey));
         Assert.That(appearance.TooltipArgKey, Is.EqualTo("test_name"));
+    }
+
+    [TestCase("storage", "button_storage_view", "storage_name")]
+    [TestCase("custom", "button_custom_view", "custom_name")]
+    public void TerminalSelection_UsesExplicitViewIconsInTriggerAndEntries(string current, string iconKey, string nameKey)
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        registry.AddTerminal(new TerminalDefinition("storage", 0, "storage_name", "button_storage_view", _ => true,
+            _ => new object()));
+        registry.AddTerminal(new TerminalDefinition("custom", 1, "custom_name", "button_custom_view", _ => true,
+            _ => new object()));
+        registry.Freeze();
+        var bar = new VerticalButtonBar(registry,
+            new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+        var context = Context(current);
+
+        var trigger = bar.GetButtons(context).Single(button => button.Id == TerminalSelectionButton.ButtonId).Appearance;
+        Assert.That(trigger.IconKey, Is.EqualTo(iconKey));
+        Assert.That(trigger.TooltipKey, Is.EqualTo(TerminalSelectionButton.TooltipKey));
+        Assert.That(trigger.TooltipArgKey, Is.EqualTo(nameKey));
+        bar.Press(context, TerminalSelectionButton.ButtonId, false);
+        var entries = bar.GetOpenEntries(context);
+        Assert.That(entries.Select(entry => (entry.Id, entry.Appearance.IconKey, entry.Appearance.TooltipKey)),
+            Is.EqualTo(new[]
+            {
+                ("storage", "button_storage_view", "storage_name"),
+                ("custom", "button_custom_view", "custom_name")
+            }));
+        Assert.That(entries.Single(entry => entry.Selected).Id, Is.EqualTo(current));
     }
 
     [Test]

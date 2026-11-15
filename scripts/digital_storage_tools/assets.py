@@ -36,6 +36,15 @@ for module in ("module_type_expansion_common", "module_type_expansion_rare", "mo
     ASSETS[module] = ((32, 32), (32, 32))
 
 
+BUTTON_ASSETS = (
+    "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
+    "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
+    "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_placeholder",
+)
+for button in BUTTON_ASSETS:
+    ASSETS[button] = ((16, 16), (16, 16))
+
+
 class ContentValidationError(ValueError):
     """A required content input or runtime resource is invalid."""
 
@@ -91,11 +100,18 @@ def source_png(source: Path, name: str):
             if opened.size != ASSETS[name][0]:
                 raise ContentValidationError(f"Unexpected source dimensions for {name}: {opened.size}")
             rgba = opened.convert("RGBA")
+            if name in BUTTON_ASSETS:
+                validate_button_image(rgba, name)
     except (OSError, ValueError) as error:
         if isinstance(error, ContentValidationError):
             raise
         raise ContentValidationError(f"Could not read source {name}: {error}") from error
     return data, rgba
+
+
+def validate_button_image(image, name: str) -> None:
+    if image.getchannel("A").getbbox() is None:
+        raise ContentValidationError(f"Empty button icon: {name}")
 
 
 def expected_png(source: Path, name: str) -> bytes:
@@ -110,7 +126,7 @@ def expected_png(source: Path, name: str) -> bytes:
 
 
 def runtime_png(output: Path, name: str):
-    path = plain_path(output / "Textures" / "Items" / (name + ".png"))
+    path = plain_path(output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png"))
     try:
         data = path.read_bytes()
         with image_api().open(io.BytesIO(data)) as opened:
@@ -128,6 +144,9 @@ def runtime_png(output: Path, name: str):
 def check_image(output: Path, name: str) -> None:
     """Validate a committed runtime PNG on its own; art source files are not part of the repository."""
     _, actual = runtime_png(output, name)
+    if name in BUTTON_ASSETS:
+        validate_button_image(actual, name)
+        return
     width, height = ASSETS[name][0]
     for y in range(actual.height):
         for x in range(actual.width):
@@ -155,7 +174,7 @@ def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSE
         raise ContentValidationError("Choose unique known asset names.")
     # Preflight all inputs and destination paths before writing any image.
     prepared = {name: expected_png(source, name) for name in names}
-    paths = {name: plain_path(output / "Textures" / "Items" / (name + ".png")) for name in names}
+    paths = {name: plain_path(output / "Textures" / ("" if name in BUTTON_ASSETS else "Items") / (name + ".png")) for name in names}
     for path in paths.values():
         if path.exists() and not path.is_file():
             raise ContentValidationError(f"Runtime destination is not a file: {path}")
@@ -316,7 +335,6 @@ def check_content(project: Path, output: Path) -> None:
         "partition_op_notcontains",
         "partition_op_range",
         "partition_op_yes",
-        "partition_remove_condition",
         "partition_rule_name",
         "partition_sample_attributes",
         "partition_sample_unsupported",
@@ -391,21 +409,18 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_storage_reject_partition_unknown", "terminal_storage_reject_partition_invalid",
         "partition_field_item", "partition_field_type", "partition_field_legality", "partition_field_stolen",
         "partition_field_heat", "partition_field_feature", "partition_unit_percent",
-        "terminal_button_modules", "terminal_button_modules_tip", "terminal_button_sort_name",
-        "terminal_button_sort_amount", "terminal_button_sort_tip", "terminal_sort_name", "terminal_sort_amount",
-        "terminal_button_direction_asc", "terminal_button_direction_desc", "terminal_button_direction_tip",
-        "terminal_direction_asc", "terminal_direction_desc", "terminal_button_size_small", "terminal_button_size_medium",
-        "terminal_button_size_tall", "terminal_button_size_full", "terminal_button_size_tip",
+        "terminal_button_modules_tip", "terminal_button_sort_tip", "terminal_sort_name", "terminal_sort_amount",
+        "terminal_button_direction_tip", "terminal_direction_asc", "terminal_direction_desc", "terminal_button_size_tip",
         "terminal_size_small", "terminal_size_medium", "terminal_size_tall", "terminal_size_full",
-        "terminal_dock_title", "terminal_button_current_tip", "terminal_button_functions",
+        "terminal_dock_title", "terminal_button_current_tip",
         "terminal_button_functions_tip", "terminal_view_storage", "terminal_view_diagnostics",
-        "terminal_button_diagnostics_rail", "terminal_button_diagnostics_rail_tip",
-        "terminal_button_diagnostics_picker", "terminal_button_diagnostics_picker_tip", "terminal_back",
+        "terminal_button_diagnostics_rail_tip",
+        "terminal_button_diagnostics_picker_tip", "terminal_back",
         "terminal_modules_unavailable", "terminal_modules_stage", "module_restore_failed_title", "module_restore_failed_body", "terminal_page_unavailable", "terminal_diagnostics_view_text",
         "terminal_diagnostics_screen_text", "terminal_test_view_name", "terminal_test_view_desc",
         "workbench_info_mode", "workbench_info_rules", "workbench_info_types", "workbench_info_count",
         "partition_condition_count", "partition_remove_condition_tip", "partition_search_value",
-        "partition_tool_whitelist", "partition_tool_blacklist", "partition_tool_clear", "partition_clear",
+        "partition_clear",
         "partition_hint_title", "partition_hint_left", "partition_hint_right", "partition_hint_middle",
         "config_section_terminal_view", "terminal_view_sort_name", "terminal_view_sort_desc",
         "terminal_view_direction_name", "terminal_view_direction_desc", "terminal_view_size_name", "terminal_view_size_desc", "partition_view_size_name",
