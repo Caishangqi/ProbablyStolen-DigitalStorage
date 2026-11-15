@@ -147,11 +147,39 @@ class PackageValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory, False)
 
+    def test_earlier_build_missing_only_resources_is_replaceable(self) -> None:
+        newest = [name for name in RESOURCE_FILES if name.startswith("Textures/") and name.count("/") == 1][-2:]
+        for name in newest:
+            (self.package_directory / name).unlink()
+        inventory = validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+        self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) - set(newest))
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory, False)
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory)
+
+    def test_earlier_build_with_extra_file_or_missing_assembly_is_refused(self) -> None:
+        (self.package_directory / RESOURCE_FILES[-1]).unlink()
+        foreign = self.package_directory / "Textures" / "player_notes.png"
+        foreign.write_bytes(b"foreign")
+        with self.assertRaisesRegex(PackageValidationError, "extra=.*player_notes.png"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+        foreign.unlink()
+        (self.package_directory / "ProbablyStolen.DigitalStorage.Mod.dll").unlink()
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+
+    def test_earlier_build_needs_this_mods_manifest(self) -> None:
+        (self.package_directory / RESOURCE_FILES[-1]).unlink()
+        self._replace_manifest_text("<ID>digital_storage</ID>", "<ID>other_mod</ID>")
+        with self.assertRaisesRegex(PackageValidationError, "package ID"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+
     def test_nested_missing_empty_unknown_and_reparse_resources_are_rejected(self) -> None:
         path = self.package_directory / RESOURCE_FILES[0]
         path.unlink()
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
-            validate_package_directory(self.package_directory, False)
+            validate_package_directory(self.package_directory)
         path.write_bytes(b"")
         with self.assertRaisesRegex(PackageValidationError, "empty"):
             validate_package_directory(self.package_directory)

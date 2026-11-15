@@ -490,6 +490,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(note.read_text(), "preserve")
         self.assertEqual({name: (self.target / name).read_bytes() for name in CURRENT_FILES}, before)
 
+    def test_deploy_replaces_earlier_build_missing_resources_but_remove_refuses_it(self) -> None:
+        self._install_initial_package()
+        (self.target / RESOURCE_FILES[-1]).unlink()
+        with self.assertRaisesRegex(DeploymentError, "unowned or incomplete"):
+            remove_deployment(self.game, self.target)
+        deploy_package(self.package, self.game, self.target)
+        self.assertEqual(self.installed_files(), set(CURRENT_FILES))
+
     def test_remove_rejects_incomplete_layout_and_nested_reparse_directory(self) -> None:
         self._install_initial_package()
         path = self.target / RESOURCE_FILES[0]

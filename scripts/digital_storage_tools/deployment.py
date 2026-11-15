@@ -154,7 +154,7 @@ def plan_deployment(
     if target.exists():
         try:
             existing_inventory = _inventory_by_name(
-                validate_package_directory(target, require_current_metadata=False)
+                validate_package_directory(target, require_current_metadata=False, allow_earlier_build=True)
             )
         except PackageValidationError as error:
             raise DeploymentError(f"Existing Digital Storage directory is not safely owned: {error}") from error
@@ -227,7 +227,7 @@ def deploy_package(
     package, source_inventory = _validate_package_source(package_directory, game_directory)
     source_names = [str(item["name"]) for item in source_inventory]
     target_existed = target.exists()
-    old_inventory = validate_package_directory(target, False) if target_existed else []
+    old_inventory = validate_package_directory(target, False, allow_earlier_build=True) if target_existed else []
     old_names = [str(item["name"]) for item in old_inventory]
     mods_existed = _existing_plain_directory(mods, "Mods directory")
     if not mods_existed:
@@ -246,13 +246,13 @@ def deploy_package(
         if validate_package_directory(staging) != source_inventory:
             raise DeploymentError("Staged content changed from the validated source inventory.")
         if target_existed:
-            if validate_package_directory(target, False) != old_inventory:
+            if validate_package_directory(target, False, allow_earlier_build=True) != old_inventory:
                 raise DeploymentError("Installed files changed while staging; no replacement performed.")
             backup.mkdir()
             _ensure_resource_directories(backup, old_names)
             for name in old_names:
                 shutil.copyfile(target / name, backup / name)
-            if validate_package_directory(backup, False) != old_inventory:
+            if validate_package_directory(backup, False, allow_earlier_build=True) != old_inventory:
                 raise DeploymentError("Backup does not match the original installation.")
             backup_ready = True
         else:
@@ -291,7 +291,7 @@ def deploy_package(
                 directory.rmdir()
             if target_created:
                 target.rmdir()
-            if target_existed and validate_package_directory(target, False) != old_inventory:
+            if target_existed and validate_package_directory(target, False, allow_earlier_build=True) != old_inventory:
                 raise DeploymentError("Rollback did not restore the old inventory.")
         except Exception as rollback_error:
             raise DeploymentError(

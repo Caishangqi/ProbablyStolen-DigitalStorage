@@ -274,12 +274,31 @@ def load_layouts(path: Path = LAYOUT_PATH) -> dict[str, object]:
     return data
 
 
+def _earlier_build_of_current(actual_names: set[str]) -> tuple[str, ...] | None:
+    """Recognize an earlier build of the current layout that only lacks resource files.
+
+    Resources are added during development, so an earlier local build has fewer of them than any released layout.
+    It is still ours when its manifest and every current assembly are present and nothing outside the current
+    allowlist exists; missing files never put foreign data at risk, while any extra file still refuses replacement.
+    """
+    required = {"manifest.xml", *EXPECTED_ASSEMBLIES}
+    if not required <= actual_names or not actual_names <= set(CURRENT_FILES):
+        return None
+    return tuple(name for name in CURRENT_FILES if name in actual_names)
+
+
 def package_directories(names: Sequence[str]) -> set[str]:
     return {str(parent) for name in names for parent in PurePosixPath(name).parents if str(parent) != "."}
 
 
-def validate_package_directory(package_directory: Path, require_current_metadata: bool = True) -> list[dict[str, object]]:
-    """Validate the package allowlist and return a size and SHA-256 inventory."""
+def validate_package_directory(
+    package_directory: Path, require_current_metadata: bool = True, allow_earlier_build: bool = False
+) -> list[dict[str, object]]:
+    """Validate the package allowlist and return a size and SHA-256 inventory.
+
+    ``allow_earlier_build`` also accepts an earlier local build of the current layout, and is meant only for checking
+    a directory about to be replaced; removal keeps requiring a known layout.
+    """
     layouts = load_layouts()
     candidate = Path(os.path.abspath(package_directory))
     for parent in reversed(candidate.parents):
@@ -332,6 +351,9 @@ def validate_package_directory(package_directory: Path, require_current_metadata
             if actual_names == set(candidate_names):
                 names = candidate_names
                 break
+        else:
+            if allow_earlier_build:
+                names = _earlier_build_of_current(actual_names) or names
     if actual_names != set(names) or actual_directories != package_directories(names):
         missing = sorted(set(names) - actual_names)
         extra = sorted(actual_names - set(names))
@@ -375,7 +397,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = _arguments(argv)
     try:
         inventory = validate_package_directory(
-            Path(arguments.package_dir), require_current_metadata=not arguments.check_existing
+            Path(arguments.package_dir), require_current_metadata=not arguments.check_existing,
+            allow_earlier_build=arguments.check_existing,
         )
     except PackageValidationError as error:
         print(f"Package validation error: {error}", file=sys.stderr)
