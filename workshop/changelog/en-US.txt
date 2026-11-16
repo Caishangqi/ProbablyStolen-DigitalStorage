@@ -1,16 +1,10 @@
-0.5.8
-Reworked the terminal and partition panels and added the terminal Stack Display Module.
-- New Stack Display Module (2x2), which Dr. Jackson and the Upper-Level Engineer may sell. Put it in a terminal's module bay and a stack button appears on the storage view rail.
-- On the stacking rules page you can tell the terminal to ignore some differences between items, such as what a container holds, the estimated value or metal purity, so those items share one slot. The attributes you can pick come from the items the terminal actually stores, and each terminal keeps its own rules.
-- Merged slots carry a stack mark whose color you choose on the rules page. Hovering one lists below the item tooltip how many kinds it merges and which rules apply.
-- You can take items straight out of a merged slot: left click takes 1, right click takes half, Shift+left click takes everything.
-- Terminal badges now show pieces, and tooltips of stackable items show the total count. Taking items out never splits a piece.
-- The terminal's module bay can be upgraded 10 times with the vanilla module bay expansion kit, up to 255 slots. Vanilla machines still take 2 upgrades, and storage cell limits are unchanged.
-- The Modules page sizes its window to the module bay and shows the current stage, the upgrade limit and the usable slots. Going back to the terminal restores the window's size and position.
-- The partition page's Add Condition and Sample Attributes buttons are now icons.
-- Terminal and partition buttons no longer grab keyboard focus, so they stay out of the game's own key navigation.
-- Fixed bottled water, metal ingots and other items with water quality or purity not merging in the terminal and not matching partition rules.
-- Fixed an issue that stopped the mod from starting.
-- Module bay upgrades only apply to this mod's items and items other mods register. Vanilla machines and other mods' machines behave as before.
-- A module bay that fails to restore no longer opens a warning window. It is written to the log and locked when it can be found.
-- Mod authors can use the new content.v1 interface to define module bays and item bindings in C# or JSON.
+0.5.9
+
+Updated item tooltips and added more detail to storage error logs.
+
+- Controller tooltips now show the total power demand of the connected network in the game's own power display.
+- Storage cell, module and network device tooltips are handled separately. If one section fails, the remaining sections can still appear.
+- Errors such as an unavailable storage cell, a failed module display update or a module bay restore failure now include the exception message, stack trace and relevant item or page details in Player.log.
+- Added Storage diagnostics under Debug in the mod settings. It is off by default and records extra storage page and module bay structure details when enabled. Errors are still logged when it is off.
+- Repeated storage errors are deduplicated and diagnostic output is limited. A logging failure will not interrupt item transfers.
+- The reported issue where an existing storage cell becomes unavailable is still under investigation.
