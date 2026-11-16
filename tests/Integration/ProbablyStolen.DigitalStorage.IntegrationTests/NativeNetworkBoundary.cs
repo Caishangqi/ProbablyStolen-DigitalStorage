@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -13,6 +14,25 @@ internal sealed class GameItemShape
     internal int height;
 }
 
+internal static class ModHook
+{
+    private static Action<RichTextBuilder, GameItem>? _tooltip;
+    internal static bool ThrowAfterTooltipSubscription { get; set; }
+    internal static int TooltipSubscriberCount => _tooltip?.GetInvocationList().Length ?? 0;
+    internal static Action<RichTextBuilder, GameItem>? TooltipCallback => _tooltip;
+    internal static event Action<RichTextBuilder, GameItem> OnCreateTooltipLate
+    {
+        add
+        {
+            _tooltip += value;
+            if (ThrowAfterTooltipSubscription) throw new InvalidOperationException("injected hook subscription failure");
+        }
+        remove { _tooltip -= value; }
+    }
+    internal static void Reset() { _tooltip = null; ThrowAfterTooltipSubscription = false; }
+    internal static void RaiseTooltip(RichTextBuilder builder, GameItem item) => _tooltip?.Invoke(builder, item);
+}
+
 internal static class ModuleHelper
 {
     internal const string MODULE_STUCK_TAG = "MODULE_STUCK_BOOL";
@@ -23,7 +43,34 @@ internal static class SaveManager
     internal static bool IsDecoding { get; set; }
 }
 
-public sealed class GameItem
+public sealed class TagState
+{
+    public int valueInt;
+    public bool valueEnabled;
+    public bool GetBool() => valueEnabled;
+    public TagState Clone() => new() { valueInt = valueInt, valueEnabled = valueEnabled };
+    public TagState Enable() { valueEnabled = true; return this; }
+    public TagState SetInt(int value) { valueInt = value; return this; }
+}
+
+public sealed class TagSystem
+{
+    public Dictionary<string, TagState> dict = new();
+    public TagSystem Clone() => new() { dict = new Dictionary<string, TagState>(dict) };
+    public TagState GetTag(string key)
+    {
+        if (!dict.TryGetValue(key, out var state)) dict[key] = state = new TagState();
+        return state;
+    }
+}
+
+internal static class MachineryHelper
+{
+    internal const string MACHINERY_DRAWN_POWER = "machinery_drawn_power";
+    internal const string MACHINERY_DRAWN_POWER_BASE = "MACHINERY_DRAWN_POWER_BASE";
+}
+
+public class GameItem
 {
     internal GameItem(string id)
     {
@@ -34,13 +81,23 @@ public sealed class GameItem
 
     internal string identifier;
     internal GameItemState? state;
+    internal TagSystem modifiedState = new();
     internal GameInventory? parentInventory;
     internal readonly List<GameSlotInventory> Slots = new();
     internal int unitCount = 1;
     internal GameItemShape shape = new() { width = 1, height = 2 };
     internal bool Stuck = false;
+    internal bool TooltipRefusal = false;
+    internal bool ThrowTooltip = false;
+    internal bool ReceivingModuleBonus = false;
+    internal bool ContainerTooltip = false;
 
-    internal bool IsTag(string tag) => Stuck && tag == ModuleHelper.MODULE_STUCK_TAG;
+    internal bool IsTag(string tag) => tag == "CONTAINER_TAG" || tag == "CONTAINER_TOOLTIP_TAG"
+        ? ContainerTooltip
+        : Stuck && tag == ModuleHelper.MODULE_STUCK_TAG;
+    internal TagState GetTagReadonly(string tag) => ReceivingModuleBonus && tag == "IS_RECEIVING_BONUS_FROM_MODULE_BOOL"
+        ? new TagState().Enable()
+        : new TagState();
 
     internal List<T> FindAdjacentType<T>() => parentInventory is GameGridInventory grid
         ? grid.Neighbors(this).OfType<T>().ToList()

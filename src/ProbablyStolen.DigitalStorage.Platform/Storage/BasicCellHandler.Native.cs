@@ -45,18 +45,21 @@ internal sealed partial class BasicCellHandler
     /// Adds the cell summary for players: bytes, item types, partition, then the storage format and,
     /// when needed, a status and upgrade line. Stored items are not listed.
     /// </summary>
-    internal void AddCellInformationToTooltip(RichTextBuilder builder, GameItem cell)
+    internal void AddCellInformationToTooltip(RichTextBuilder builder, GameItem cell, Func<bool>? isActive = null)
     {
         if (builder == null) throw new ArgumentNullException(nameof(builder));
+        if (isActive?.Invoke() == false) return;
         if (cell == null || CellPages.Tabs(cell) == null)
         {
-            Add(builder, "cell_storage_unavailable");
+            Add(builder, isActive, "cell_storage_unavailable");
             return;
         }
 
         var input = new CellLoreInput
         {
-            Schema = CellTags.ReadSchema(cell), Health = CellHealth.Get(cell), ExpansionStage = CellUpgradeInventory.Stage(cell)
+            Schema = CellTags.ReadSchema(cell),
+            Health = CellHealth.Get(cell),
+            ExpansionStage = CellUpgradeInventory.Stage(cell)
         };
         if (input.Health.Status != CellHealthStatus.Unavailable && StorageCellTier.FromCellId(cell.identifier) != null &&
             !SaveManager.IsDecoding && CellPages.IsComplete(cell))
@@ -73,9 +76,17 @@ internal sealed partial class BasicCellHandler
             }
         }
 
-        foreach (var line in CellLore.Lines(input)) Add(builder, line.Key, line.Arguments);
+        foreach (var line in CellLore.Lines(input))
+        {
+            if (isActive?.Invoke() == false) break;
+            Add(builder, isActive, line.Key, line.Arguments);
+        }
     }
 
-    private void Add(RichTextBuilder builder, string key, params object[] arguments) =>
-        builder.AddLine(_text.Get(key, arguments), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+    private void Add(RichTextBuilder builder, Func<bool>? isActive, string key, params object[] arguments)
+    {
+        var text = _text.Get(key, arguments);
+        if (isActive?.Invoke() != false)
+            builder.AddLine(text, ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+    }
 }

@@ -31,7 +31,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly StartupStatusPresenter _statusPresenter;
     private readonly string _modId;
     private readonly ItemAppearance _appearance;
-    private readonly GridNetworkTooltipPresenter _networkTooltipPresenter;
+    private readonly TooltipComposition _tooltip;
     private readonly BasicCellHandler _cellHandler;
     private readonly StorageContentRegistration _content;
     private readonly ItemContentService _itemContent;
@@ -55,7 +55,7 @@ public sealed class PlatformComposition : IDisposable
     private bool _isDisposed;
 
     private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
-        GridNetworkTooltipPresenter networkTooltipPresenter, BasicCellHandler cellHandler,
+        TooltipComposition tooltip, BasicCellHandler cellHandler,
         ItemAppearance appearance,
         StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
@@ -72,7 +72,7 @@ public sealed class PlatformComposition : IDisposable
         _log = log;
         _statusPresenter = statusPresenter;
         _modId = modId;
-        _networkTooltipPresenter = networkTooltipPresenter;
+        _tooltip = tooltip;
         _cellHandler = cellHandler;
         _appearance = appearance;
         _content = content;
@@ -160,7 +160,7 @@ public sealed class PlatformComposition : IDisposable
         var eventBus = new StorageEventBus(message => log.Error(message));
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
-        var networkTooltipPresenter = new GridNetworkTooltipPresenter(networkScanner, networkPower, text, cellHandler);
+        var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, message => log.Error(message));
         var contentApi = new DigitalStorageContentService(message => log.Warning(message));
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
@@ -192,7 +192,7 @@ public sealed class PlatformComposition : IDisposable
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
             modules, new TerminalModuleFactory(appearance), itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
-            networkTooltipPresenter, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
+            tooltip, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
@@ -221,6 +221,7 @@ public sealed class PlatformComposition : IDisposable
         try
         {
             _moduleBayHooks = ModuleBayExpansionHooks.Attach(_contentApi);
+            _tooltip.Enable();
             _content.Enable();
             _vendors.Enable();
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
@@ -234,7 +235,6 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
-            ModHook.OnCreateTooltipLate += _networkTooltipPresenter.OnCreateTooltipLate;
             ExposeRuntime(_runtime);
             ExposeContent(_contentApi);
             // Subscribed before the integrations, so a plugin ending a stopped run finds no cells of the previous game.
@@ -269,6 +269,7 @@ public sealed class PlatformComposition : IDisposable
 
         _isEnabled = false;
         _isDisposed = true;
+        _tooltip.Dispose();
         _workbench.Detach();
         ModHook.OnModAssetsLoaded -= OnAssetsLoaded;
         _localeRegistration?.Dispose();
@@ -285,7 +286,6 @@ public sealed class PlatformComposition : IDisposable
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         _buttonIcons.Dispose();
-        ModHook.OnCreateTooltipLate -= _networkTooltipPresenter.OnCreateTooltipLate;
         ModHook.OnGameLoadedInit -= _runtime.OnGameLoading;
         if (_integrations != null)
         {

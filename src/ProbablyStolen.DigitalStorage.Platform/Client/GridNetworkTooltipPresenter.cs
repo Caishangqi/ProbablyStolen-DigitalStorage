@@ -1,88 +1,69 @@
+using System;
+using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Client.Network;
-using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
-using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
-using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
-using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
-using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
-internal sealed class GridNetworkTooltipPresenter
+internal sealed class GridNetworkTooltipPresenter : INativeTooltipContributor
 {
-    private readonly NativeNetworkScanner _scanner;
-    private readonly GridNetworkPowerCoordinator _networkPower;
+    private static readonly Identifier ContributorId = new("digital_storage", "network");
+    private readonly GridNetworkPowerCoordinator _power;
     private readonly ModText _text;
-    private readonly BasicCellHandler _cellHandler;
+    private IReadOnlyList<INetworkTooltipDetail> _details;
+    private readonly Action<Identifier, Exception> _reportError;
 
-    internal GridNetworkTooltipPresenter(NativeNetworkScanner scanner,
-        GridNetworkPowerCoordinator networkPower, ModText text, BasicCellHandler cellHandler)
+    internal GridNetworkTooltipPresenter(GridNetworkPowerCoordinator power, ModText text,
+        IReadOnlyList<INetworkTooltipDetail> details, Action<Identifier, Exception> reportError)
     {
-        _scanner = scanner;
-        _networkPower = networkPower;
+        _power = power;
         _text = text;
-        _cellHandler = cellHandler;
+        _details = details;
+        _reportError = reportError;
     }
 
-    internal void OnCreateTooltipLate(RichTextBuilder builder, GameItem item)
+    internal void SetDetails(IReadOnlyList<INetworkTooltipDetail> details)
     {
-        if (builder == null || item == null)
-        {
-            return;
-        }
+        _details = details ?? throw new ArgumentNullException(nameof(details));
+    }
 
-        if (StorageCellTier.FromCellId(item.identifier) != null)
-        {
-            _cellHandler.AddCellInformationToTooltip(builder, item);
-            return;
-        }
+    public Identifier Identity => ContributorId;
 
-        if (StorageCellTier.FromComponentId(item.identifier) != null)
-        {
-            return;
-        }
-
-        ModuleChangeTooltipPresenter.AppendRemovalRefusal(builder, item, _text);
-
-        if (!IsNetworkMachine(item))
-        {
-            return;
-        }
-
-        var snapshot = _scanner.Capture(item);
+    public void Append(NativeTooltipContext context)
+    {
+        var item = context.Item;
+        if (!NativeNetworkScanner.IsNetworkMachine(item)) return;
+        var snapshot = context.Snapshot;
+        if (!context.IsActive) return;
         var grid = snapshot.FindGrid(item);
-        var displayStatus = GridNetworkStatusPresenter.Resolve(grid.GetPathingService().GetControllerState(),
-            _networkPower.IsPowered(snapshot, grid));
-        var statusKey = GetStatusKey(displayStatus);
-        builder.AddLine(_text.Get("network_tooltip_state", _text.Get(statusKey)),
+        var status = GridNetworkStatusPresenter.Resolve(grid.GetPathingService().GetControllerState(),
+            _power.IsPowered(snapshot, grid));
+        if (!context.IsActive) return;
+        context.Builder.AddLine(_text.Get("network_tooltip_state", _text.Get(GetStatusKey(status))),
             ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
 
-        if (item.identifier == DriveItem.ItemId)
+        foreach (var detail in _details)
         {
-            var drive = snapshot.FindNode(item);
-            builder.AddLine(_text.Get("network_tooltip_drive_slots",
-                    drive.OccupiedDriveSlots, drive.DriveSlotCapacity),
-                ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+            if (!context.IsActive) return;
+            try { detail.Append(context, grid); }
+            catch (Exception error)
+            {
+                try { _reportError(detail.Identity, error); }
+                catch (Exception) { }
+            }
         }
 
+        if (!context.IsActive) return;
         if (item.GetTagReadonly("IS_RECEIVING_BONUS_FROM_MODULE_BOOL").GetBool())
-        {
-            builder.AddLine(_text.Get("network_module_stats_scope"),
+            context.Builder.AddLine(_text.Get("network_module_stats_scope"),
                 ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
-        }
-
-        AddOpenHint(builder, item);
+        if (!context.IsActive) return;
+        AddOpenHint(context.Builder, item);
     }
 
-    /// <summary>
-    /// Adds the game's own "Double-Click To Open" line, as ContainerHelper.CreateContainerTooltip does for items with
-    /// CONTAINER_TOOLTIP_TAG. The line is added here rather than through the tag because
-    /// loading replaces item state with the saved tags, and the tag would then be written into saves.
-    /// </summary>
     private static void AddOpenHint(RichTextBuilder builder, GameItem item)
     {
         if (item.IsTag("CONTAINER_TAG") || item.IsTag("CONTAINER_TOOLTIP_TAG")) return;
@@ -96,11 +77,6 @@ internal sealed class GridNetworkTooltipPresenter
         GridNetworkDisplayStatus.Unpowered => "network_status_unpowered",
         GridNetworkDisplayStatus.NoController => "network_status_no_controller",
         GridNetworkDisplayStatus.ControllerConflict => "network_status_controller_conflict",
-        _ => throw new System.ArgumentOutOfRangeException(nameof(status))
+        _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
-
-    private static bool IsNetworkMachine(GameItem item) =>
-        item.identifier == ControllerItem.ItemId ||
-        item.identifier == DriveItem.ItemId ||
-        item.identifier == TerminalItem.ItemId;
 }

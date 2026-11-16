@@ -1,0 +1,102 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Registries;
+using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Network;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
+
+namespace ProbablyStolen.DigitalStorage.Platform.Composition;
+
+internal sealed class TooltipComposition : IDisposable
+{
+    private readonly RegistryManager _registries = new();
+    private readonly NativeNetworkScanner _scanner;
+    private readonly Action<string> _reportError;
+    private readonly HashSet<Identifier> _reportedFailures = new();
+    private NativeTooltipDispatcher? _dispatcher;
+    private GridNetworkTooltipPresenter? _networkPresenter;
+    private IDisposable? _projection;
+    private bool _subscribed;
+    private bool _disposed;
+
+    internal TooltipComposition(NativeNetworkScanner scanner, GridNetworkPowerCoordinator power,
+        ModText text, BasicCellHandler cells, Action<string> reportError)
+    {
+        _scanner = scanner;
+        _reportError = reportError;
+        var contributorsId = ContributorsId;
+        var detailsId = DetailsId;
+        _registries.NewRegistry += e =>
+        {
+            e.Create<INativeTooltipContributor>(contributorsId);
+            e.Create<INetworkTooltipDetail>(detailsId);
+        };
+        var details = DeferredRegister<INetworkTooltipDetail>.Create(_registries, detailsId);
+        details.Register("controller", () => new ControllerTooltipDetail());
+        details.Register("drive", () => new DriveTooltipDetail(text));
+        var contributors = DeferredRegister<INativeTooltipContributor>.Create(_registries, contributorsId);
+        contributors.Register("cell", () => new CellTooltipContributor(cells));
+        contributors.Register("module", () => new ModuleTooltipContributor(text));
+        contributors.Register("network", () => _networkPresenter = new GridNetworkTooltipPresenter(
+            power, text, Array.Empty<INetworkTooltipDetail>(), ReportFailure));
+    }
+
+    internal void Enable()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(TooltipComposition));
+        if (_dispatcher != null) return;
+        try
+        {
+            _registries.CreateRegistries();
+            _registries.RegisterEntries();
+            _registries.RegisterDataRegistries();
+            _registries.Freeze();
+            _networkPresenter!.SetDetails(_registries.Get<INetworkTooltipDetail>(DetailsId)
+                .RegistrationEntries.Select(entry => entry.Value).ToArray());
+            _dispatcher = new NativeTooltipDispatcher(_scanner,
+                _registries.Get<INativeTooltipContributor>(ContributorsId)
+                    .RegistrationEntries.Select(entry => entry.Value).ToArray(), ReportFailure);
+            _projection = ControllerTooltipBridge.Register(_scanner, _reportError);
+            _subscribed = true;
+            ModHook.OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate;
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        var dispatcher = _dispatcher;
+        if (dispatcher != null) dispatcher.Disable();
+        if (_subscribed && dispatcher != null)
+        {
+            try { ModHook.OnCreateTooltipLate -= dispatcher.OnCreateTooltipLate; }
+            catch (Exception) { }
+            _subscribed = false;
+        }
+        _dispatcher = null;
+        _projection?.Dispose();
+        _projection = null;
+        _registries.Dispose();
+    }
+
+    private void ReportFailure(Identifier identity, Exception error)
+    {
+        if (!_reportedFailures.Add(identity)) return;
+        try
+        {
+            _reportError($"Digital Storage: native tooltip handler {identity} failed ({error.GetType().Name}).");
+        }
+        catch (Exception) { }
+    }
+
+    private static readonly Identifier ContributorsId = new("digital_storage", "native_tooltip_contributors");
+    private static readonly Identifier DetailsId = new("digital_storage", "network_tooltip_details");
+}
