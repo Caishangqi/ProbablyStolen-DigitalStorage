@@ -142,6 +142,8 @@ config_section_power,Network power
 config_section_debug,Debug
 debug_show_cell_pages_name,Show storage pages when opening a cell
 debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
+debug_storage_diagnostics_name,Storage diagnostics
+debug_storage_diagnostics_desc,Record limited storage page and module bay structure details. Errors are still logged when off. Original exception messages are retained.
 config_section_vendors,Vendors
 upper_engineer_daily_chance_name,Upper-level engineer daily visit chance %
 upper_engineer_daily_chance_desc,Chance that the upper-level engineer joins the day's customers. Range 0-100. Default: 25. Set 0 to stop the visits.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -64,7 +65,8 @@ internal sealed class CellHealth
         }
 
         if (CellPageRestore.TakeLastFailure() is { } error)
-            _log.Error($"Digital Storage: page restore failed ({error.GetType().Name}).");
+            StorageDiagnostics.Report(message => _log.Error(message), "cell_page_restore_failed",
+                "Digital Storage: page restore failed.", error);
         if (atRisk > 0) WarnDoNotSave(atRisk, "lost pages while loading");
     }
 
@@ -82,7 +84,8 @@ internal sealed class CellHealth
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: the do-not-save window could not be shown ({error.GetType().Name}).");
+            StorageDiagnostics.Report(message => _log.Error(message), "restore_warning_failed",
+                "Digital Storage: the do-not-save window could not be shown.", error);
         }
     }
 

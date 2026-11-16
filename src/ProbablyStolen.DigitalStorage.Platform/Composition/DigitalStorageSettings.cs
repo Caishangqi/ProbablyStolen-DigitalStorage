@@ -44,6 +44,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<int> _terminalPowerUsage;
     private readonly ConfigEntry<int> _engineerDailyChance;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
+    private readonly ConfigEntry<bool> _storageDiagnostics;
     private readonly ConfigEntry<bool> _itemIdentityLog;
     private readonly ConfigEntry<bool> _terminalTestView;
     private readonly ConfigEntry<bool> _showCellPages;
@@ -101,7 +102,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
         _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
             () => text.Get("terminal_diagnostics_name"), tooltip: () => text.Get("terminal_diagnostics_desc"));
-        // Off by default and separate from the terminal diagnostics: it writes full item data, tags and feature values
+        _storageDiagnostics = config.Define("debug_storage_diagnostics", false, debug,
+            () => text.Get("debug_storage_diagnostics_name"), tooltip: () => text.Get("debug_storage_diagnostics_desc"));
+        // Off by default and separate from the diagnostics log: it writes full item data, tags and feature values
         // included, which ordinary logs never carry.
         _itemIdentityLog = config.Define("debug_item_identity_log", false, debug,
             () => text.Get("debug_item_identity_log_name"), tooltip: () => text.Get("debug_item_identity_log_desc"));
@@ -136,7 +139,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
             (_engineerDailyChance, vendors),
-            (_showCellPages, debug), (_terminalDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
+            (_showCellPages, debug), (_terminalDiagnostics, debug), (_storageDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
@@ -313,6 +316,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         () => text.Get("terminal_search_" + suffix + "_desc"));
 
     internal bool GetTerminalDiagnostics() => _terminalDiagnostics.Value;
+
+    /// <summary>Gets whether bounded storage structure diagnostics are enabled.</summary>
+    internal bool GetStorageDiagnostics() => _storageDiagnostics.Value;
 
     /// <summary>Gets whether clicked terminal slots write their full item identity and stacking splits to the log.</summary>
     internal bool GetItemIdentityLog() => _itemIdentityLog.Value;

@@ -6,11 +6,13 @@ using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Api;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 internal sealed partial class DigitalStorageContentService
 {
+    private readonly StorageDiagnostics? _storageDiagnostics;
     private readonly ApiThread _thread = new();
     private readonly ConditionalWeakTable<GameItem, BaySession> _baySessions = new();
     private readonly ConditionalWeakTable<GameItem, KitSession> _kitSessions = new();
@@ -67,10 +69,14 @@ internal sealed partial class DigitalStorageContentService
                 bay.SetShape(string.Concat(layout.Rows), layout.Width);
                 item.contentWindow?.Validate();
             }
+            _storageDiagnostics?.VerboseOnce(item, "module_bay_initialized", "Digital Storage: module bay initialized.",
+                () => NativeStorageDiagnosticContext.Item(item) + " " +
+                    StorageDiagnostics.Field("stage", () => stage) + " " + StorageDiagnostics.Field("modules", () => bay?.childItems.Count));
             return new ModuleBayState(true, stage, definition, null, maximum);
         }
         catch (Exception error)
         {
+            ReportFailure(item, "module_bay_restore_failed", "layout restore failed", error, bay);
             return Unavailable(item, session, stage, definition, maximum, "layout restore failed: " + error.GetType().Name, bay);
         }
     }
@@ -85,18 +91,27 @@ internal sealed partial class DigitalStorageContentService
         var stage = ReadStage(item);
         var maximum = binding.MaximumStage ?? definition.Stages.Count - 1;
         var session = _baySessions.GetOrCreateValue(item);
+        if (stage < 0 || stage > maximum)
+            _storageDiagnostics?.Failure(item, "module_bay_invalid_stage", "Digital Storage: module bay has an invalid recorded stage.",
+                () => NativeStorageDiagnosticContext.Item(item) + $" stage={stage} maximum={maximum}");
         if (stage < 0 || stage > maximum || session.Transaction.IsLocked || session.Failure != null)
             return new ModuleBayState(false, stage, definition, session.Failure ?? "invalid or locked module bay", maximum);
         try
         {
             if (!TryProvider(binding, item, out var provider, out var reason) || !provider.TryGetInventory(item, out var bay))
-                return new ModuleBayState(false, stage, definition, reason ?? "module inventory unavailable", maximum);
+            {
+                var refusal = reason ?? "module inventory unavailable";
+                _storageDiagnostics?.Failure(item, "module_bay_unavailable", "Digital Storage: module provider or inventory is unavailable.",
+                    () => NativeStorageDiagnosticContext.Item(item) + $" stage={stage} reason=provider_or_inventory_unavailable");
+                return new ModuleBayState(false, stage, definition, refusal, maximum);
+            }
             if (!Matches(bay, definition.Stage(stage).Layout) || !ChildrenFit(bay, definition.Stage(stage).Layout))
                 return Unavailable(item, session, stage, definition, maximum, "actual module layout does not match recorded stage", bay);
             return new ModuleBayState(true, stage, definition, null, maximum);
         }
         catch (Exception error)
         {
+            ReportFailure(item, "module_bay_provider_failed", "module provider failed", error, null);
             return new ModuleBayState(false, stage, definition, "module provider failed: " + error.GetType().Name, maximum);
         }
     }
@@ -183,6 +198,20 @@ internal sealed partial class DigitalStorageContentService
     {
         try { _diagnostic($"module_bay item={item.identifier} result=unavailable reason={reason}"); }
         catch { }
+    }
+
+    private void ReportFailure(GameItem item, string eventCode, string message, Exception error, GameGridInventory? bay)
+    {
+        if (_storageDiagnostics == null)
+        {
+            StorageDiagnostics.Report(_diagnostic, eventCode, $"Digital Storage: {message}.", error,
+                () => NativeStorageDiagnosticContext.Item(item));
+            return;
+        }
+
+        _storageDiagnostics.Failure(item, eventCode, $"Digital Storage: {message}.", error,
+            () => NativeStorageDiagnosticContext.Item(item) + " " + StorageDiagnostics.Field("stage", () => ReadStage(item)) +
+                " " + StorageDiagnostics.Field("modules", () => bay?.childItems.Count));
     }
 
     private static int ReadStage(GameItem item) => item.modifiedState.dict.TryGetValue(StageTag, out var tag) ? tag.GetInt() : 0;

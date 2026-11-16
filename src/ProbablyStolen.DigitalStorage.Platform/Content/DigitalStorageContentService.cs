@@ -4,6 +4,7 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Api.Registries;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -29,9 +30,10 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     // null, so any thread may read it unlocked.
     private volatile Dictionary<string, (ModuleBayBinding Binding, ModuleBayDefinition Definition)>? _bindingsByItem;
 
-    internal DigitalStorageContentService(Action<string>? diagnostic = null)
+    internal DigitalStorageContentService(Action<string>? diagnostic = null, StorageDiagnostics? storageDiagnostics = null)
     {
         _diagnostic = diagnostic ?? (_ => { });
+        _storageDiagnostics = storageDiagnostics;
 
     }
 

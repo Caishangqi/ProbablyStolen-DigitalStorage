@@ -142,6 +142,8 @@ config_section_power,网络耗电
 config_section_debug,调试
 debug_show_cell_pages_name,双击存储元件时显示存储页
 debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其中的存储页; 关闭时只显示存储组件. 存储页始终锁定, 物品只能通过终端存取.
+debug_storage_diagnostics_name,存储诊断日志
+debug_storage_diagnostics_desc,开启后限量记录存储页和模块栏的结构信息。关闭后仍记录错误详情。异常消息保留原文。
 config_section_vendors,商人
 upper_engineer_daily_chance_name,上层区工程师每日来访概率 %
 upper_engineer_daily_chance_desc,每天生成顾客时上层区工程师加入队伍的概率. 范围 0-100. 默认: 25. 设为 0 则不再来访.

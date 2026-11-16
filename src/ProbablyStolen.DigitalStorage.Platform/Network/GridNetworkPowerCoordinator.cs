@@ -8,6 +8,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Energy;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Pathing;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Network;
@@ -20,11 +21,12 @@ internal sealed class GridNetworkPowerCoordinator
 
     private readonly Action<string> _log;
 
-    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> log, Func<GameItem, bool> migrate)
+    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> log, Func<GameItem, bool> migrate,
+        StorageDiagnostics diagnostics)
     {
         _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        _storage = new StorageService(scanner, IsPowered, log, migrate);
+        _storage = new StorageService(scanner, IsPowered, log, migrate, diagnostics);
     }
 
     /// <summary>Gets the storage operations shared by terminals and the public API.</summary>

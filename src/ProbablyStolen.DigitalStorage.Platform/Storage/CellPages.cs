@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -61,33 +62,78 @@ internal static class CellPages
     internal static PageSetSwap<MachineryTabs> SwapOf(GameItem cell) => Swaps.GetValue(cell, _ => new PageSetSwap<MachineryTabs>());
 
     /// <summary>Gets whether the cell's pages match its recorded layout.</summary>
-    internal static bool IsComplete(GameItem cell)
+    internal static bool IsComplete(GameItem cell) => IsComplete(cell, out _);
+
+    internal static bool IsComplete(GameItem cell, out string? failure)
     {
+        failure = null;
         var tabs = Tabs(cell);
-        return tabs != null && CellTags.TryReadLayout(cell, out var layout) && IsLinked(cell, tabs, layout!);
+        if (tabs == null)
+        {
+            failure = "reason=pages_panel_missing";
+            return false;
+        }
+        if (!CellTags.TryReadLayout(cell, out var layout))
+        {
+            failure = "reason=layout_unreadable";
+            return false;
+        }
+        return IsLinked(cell, tabs, layout!, out failure);
     }
 
     /// <summary>Gets whether the pages are attached, linked to the cell and sized exactly as the layout says.</summary>
-    internal static bool IsLinked(GameItem cell, MachineryTabs tabs, LayoutDescriptor layout)
+    internal static bool IsLinked(GameItem cell, MachineryTabs tabs, LayoutDescriptor layout) =>
+        IsLinked(cell, tabs, layout, out _);
+
+    private static bool IsLinked(GameItem cell, MachineryTabs tabs, LayoutDescriptor layout, out string? failure)
     {
+        failure = null;
         var row = cell.contentWindow?.childElement as MachineryPanelRow;
         var panel = row?.GetPanel(PanelRole);
         var count = layout.Pages.Count;
         if (SaveManager.IsDecoding || panel?.owner == null || !ReferenceEquals(panel.content, tabs) ||
             !((PixelElement)tabs).IsRenderingChildOf(panel) || !ReferenceEquals(tabs.owner, panel.owner) ||
-            tabs.count != count) return false;
+            tabs.count != count)
+        {
+            failure = StorageDiagnostics.Context(() =>
+                $"reason=panel_link_or_page_count expected_pages={count} actual_pages={tabs.count} decoding={SaveManager.IsDecoding}");
+            return false;
+        }
         // The native children getter collects every panel once; GetBodyStorage would recollect for every page.
         // Save order is component slot, pages, then the module bay (CellContentWindow), so the bay is last.
         var storage = row!.children;
         if (storage.Count != count + 2 || storage[0] is not GameSlotInventory slot ||
             slot.identifier != Client.CellContentWindow.SlotId || !slot.parents.Contains(panel.owner) ||
-            storage[count + 1] is not GameGridInventory { identifier: CellUpgradeInventory.BayId }) return false;
+            storage[count + 1] is not GameGridInventory { identifier: CellUpgradeInventory.BayId })
+        {
+            failure = StorageDiagnostics.Context(() =>
+                $"reason=storage_order expected_children={count + 2} actual_children={storage.Count}");
+            return false;
+        }
         for (var index = 0; index < count; index++)
         {
             var geometry = layout.Pages[index];
-            if (tabs.GetTabInventory(index) is not GameGridInventory page || !ReferenceEquals(storage[index + 1], page) ||
-                page.inventoryShape.width != geometry.Width || page.inventoryShape.height != geometry.Height ||
-                !page.parents.Contains(panel.owner)) return false;
+            if (tabs.GetTabInventory(index) is not GameGridInventory page)
+            {
+                failure = $"reason=page_missing page={index}";
+                return false;
+            }
+            if (!ReferenceEquals(storage[index + 1], page))
+            {
+                failure = $"reason=page_order page={index}";
+                return false;
+            }
+            if (page.inventoryShape.width != geometry.Width || page.inventoryShape.height != geometry.Height)
+            {
+                failure = StorageDiagnostics.Context(() =>
+                    $"reason=page_size page={index} expected={geometry.Width}x{geometry.Height} actual={page.inventoryShape.width}x{page.inventoryShape.height}");
+                return false;
+            }
+            if (!page.parents.Contains(panel.owner))
+            {
+                failure = $"reason=page_owner page={index}";
+                return false;
+            }
         }
 
         return true;
@@ -156,7 +202,8 @@ internal static class CellPages
         var tier = StorageCellTier.FromCellId(cell.identifier) ?? throw new InvalidOperationException("Unknown storage cell tier.");
         if (!CellTags.TryReadLayout(cell, out var layout)) throw new InvalidOperationException("The cell layout cannot be read.");
         var pages = Pages(cell);
-        if (pages.Count != layout!.Pages.Count) throw new InvalidOperationException("The cell pages do not match its layout.");
+        if (pages.Count != layout!.Pages.Count)
+            throw new InvalidOperationException($"The cell pages do not match its layout. expected_pages={layout.Pages.Count} actual_pages={pages.Count}");
 
         var usage = new CellUsage();
         var views = new List<PageView>(pages.Count);
@@ -171,11 +218,14 @@ internal static class CellPages
                 {
                     var slot = StripLayout.SlotIndexAt(geometry, root.modifiedShape.minX, root.modifiedShape.minY);
                     if (!size.Equals(geometry.SlotSize) || slot < 0)
-                        throw new InvalidOperationException($"A root on strip page {index} is off its slot grid.");
+                        throw new InvalidOperationException("A root is off its slot grid. " + StorageDiagnostics.Context(() =>
+                            $"page={index} expected_slot={geometry.SlotSize.Width}x{geometry.SlotSize.Height} actual={size.Width}x{size.Height} " +
+                            $"x={root.modifiedShape.minX} y={root.modifiedShape.minY} slot={slot} " + NativeStorageDiagnosticContext.Item(root)));
                     slots.Add(slot);
                 }
 
-                var key = identify(root) ?? throw new InvalidOperationException($"A root on page {index} has no type.");
+                var key = identify(root) ?? throw new InvalidOperationException($"A root on page {index} has no type. " +
+                    StorageDiagnostics.Context(() => NativeStorageDiagnosticContext.Item(root)));
                 usage.Add(key, root.unitCount, CellUsage.AreaOf(size, root.unitCount));
             }
 
@@ -215,7 +265,7 @@ internal static class CellPages
     /// <summary>
     /// Removes empty pages after items left the cell; does nothing while compaction is blocked. Failures never
     /// propagate: they are recorded in <see cref="CellHealth"/> (blocked after a rollback, unavailable when the
-    /// rollback failed too) and logged with the exception type only.
+    /// rollback failed too) and logged with the original exception.
     /// </summary>
     internal static void Compact(GameItem cell)
     {
@@ -233,8 +283,8 @@ internal static class CellPages
         }
         catch (Exception error)
         {
-            UnityEngine.Debug.LogWarning($"Digital Storage: empty page removal for {cell.identifier} failed " +
-                $"({error.GetType().Name}); health={CellHealth.Get(cell).Status}.");
+            StorageDiagnostics.Report(UnityEngine.Debug.LogWarning, "cell_compaction_failed",
+                "Digital Storage: empty page removal failed.", error, () => NativeStorageDiagnosticContext.Cell(cell));
         }
     }
 

@@ -60,6 +60,19 @@ class ContentContractTests(unittest.TestCase):
     def test_actual_contract_and_resources_pass(self):
         check_content(self.root, self.output)
 
+    def test_storage_diagnostics_setting_and_localization_are_wired(self):
+        settings = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Platform/Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")
+        composition = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Platform/Composition/PlatformComposition.cs").read_text(encoding="utf-8")
+        self.assertIn('Define("debug_storage_diagnostics", false, debug', settings)
+        self.assertIn("GetStorageDiagnostics() => _storageDiagnostics.Value", settings)
+        self.assertIn("new StorageDiagnostics", composition)
+        english = read_localization(REPOSITORY / "packaging/resources/Localization/en.csv")
+        chinese = read_localization(REPOSITORY / "packaging/resources/Localization/zh.csv")
+        for key in ("debug_storage_diagnostics_name", "debug_storage_diagnostics_desc"):
+            self.assertTrue(english[key])
+            self.assertTrue(chinese[key])
+
+
     def test_missing_search_resources_are_rejected(self):
         for name in ("Search/pinyin-dictionary.txt", "Licenses/PininSharp-LICENSE.txt",
                      "Licenses/pinyin-data-LICENSE.txt", "Licenses/Rime-Terra-Pinyin-LICENSE.txt"):

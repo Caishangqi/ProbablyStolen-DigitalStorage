@@ -27,6 +27,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ControllerTooltipBridge.cs" Link="Client\ControllerTooltipBridge.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\ControllerTooltipPatch.cs" Link="Client\ControllerTooltipPatch.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentCoordinator.cs" Link="Content\ItemContentCoordinator.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\StorageDiagnostics.cs" Link="Diagnostics\StorageDiagnostics.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentPriceRules.cs" Link="Content\ItemContentPriceRules.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentRepairRules.cs" Link="Content\ItemContentRepairRules.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinSearchMode.cs" Link="Composition\PinyinSearchMode.cs" />

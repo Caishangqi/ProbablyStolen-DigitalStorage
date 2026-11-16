@@ -5,6 +5,7 @@ using System.Reflection;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -16,6 +17,7 @@ internal sealed class ItemContentService : IDisposable
     private readonly ItemContentSynchronization _synchronization;
     private readonly ItemContentCoordinator<GameItem> _coordinator;
     private readonly Action<string> _log;
+    private readonly StorageDiagnostics _diagnostics;
     private Func<GameItem, bool>? _presentModule;
     private ItemContentFeatureSnapshot? _nativeStuckTemplate;
     private IReadOnlyCollection<string> _nativeStuckConditionDisplays = Array.Empty<string>();
@@ -23,15 +25,18 @@ internal sealed class ItemContentService : IDisposable
     private bool _loading;
     private bool _disposed;
 
-    internal ItemContentService(ItemContentSynchronization synchronization, Action changed, Action<string> log)
+    internal ItemContentService(ItemContentSynchronization synchronization, Action changed, Action<string> log,
+        StorageDiagnostics diagnostics)
     {
         _synchronization = synchronization;
         _log = log;
+        _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _coordinator = new ItemContentCoordinator<GameItem>(Apply, () =>
         {
             if (!_loading && !SaveManager.IsDecoding) changed();
         },
-            error => _log($"Digital Storage: item content failed ({error.GetType().Name})."));
+            (item, error) => _diagnostics.Failure(item, "item_content_failed",
+                "Digital Storage: item content failed.", error, () => NativeStorageDiagnosticContext.Item(item)));
     }
 
     internal void SetModulePresenter(Func<GameItem, bool> presenter) => _presentModule = presenter;
@@ -127,7 +132,8 @@ internal sealed class ItemContentService : IDisposable
             try { if (_presentModule(item)) repaired = true; }
             catch (Exception error)
             {
-                _log($"Digital Storage: module presentation failed ({error.GetType().Name}).");
+                _diagnostics.Failure(item, "module_presentation_failed",
+                    "Digital Storage: module presentation failed.", error, () => NativeStorageDiagnosticContext.Item(item));
                 result = ItemContentResult.Failed;
             }
         }

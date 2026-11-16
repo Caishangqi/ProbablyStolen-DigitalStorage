@@ -1,6 +1,7 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -20,7 +21,7 @@ internal sealed partial class BasicCellHandler
     /// cells that must not be mounted: locked, unavailable, still decoding, or unreadable. An unreadable cell becomes
     /// unavailable; it is never treated as empty.
     /// </summary>
-    internal static BasicCellInventory? GetCellInventory(GameItem cell, Action<string> log)
+    internal static BasicCellInventory? GetCellInventory(GameItem cell, Action<string> log, StorageDiagnostics? diagnostics = null)
     {
         if (!IsCell(cell) || SaveManager.IsDecoding || CellPages.Tabs(cell) == null) return null;
         var health = CellHealth.Get(cell);
@@ -28,15 +29,21 @@ internal sealed partial class BasicCellHandler
         try
         {
             var state = health.Status == CellHealthStatus.ReadOnly ? CellWriteState.ExtractOnly : CellWriteState.Writable;
-            if (!CellPages.IsComplete(cell)) throw new InvalidOperationException("The pages do not match the layout.");
+            if (!CellPages.IsComplete(cell, out var failure))
+                throw new InvalidOperationException("The pages do not match the layout. " + failure);
             var view = CellPages.Read(cell, StorageService.Identify, state);
+            diagnostics?.VerboseOnce(cell, "cell_mounted", "Digital Storage: cell mounted.", () =>
+                NativeStorageDiagnosticContext.Cell(cell) + $" types={view.TypeCount} area={view.Usage.AreaUnits}");
             return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify));
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {
             var reason = error is ArgumentException ? CellUnavailableReason.InvalidTypeLimit : CellUnavailableReason.InvalidLayout;
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Unavailable, reason));
-            log($"Digital Storage: {cell.identifier} cannot be read ({error.GetType().Name}); it is now unavailable.");
+            const string message = "Digital Storage: cell cannot be read and is now unavailable.";
+            if (diagnostics == null)
+                StorageDiagnostics.Report(log, "cell_read_failed", message, error, () => NativeStorageDiagnosticContext.Cell(cell));
+            else diagnostics.Failure(cell, "cell_read_failed", message, error, () => NativeStorageDiagnosticContext.Cell(cell));
             return null;
         }
     }

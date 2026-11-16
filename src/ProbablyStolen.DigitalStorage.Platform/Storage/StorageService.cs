@@ -16,6 +16,7 @@ using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 
@@ -33,6 +34,7 @@ internal sealed class StorageService
     private readonly NativeNetworkScanner _scanner;
     private readonly Func<NativeGridSnapshot, Grid, bool> _isPowered;
     private readonly Action<string> _log;
+    private readonly StorageDiagnostics _diagnostics;
     private readonly HashSet<(string, NativeItemIdentityFailure)> _reportedFallbacks = new();
     private const string NoSpaceKey = "terminal_storage_reject_no_space";
     private static readonly IActionSource Player = new PlayerSource("player");
@@ -42,12 +44,13 @@ internal sealed class StorageService
     private bool? _restoreApplied;
 
     internal StorageService(NativeNetworkScanner scanner, Func<NativeGridSnapshot, Grid, bool> isPowered,
-        Action<string> log, Func<GameItem, bool> migrate)
+        Action<string> log, Func<GameItem, bool> migrate, StorageDiagnostics diagnostics)
     {
         _migrate = migrate ?? throw new ArgumentNullException(nameof(migrate));
         _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
         _isPowered = isPowered ?? throw new ArgumentNullException(nameof(isPowered));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
     }
 
     private const string UniqueComponent = "digital_storage.unique";
@@ -171,7 +174,7 @@ internal sealed class StorageService
         foreach (var cell in network.Cells)
         {
             if (migratePending) _migrate(cell);
-            var inventory = BasicCellHandler.GetCellInventory(cell, _log);
+            var inventory = BasicCellHandler.GetCellInventory(cell, _log, _diagnostics);
             if (inventory == null) continue;
             var readOnly = CellHealth.Get(cell).Status == CellHealthStatus.ReadOnly;
             storage.Mount(inventory.View.Priority,

@@ -29,11 +29,16 @@ internal sealed class ItemContentCoordinator<T> where T : class
     private ConditionalWeakTable<T, Marker> _membership = new();
     private readonly Func<T, bool, ItemContentResult> _apply;
     private readonly Action _changed;
-    private readonly Action<Exception> _error;
+    private readonly Action<T, Exception> _error;
     private int _nextPruneAt = PruneInterval;
     private bool _disposed;
 
     internal ItemContentCoordinator(Func<T, bool, ItemContentResult> apply, Action changed, Action<Exception> error)
+        : this(apply, changed, (_, exception) => error(exception))
+    {
+    }
+
+    internal ItemContentCoordinator(Func<T, bool, ItemContentResult> apply, Action changed, Action<T, Exception> error)
     {
         _apply = apply;
         _changed = changed;
@@ -77,7 +82,7 @@ internal sealed class ItemContentCoordinator<T> where T : class
             try { result = _apply(item, textOnly); }
             catch (Exception error)
             {
-                try { _error(error); }
+                try { _error(item, error); }
                 catch { }
                 result = ItemContentResult.Failed;
             }

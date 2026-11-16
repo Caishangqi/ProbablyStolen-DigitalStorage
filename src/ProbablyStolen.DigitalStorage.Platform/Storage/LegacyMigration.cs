@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -72,7 +73,8 @@ internal sealed class LegacyMigration
         catch (Exception error)
         {
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Unavailable, CellUnavailableReason.MigrationFailed));
-            _log.Error($"Digital Storage: migration of {cell.identifier} stopped ({error.GetType().Name}: {error.Message}).");
+            StorageDiagnostics.Report(message => _log.Error(message), "cell_migration_failed",
+                "Digital Storage: cell migration stopped.", error, () => NativeStorageDiagnosticContext.Cell(cell));
             return false;
         }
         finally

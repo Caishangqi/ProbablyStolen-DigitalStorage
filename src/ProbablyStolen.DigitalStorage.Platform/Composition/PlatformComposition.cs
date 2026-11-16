@@ -14,6 +14,7 @@ using ProbablyStolen.DigitalStorage.Platform.Api;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Content;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
@@ -142,6 +143,8 @@ public sealed class PlatformComposition : IDisposable
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
         var inventory = new DriveCellInventory(recipe);
         var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text);
+        var diagnostics = new StorageDiagnostics(message => log.Error(message), networkPowerSettings.GetStorageDiagnostics,
+            message => log.Log(message));
         var search = new TerminalSearchComposition(identity.Id, text,
             networkPowerSettings.GetSearchConfiguration(null, message => log.Error(message)),
             message => log.Error(message), registerSearchAddons);
@@ -156,12 +159,12 @@ public sealed class PlatformComposition : IDisposable
             var migrated = migration.TryMigrate(cell);
             if (!migrated) cellHealth.WarnDoNotSave(1, "failed to migrate");
             return migrated;
-        });
+        }, diagnostics);
         var eventBus = new StorageEventBus(message => log.Error(message));
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
         var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, message => log.Error(message));
-        var contentApi = new DigitalStorageContentService(message => log.Warning(message));
+        var contentApi = new DigitalStorageContentService(message => log.Warning(message), diagnostics);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
             message => log.Error(message), (state, price) => ItemValueAdjustment.Adjust(state, price, contentApi.MaximumStage));
@@ -170,7 +173,7 @@ public sealed class PlatformComposition : IDisposable
             search.Service.UpdateConfiguration(search.Service.Configuration);
             PartitionWindow.InvalidateSamples();
             eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged));
-        }, message => log.Error(message));
+        }, message => log.Error(message), diagnostics);
         var component = new StorageComponentFactory(appearance, componentDefinition, recipe);
         var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
             itemContent.Changed);

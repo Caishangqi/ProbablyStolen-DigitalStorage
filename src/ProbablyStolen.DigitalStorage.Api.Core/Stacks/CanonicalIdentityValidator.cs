@@ -284,42 +284,42 @@ internal sealed class CanonicalIdentityValidator
         switch (kind)
         {
             case 1:
-            {
-                var nodes = ReadNodes(itemDepth, nodeDepth);
-                return _decode ? CanonicalIdentityNode.Window(nodes!) : null;
-            }
-            case 2:
-            {
-                var shape = ReadShape();
-                var items = ReadItems(itemDepth, nodeDepth);
-                return _decode ? CanonicalIdentityNode.Grid(shape!, items!) : null;
-            }
-            case 3:
-            {
-                var width = ReadInt32();
-                RequireDimension(width);
-                var height = ReadInt32();
-                RequireDimension(height);
-                var alwaysStack = ReadBool();
-                var items = ReadItems(itemDepth, nodeDepth);
-                return _decode ? CanonicalIdentityNode.Scrollable(width, height, alwaysStack, items!) : null;
-            }
-            case 4:
-            {
-                var orientation = ReadInt32();
-                Require(orientation >= 0 && orientation <= 3);
-                CanonicalIdentityChild? slotItem = null;
-                if (ReadBool())
                 {
-                    AddEdge();
-                    _path.Add(new PathStep(5));
-                    slotItem = ReadItem(true, itemDepth + 1, nodeDepth).Child;
-                    _path.RemoveAt(_path.Count - 1);
+                    var nodes = ReadNodes(itemDepth, nodeDepth);
+                    return _decode ? CanonicalIdentityNode.Window(nodes!) : null;
                 }
+            case 2:
+                {
+                    var shape = ReadShape();
+                    var items = ReadItems(itemDepth, nodeDepth);
+                    return _decode ? CanonicalIdentityNode.Grid(shape!, items!) : null;
+                }
+            case 3:
+                {
+                    var width = ReadInt32();
+                    RequireDimension(width);
+                    var height = ReadInt32();
+                    RequireDimension(height);
+                    var alwaysStack = ReadBool();
+                    var items = ReadItems(itemDepth, nodeDepth);
+                    return _decode ? CanonicalIdentityNode.Scrollable(width, height, alwaysStack, items!) : null;
+                }
+            case 4:
+                {
+                    var orientation = ReadInt32();
+                    Require(orientation >= 0 && orientation <= 3);
+                    CanonicalIdentityChild? slotItem = null;
+                    if (ReadBool())
+                    {
+                        AddEdge();
+                        _path.Add(new PathStep(5));
+                        slotItem = ReadItem(true, itemDepth + 1, nodeDepth).Child;
+                        _path.RemoveAt(_path.Count - 1);
+                    }
 
-                var nodes = ReadNodes(itemDepth, nodeDepth);
-                return _decode ? CanonicalIdentityNode.Slot(orientation, slotItem, nodes!) : null;
-            }
+                    var nodes = ReadNodes(itemDepth, nodeDepth);
+                    return _decode ? CanonicalIdentityNode.Slot(orientation, slotItem, nodes!) : null;
+                }
             default:
                 throw new InvalidIdentityException();
         }
