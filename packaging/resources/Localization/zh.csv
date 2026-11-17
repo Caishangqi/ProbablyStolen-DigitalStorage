@@ -1,8 +1,22 @@
 terminal_name,终端
 terminal_desc,访问存储网络中的物品.
 terminal_storage_title,终端
-terminal_storage_drag_hint,松开鼠标，将拖动的 {0} 个堆叠存入「{1}」。无法存入的物品留在原处。
-terminal_storage_drag_rejected,无法存入拖动的物品。请拖动整个堆叠，并检查物品状态、剩余容量和网络连接。物品留在原处。
+terminal_storage_drag_hint,松开鼠标，将 {0} 个堆叠存入{1}。
+terminal_storage_drag_refused,无法将{0}放入{1}：{2}。
+terminal_drag_reason_not_owned,未拥有
+terminal_drag_reason_whole_stack,请拖动整个堆叠
+terminal_drag_reason_unsupported,此物品无法存储
+terminal_drag_reason_offline,网络不可用
+terminal_drag_reason_store_disabled,当前游戏版本已禁用存入
+terminal_drag_reason_no_cell,没有存储元件接收它
+terminal_drag_reason_type_limit,物品种类已达上限
+terminal_drag_reason_too_large,尺寸超出存储元件
+terminal_drag_reason_full,存储元件已满
+terminal_drag_reason_capacity,剩余字节不足
+terminal_drag_reason_quota,该种类的均分容量已用完
+terminal_drag_reason_read_only,元件迁移前只能取出
+terminal_drag_reason_partition_unknown,暂无法判断分区匹配
+terminal_drag_reason_partition_invalid,元件分区设置无效
 terminal_storage_whole_stack_only,请拖动整个堆叠。选中的部分物品未存入，仍留在原处。
 terminal_diagnostics_name,终端诊断日志
 terminal_diagnostics_desc,将界面层级和拖动操作的诊断信息写入 Player.log，并限制日志量。不记录物品名称或保存状态。
@@ -111,6 +125,7 @@ terminal_storage_inserted_partial,已存入 {0} 个物品。其余物品没有�
 terminal_storage_reject_no_cell,没有存储元件可以接收此物品。请检查分区和驱动器。
 terminal_storage_reject_type_limit,存储元件的物品种类已达上限。
 terminal_storage_reject_too_large,此物品尺寸过大, 无法放入存储元件.
+terminal_storage_reject_not_owned,此物品不归你所有, 购买后才能存入.
 terminal_storage_reject_no_space,存储元件已满。
 cell_storage_unavailable,存储不可用
 terminal_button_modules_tip,打开模块面板

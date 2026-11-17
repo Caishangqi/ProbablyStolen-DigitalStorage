@@ -124,7 +124,7 @@ class RetirementContractTests(unittest.TestCase):
     def test_terminal_storage_goes_through_network_storage_only(self):
         coordinator = (NETWORK / "GridNetworkPowerCoordinator.cs").read_text(encoding="utf-8")
         for required in ("StoreSelected(GameItem terminal",
-                         "StoreSingle(GameItem terminal", "CanStore(GameItem terminal",
+                         "StoreSingle(GameItem terminal", "StoreRefusals(GameItem terminal",
                          "ExtractPiecesToPlayer(GameItem terminal", "_storage.Store(", "_storage.ExtractPieces("):
             self.assertIn(required, coordinator)
         for forbidden in ("storage.insert(", "storage.extract(", "PoweredExtraction", "Journal", "Codec"):

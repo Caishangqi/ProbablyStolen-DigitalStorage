@@ -18,14 +18,20 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
     private Func<bool>? _isCurrentSession;
     private Action<IReadOnlyList<GameItem>>? _storeSelection;
     private Action<GameItem, int>? _storeSingle;
-    private Func<GameItem, int, bool>? _canStore;
+    // Without a store check, or when it throws, the hint still has to say the items stay where they are.
+    private const string UnknownRefusal = "terminal_storage_unsupported_item";
+    private Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>>? _storeRefusals;
+    private GameItemElement[] _groupSelection = Array.Empty<GameItemElement>();
+    private GameItem[] _groupItems = Array.Empty<GameItem>();
     private Action<TerminalDropHighlight>? _setHighlight;
     private Func<bool>? _isOverDropArea;
     private TerminalDiagnostics? _diagnostics;
-    private Action<int>? _showHint;
+    private Action<int, GameItem?, string?>? _showHint;
     private bool _hintVisible;
     private bool _consumedRelease;
     private bool _previewAccepted;
+    private GameItem? _previewRefused;
+    private string? _previewRefusal;
     private GameItem[] _previewItems = Array.Empty<GameItem>();
     private int[] _previewCounts = Array.Empty<int>();
     private int _previewAmount;
@@ -62,8 +68,8 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
 
     internal void Initialize(CustomUIWindow window, Func<bool> isCurrentSession,
         Action<IReadOnlyList<GameItem>> storeSelection, TerminalDiagnostics? diagnostics = null,
-        Action<int>? showHint = null, Action<GameItem, int>? storeSingle = null,
-        Func<GameItem, int, bool>? canStore = null, Action<TerminalDropHighlight>? setHighlight = null,
+        Action<int, GameItem?, string?>? showHint = null, Action<GameItem, int>? storeSingle = null,
+        Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>>? storeRefusals = null, Action<TerminalDropHighlight>? setHighlight = null,
         Func<bool>? isOverDropArea = null)
     {
         ResetPreview();
@@ -71,7 +77,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
         _isCurrentSession = isCurrentSession;
         _storeSelection = storeSelection;
         _storeSingle = storeSingle;
-        _canStore = canStore;
+        _storeRefusals = storeRefusals;
         _setHighlight = setHighlight;
         _isOverDropArea = isOverDropArea;
         _diagnostics = diagnostics;
@@ -123,15 +129,29 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
         priority = max == int.MaxValue ? int.MaxValue : max + 1;
     }
 
-    private static GameItem[] DraggedItems(out bool groupDrag, out int amount)
+    private GameItem[] DraggedItems(out bool groupDrag, out int amount)
     {
         var group = ItemMultiSelectHandler.current;
         groupDrag = group?.IsGroupDragging == true;
         amount = 0;
         if (groupDrag)
         {
-            return EmporiumEntry.Instance?.GetAllItems().Where(group!.IsGroupDraggingItem).ToArray()
-                ?? Array.Empty<GameItem>();
+            // The selection does not change during a drag: the player inventories are walked once per selection.
+            var selection = NativeTerminalDragAccess.GetGroupItems(group!);
+            if (selection.Count == 0 || !selection.SequenceEqual(_groupSelection))
+            {
+                _groupSelection = selection.ToArray();
+                _groupItems = EmporiumEntry.Instance?.GetAllItems().Where(group!.IsGroupDraggingItem).ToArray()
+                    ?? Array.Empty<GameItem>();
+            }
+
+            return _groupItems;
+        }
+
+        if (_groupSelection.Length > 0)
+        {
+            _groupSelection = Array.Empty<GameItemElement>();
+            _groupItems = Array.Empty<GameItem>();
         }
 
         var single = ItemMouseDragHandler.current;
@@ -325,12 +345,28 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
             _previewGroup = groupDrag;
             _previewAmount = amount;
             _previewAccepted = false;
+            _previewRefused = items[0];
+            _previewRefusal = null;
             try
             {
-                _previewAccepted = items.Any(item => _canStore?.Invoke(item, groupDrag ? item.unitCount : amount) == true);
+                // One call for the whole selection: each check scans the network and every cell on it.
+                var refusals = _storeRefusals?.Invoke(items, groupDrag ? null : amount);
+                for (var index = 0; index < items.Length; index++)
+                {
+                    var refusal = refusals == null || index >= refusals.Count ? UnknownRefusal : refusals[index];
+                    if (refusal == null)
+                    {
+                        _previewAccepted = true;
+                        break;
+                    }
+                    if (_previewRefusal != null) continue;
+                    _previewRefused = items[index];
+                    _previewRefusal = refusal;
+                }
             }
             catch
             {
+                _previewAccepted = false;
                 _diagnostics?.Record("preview_failed", "inventory_unchanged=true");
             }
         }
@@ -352,7 +388,8 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
             target == "terminal" ? TerminalDropHighlight.Hover : TerminalDropHighlight.Ready);
         if (target == "terminal")
         {
-            _showHint?.Invoke(canStore ? count : -count);
+            if (canStore) _showHint?.Invoke(count, null, null);
+            else _showHint?.Invoke(count, _previewRefused, _previewRefusal ?? UnknownRefusal);
             _hintVisible = true;
         }
         else ClearHint();
@@ -363,13 +400,15 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
         _previewItems = Array.Empty<GameItem>();
         _previewCounts = Array.Empty<int>();
         _previewAccepted = false;
+        _previewRefused = null;
+        _previewRefusal = null;
     }
 
     private void ClearHint()
     {
         if (_hintVisible)
         {
-            _showHint?.Invoke(0);
+            _showHint?.Invoke(0, null, null);
             _hintVisible = false;
         }
     }

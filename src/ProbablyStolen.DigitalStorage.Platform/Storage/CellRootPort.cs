@@ -29,11 +29,18 @@ internal sealed class CellRootPort : ICellPagesPort
 {
     private readonly GameItem _cell;
     private readonly Func<GameItem, ItemKey?> _identify;
+    private readonly CellView? _view;
 
-    internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify)
+    /// <param name="cell">The cell whose pages this port moves roots on.</param>
+    /// <param name="identify">Reads a root's type.</param>
+    /// <param name="view">
+    /// The view whose slot types locate roots of one type; without one, every root's type is read.
+    /// </param>
+    internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify, CellView? view = null)
     {
         _cell = cell ?? throw new ArgumentNullException(nameof(cell));
         _identify = identify ?? throw new ArgumentNullException(nameof(identify));
+        _view = view;
     }
 
     /// <inheritdoc />
@@ -72,13 +79,14 @@ internal sealed class CellRootPort : ICellPagesPort
     }
 
     /// <inheritdoc />
-    public IRootSource StoredRoots(ItemKey key) => new CellRootSource(_cell, _identify, key, unslottedOnly: false);
+    public IRootSource StoredRoots(ItemKey key) => new CellRootSource(_cell, _identify, key, unslottedOnly: false, _view);
 }
 
 /// <summary>
 /// Roots of one cell in page, row, column order, optionally of one type or only on anchor and legacy pages. Each
-/// call reads the live pages, so the order always follows the actual items. Types are cached for this source's
-/// operation only.
+/// call reads the live pages, so the order always follows the actual items. With a view, a strip root's type is the
+/// one its slot records, and only a root about to move has its own type read to confirm it; other types are read and
+/// cached for this source's operation only.
 /// </summary>
 internal sealed class CellRootSource : INativeRootSource
 {
@@ -86,14 +94,18 @@ internal sealed class CellRootSource : INativeRootSource
     private readonly Func<GameItem, ItemKey?> _identify;
     private readonly ItemKey? _key;
     private readonly bool _unslottedOnly;
+    private readonly CellView? _view;
     private readonly Dictionary<GameItem, ItemKey?> _types = new();
+    private readonly HashSet<GameItem> _confirmed = new();
 
-    internal CellRootSource(GameItem cell, Func<GameItem, ItemKey?> identify, ItemKey? key, bool unslottedOnly)
+    internal CellRootSource(GameItem cell, Func<GameItem, ItemKey?> identify, ItemKey? key, bool unslottedOnly,
+        CellView? view = null)
     {
         _cell = cell;
         _identify = identify;
         _key = key;
         _unslottedOnly = unslottedOnly;
+        _view = view;
     }
 
     public bool TryPeekFirst(out RootSnapshot root)
@@ -103,7 +115,7 @@ internal sealed class CellRootSource : INativeRootSource
             GameItem? first = null;
             foreach (var item in page.childItems)
             {
-                if (!Matches(item)) continue;
+                if (!Matches(index, item)) continue;
                 if (first == null || Before(item, first)) first = item;
             }
 
@@ -119,18 +131,26 @@ internal sealed class CellRootSource : INativeRootSource
     }
 
     public IEnumerable<RootSnapshot> Snapshot() => AllowedPages()
-        .SelectMany(entry => entry.Page.childItems.Where(Matches)
+        .SelectMany(entry => entry.Page.childItems.Where(item => Matches(entry.Index, item))
             .OrderBy(item => item.modifiedShape.minY).ThenBy(item => item.modifiedShape.minX)
             .Select(item => Snapshot(entry.Index, item)))
         .ToArray();
 
+    /// <exception cref="InvalidOperationException">
+    /// The root's own type is not the one its slot records; the cell's kept contents are dropped, and nothing moves.
+    /// </exception>
     public GameItem? Resolve(RootSnapshot root)
     {
         var pages = CellPages.Pages(_cell);
-        return root.Page < pages.Count
-            ? pages[root.Page].childItems.FirstOrDefault(item =>
-                item.modifiedShape.minX == root.X && item.modifiedShape.minY == root.Y)
+        var item = root.Page < pages.Count
+            ? pages[root.Page].childItems.FirstOrDefault(candidate =>
+                candidate.modifiedShape.minX == root.X && candidate.modifiedShape.minY == root.Y)
             : null;
+        if (item == null || _types.ContainsKey(item) || !_confirmed.Add(item)) return item;
+        // Its type came from the slot record: the one root about to move is read to confirm it.
+        if (root.Key.Equals(_identify(item))) return item;
+        CellInventoryCache.Forget(_cell);
+        throw new InvalidOperationException($"A stored root on page {root.Page} is no longer of its recorded type.");
     }
 
     private static bool Before(GameItem item, GameItem other) =>
@@ -146,17 +166,26 @@ internal sealed class CellRootSource : INativeRootSource
         return pages.Select((page, index) => (index, page)).Where(entry => layout.Pages[entry.index].Kind != PageKind.Strip);
     }
 
-    private bool Matches(GameItem item) => _key == null || _key.Equals(TypeOf(item));
+    private bool Matches(int page, GameItem item) => _key == null || _key.Equals(TypeOf(page, item));
 
-    private ItemKey? TypeOf(GameItem item)
+    private ItemKey? TypeOf(int page, GameItem item)
     {
+        if (RecordedType(page, item) is { } recorded) return recorded;
         if (!_types.TryGetValue(item, out var key)) _types[item] = key = _identify(item);
         return key;
     }
 
+    // The type the view records for a strip root's slot, or null when there is no view or no record.
+    private ItemKey? RecordedType(int page, GameItem item)
+    {
+        if (_view == null || page >= _view.Pages.Count || _view.Pages[page].Kind != PageKind.Strip) return null;
+        var slot = StripLayout.SlotIndexAt(_view.Pages[page].Geometry, item.modifiedShape.minX, item.modifiedShape.minY);
+        return slot < 0 ? null : _view.KeyAt(page, slot);
+    }
+
     private RootSnapshot Snapshot(int page, GameItem item)
     {
-        var key = TypeOf(item) ?? throw new InvalidOperationException($"A root on page {page} has no type.");
+        var key = TypeOf(page, item) ?? throw new InvalidOperationException($"A root on page {page} has no type.");
         return new RootSnapshot(page, item.modifiedShape.minX, item.modifiedShape.minY, CellPages.SizeOf(item), key,
             item.unitCount, this);
     }

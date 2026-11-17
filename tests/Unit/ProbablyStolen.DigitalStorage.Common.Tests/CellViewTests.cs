@@ -167,4 +167,59 @@ public sealed class CellViewTests
         Assert.Throws<ArgumentOutOfRangeException>(new Action(() => _ = new CellRules(StorageCellTier.All[0], 0)));
         Assert.Throws<ArgumentOutOfRangeException>(new Action(() => _ = new CellRules(StorageCellTier.All[0], 32769)));
     }
+
+    [Test]
+    public void SlotKeys_FollowStoredRemovedAndRelocatedRoots()
+    {
+        var view = Empty(PageView.Strip(PageGeometry.Strip(TwoByTwo, 4), Array.Empty<int>()),
+            PageView.Strip(PageGeometry.Strip(TwoByTwo, 4), Array.Empty<int>()));
+
+        view.RecordStored(1, 0, Apple, 1, TwoByTwo);
+        view.RecordStored(1, 2, Pear, 1, TwoByTwo);
+        Assert.That(view.KeyAt(1, 0), Is.EqualTo(Apple));
+        Assert.That(view.KeyAt(1, 2), Is.EqualTo(Pear));
+        Assert.That(view.KeyAt(1, 1), Is.Null);
+
+        view.RecordRelocated(1, 2, 2, 3);
+        Assert.That(view.KeyAt(1, 2), Is.Null);
+        Assert.That(view.KeyAt(2, 3), Is.EqualTo(Pear));
+
+        view.RecordRemoved(1, 0, Apple, 1, TwoByTwo);
+        Assert.That(view.KeyAt(1, 0), Is.Null);
+        Assert.That(view.KeyAt(0, 0), Is.Null);
+    }
+
+    [Test]
+    public void SlotKeys_ComeFromTheStripProjectionAndStayOutOfClones()
+    {
+        var page = PageView.Strip(PageGeometry.Strip(TwoByTwo, 4), new[] { (1, (ItemKey?)Apple), (3, (ItemKey?)null) });
+        var usage = new CellUsage();
+        usage.Add(Apple, 1, CellUsage.AreaOf(TwoByTwo, 1));
+        usage.Add(Pear, 1, CellUsage.AreaOf(TwoByTwo, 1));
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+            new[] { PageView.Unslotted(PageGeometry.Anchor, 0), page }, usage, CellPartition.Unfiltered);
+
+        var copy = view.Clone();
+        copy.RecordRemoved(1, 1, Apple, 1, TwoByTwo);
+        copy.RecordStored(1, 0, Pear, 1, TwoByTwo);
+
+        Assert.That(view.KeyAt(1, 1), Is.EqualTo(Apple));
+        Assert.That(view.KeyAt(1, 3), Is.Null, "an unknown key stays unknown");
+        Assert.That(view.KeyAt(1, 0), Is.Null);
+        Assert.That(copy.KeyAt(1, 0), Is.EqualTo(Pear));
+    }
+
+    [Test]
+    public void RecordRelocated_TakesTheGivenTypeForARootFromAnUnslottedPage()
+    {
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+            new[] { PageView.Unslotted(PageGeometry.Anchor, 0), PageView.Unslotted(PageGeometry.Legacy, 1),
+                PageView.Strip(PageGeometry.Strip(TwoByTwo, 4), Array.Empty<int>()) }, new CellUsage(),
+            CellPartition.Unfiltered);
+
+        view.RecordRelocated(1, -1, 2, 0, Apple);
+
+        Assert.That(view.KeyAt(2, 0), Is.EqualTo(Apple));
+        Assert.That(view.Pages[1].RootCount, Is.Zero);
+    }
 }

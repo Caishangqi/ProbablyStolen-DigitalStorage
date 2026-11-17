@@ -1,8 +1,22 @@
 terminal_name,Terminal
 terminal_desc,Accesses the items stored on the network.
 terminal_storage_title,Terminal
-terminal_storage_drag_hint,Release to store {0} stacks in {1}. Items that cannot be stored stay where they are.
-terminal_storage_drag_rejected,"These items cannot be stored. Drag a whole stack and check item state, free capacity and the network connection. Items stay where they are."
+terminal_storage_drag_hint,Release to store {0} stacks in {1}.
+terminal_storage_drag_refused,Can't insert {0} into {1}: {2}.
+terminal_drag_reason_not_owned,not owned
+terminal_drag_reason_whole_stack,drag the whole stack
+terminal_drag_reason_unsupported,this item can't be stored
+terminal_drag_reason_offline,network unavailable
+terminal_drag_reason_store_disabled,storing is disabled in this game version
+terminal_drag_reason_no_cell,no storage cell accepts it
+terminal_drag_reason_type_limit,item type limit reached
+terminal_drag_reason_too_large,too large for a storage cell
+terminal_drag_reason_full,storage cells are full
+terminal_drag_reason_capacity,not enough free bytes
+terminal_drag_reason_quota,this type's share of the cell is used up
+terminal_drag_reason_read_only,the cell is read-only until migrated
+terminal_drag_reason_partition_unknown,the partition match is not known yet
+terminal_drag_reason_partition_invalid,a cell partition is invalid
 terminal_storage_whole_stack_only,Drag a whole stack. The selected portion was not stored and stays where it is.
 terminal_diagnostics_name,Terminal diagnostics
 terminal_diagnostics_desc,Log UI layout and drag events to Player.log with a limit on log volume. Item names and saved state are excluded.
@@ -111,6 +125,7 @@ terminal_storage_inserted_partial,Stored {0} items. Some items stayed where they
 terminal_storage_reject_no_cell,No storage cell accepts this item. Check partitions and drives.
 terminal_storage_reject_type_limit,The storage cells already hold their maximum number of item types.
 terminal_storage_reject_too_large,This item is too large to fit in a storage cell.
+terminal_storage_reject_not_owned,You don't own this item. Buy it before storing it.
 terminal_storage_reject_no_space,The storage cells are full.
 cell_storage_unavailable,Storage unavailable
 terminal_button_modules_tip,Open the module panel

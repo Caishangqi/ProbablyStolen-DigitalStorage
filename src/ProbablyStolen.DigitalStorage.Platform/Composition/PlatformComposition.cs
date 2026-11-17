@@ -163,6 +163,11 @@ public sealed class PlatformComposition : IDisposable
         var eventBus = new StorageEventBus(message => log.Error(message));
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
+        // Entry names and search text depend on the language and settings; both changes are posted as ConfigChanged.
+        eventBus.Subscribe<NetworkChanged>(change =>
+        {
+            if (change.Reason == NetworkChangeReason.ConfigChanged) networkPower.Storage.ForgetEntryTexts();
+        });
         var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, message => log.Error(message));
         var contentApi = new DigitalStorageContentService(message => log.Warning(message), diagnostics);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);

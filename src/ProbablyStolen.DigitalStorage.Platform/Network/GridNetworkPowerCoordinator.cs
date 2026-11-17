@@ -15,6 +15,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Network;
 
 internal sealed class GridNetworkPowerCoordinator
 {
+    private const string WholeStackOnlyKey = "terminal_storage_whole_stack_only";
     private readonly NativeNetworkScanner _scanner;
     private readonly EnergyService _energyService = new();
     private readonly StorageService _storage;
@@ -51,11 +52,34 @@ internal sealed class GridNetworkPowerCoordinator
         }
 
         _log($"Digital Storage: store rejected item={item.identifier} units={item.unitCount} dragged={amount} reason=PartialStack");
-        return TerminalInsertionResult.Create(TerminalInsertionStatus.Rejected, 0, "terminal_storage_whole_stack_only");
+        return TerminalInsertionResult.Create(TerminalInsertionStatus.Rejected, 0, WholeStackOnlyKey);
     }
 
-    internal bool CanStore(GameItem terminal, GameItem item, int amount) =>
-        amount >= item.unitCount && _storage.CanStore(terminal, item);
+    /// <summary>
+    /// Gets why each dragged item could not be stored as a text key, or null when it could, reading the network once.
+    /// A single drag passes its dragged <paramref name="amount"/>; a group drag passes null, as it moves whole stacks.
+    /// </summary>
+    internal string?[] StoreRefusals(GameItem terminal, IReadOnlyList<GameItem> items, int? amount)
+    {
+        var refusals = new string?[items.Count];
+        var whole = new List<GameItem>(items.Count);
+        var positions = new List<int>(items.Count);
+        for (var index = 0; index < items.Count; index++)
+        {
+            if ((amount ?? items[index].unitCount) < items[index].unitCount)
+            {
+                refusals[index] = WholeStackOnlyKey;
+                continue;
+            }
+
+            whole.Add(items[index]);
+            positions.Add(index);
+        }
+
+        var stored = whole.Count == 0 ? Array.Empty<string?>() : _storage.StoreRefusals(terminal, whole);
+        for (var index = 0; index < stored.Length; index++) refusals[positions[index]] = stored[index];
+        return refusals;
+    }
 
     internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces) =>
         _storage.ExtractPieces(terminal, key, pieces);

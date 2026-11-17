@@ -31,10 +31,10 @@ internal sealed partial class BasicCellHandler
             var state = health.Status == CellHealthStatus.ReadOnly ? CellWriteState.ExtractOnly : CellWriteState.Writable;
             if (!CellPages.IsComplete(cell, out var failure))
                 throw new InvalidOperationException("The pages do not match the layout. " + failure);
-            var view = CellPages.Read(cell, StorageService.Identify, state);
+            var view = CellPages.ReadCached(cell, state);
             diagnostics?.VerboseOnce(cell, "cell_mounted", "Digital Storage: cell mounted.", () =>
                 NativeStorageDiagnosticContext.Cell(cell) + $" types={view.TypeCount} area={view.Usage.AreaUnits}");
-            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify));
+            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify, view));
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {
@@ -74,7 +74,7 @@ internal sealed partial class BasicCellHandler
             try
             {
                 var state = input.Health.Status == CellHealthStatus.ReadOnly ? CellWriteState.ExtractOnly : CellWriteState.Writable;
-                input.View = CellPages.Read(cell, StorageService.Identify, state);
+                input.View = CellPages.ReadCached(cell, state);
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException)
             {

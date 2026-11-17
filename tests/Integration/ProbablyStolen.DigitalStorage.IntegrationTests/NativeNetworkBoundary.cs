@@ -91,6 +91,8 @@ public class GameItem
     internal bool ThrowTooltip = false;
     internal bool ReceivingModuleBonus = false;
     internal bool ContainerTooltip = false;
+    internal bool Owned = true;
+    internal readonly List<GameItem> Children = new();
 
     internal bool IsTag(string tag) => tag == "CONTAINER_TAG" || tag == "CONTAINER_TOOLTIP_TAG"
         ? ContainerTooltip
@@ -153,9 +155,15 @@ internal sealed class GameSlotInventory
     internal GameItem? childItem;
 }
 
+internal static class GeneralHelper
+{
+    internal static bool IsItemOwned(GameItem item) => item.Owned;
+}
+
 internal static class GraphUtils
 {
-    internal static List<T> FindAllChildrenType<T>(GameItem item) => item.Slots.OfType<T>().ToList();
+    internal static List<T> FindAllChildrenType<T>(GameItem item) =>
+        item.Slots.OfType<T>().Concat(item.Children.OfType<T>()).ToList();
 
     /// <summary>Records native transfer calls; returns the units that did not move, as the game does.</summary>
     internal static readonly List<(GraphNodeStorage? Node, GameItem? Item, int Amount)> NativeTransfers = new();

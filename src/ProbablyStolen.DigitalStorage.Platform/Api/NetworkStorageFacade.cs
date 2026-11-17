@@ -47,7 +47,7 @@ internal sealed class NetworkStorageFacade : IStorage
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (!TryMount(out var mounted, out var refused)) return refused;
         if (!StorageOutcomes.IsWholeRoot(units, root.unitCount)) return StorageResult.None(StorageStatus.Rejected);
-        if (CellPages.CellOfStored(root, out _) != null || !StorageService.IsStorable(root) ||
+        if (CellPages.CellOfStored(root, out _) != null || StoreAdmission.Refusal(root) != null ||
             StorageService.Identify(root) is not { } key)
         {
             return StorageResult.None(StorageStatus.Rejected);
@@ -57,16 +57,25 @@ internal sealed class NetworkStorageFacade : IStorage
         {
             var result = mounted!.Storage.Insert(new ItemListSource(new[] { root }, new[] { key }), mode, source);
             if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
+            {
+                _storage.MarkUncertain();
                 _log($"Digital Storage: API insert left {root.identifier} without an owner.");
+            }
+
             return Report(mode, StorageOutcomes.Inserted(result.InsertedUnits, units));
         }
         catch (Exception error)
         {
             // A verified native move can still fail in the bookkeeping afterwards; the root is then stored.
+            _storage.MarkUncertain();
             var stored = mode == Actionable.Modulate && CellPages.CellOfStored(root, out _) is { } cell &&
                 mounted!.Cells.Contains(cell);
             _log($"Digital Storage: API insert {(stored ? "bookkeeping " : "")}failed ({error.GetType().Name}).");
             return Report(mode, stored ? new StorageResult(units, StorageStatus.Done) : StorageResult.None(StorageStatus.Rejected));
+        }
+        finally
+        {
+            if (mode == Actionable.Modulate) _storage.Settle(mounted!);
         }
     }
 
@@ -87,9 +96,11 @@ internal sealed class NetworkStorageFacade : IStorage
             var result = mounted!.Storage.Extract(what, amount, sink, mode, source);
             moved = mode == Actionable.Simulate ? result.ExtractedUnits : sink.MovedUnits;
             sourceWasEmpty = result.StoppedBy.Outcome == TransferOutcome.SourceEmpty;
+            if (result.StoppedBy.Outcome == TransferOutcome.Unowned) _storage.MarkUncertain();
         }
         catch (Exception error)
         {
+            _storage.MarkUncertain();
             moved = sink.MovedUnits;
             _log($"Digital Storage: API extract failed ({error.GetType().Name}: {error.Message}).");
         }
@@ -97,6 +108,7 @@ internal sealed class NetworkStorageFacade : IStorage
         {
             if (mode == Actionable.Modulate)
             {
+                _storage.Settle(mounted!);
                 foreach (var cell in mounted!.Cells) _access.Touched(cell);
             }
         }
@@ -127,11 +139,13 @@ internal sealed class NetworkStorageFacade : IStorage
         var sink = new InventoryRootSink(destination);
         long moved;
         var rootWasMissing = false;
+        var settled = false;
         try
         {
             var result = inventory.ExtractRoot(key, page, root.modifiedShape.minX, root.modifiedShape.minY, sink, mode, source);
             rootWasMissing = result.StoppedBy.Outcome == TransferOutcome.SourceEmpty;
             moved = mode == Actionable.Simulate ? (result.StoppedBy.IsMoved ? units : 0) : sink.MovedUnits;
+            settled = result.StoppedBy.Outcome != TransferOutcome.Unowned;
         }
         catch (Exception error)
         {
@@ -140,7 +154,13 @@ internal sealed class NetworkStorageFacade : IStorage
         }
         finally
         {
-            if (mode == Actionable.Modulate) _access.Touched(cell);
+            if (mode == Actionable.Modulate)
+            {
+                // This cell's inventory, not the mounted one, made the move; its view is the one that is current.
+                if (settled) CellInventoryCache.Remember(cell, inventory.View);
+                else CellInventoryCache.Forget(cell);
+                _access.Touched(cell);
+            }
         }
 
         return Report(mode, StorageOutcomes.ExtractedRoot(moved, units, rootWasMissing));

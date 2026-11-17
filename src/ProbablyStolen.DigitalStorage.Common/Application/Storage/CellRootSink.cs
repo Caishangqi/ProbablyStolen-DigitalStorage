@@ -52,7 +52,7 @@ public sealed class CellRootSink : IRootSink
         if (_scope == PlanScope.Insert)
             _view.RecordStored(plan.Page, plan.Slot, root.Key, root.Units, root.Size);
         else
-            _view.RecordRelocated(root.Page, _view.SlotAt(root.Page, root.X, root.Y), plan.Page, plan.Slot);
+            _view.RecordRelocated(root.Page, _view.SlotAt(root.Page, root.X, root.Y), plan.Page, plan.Slot, root.Key);
         return step;
     }
 }

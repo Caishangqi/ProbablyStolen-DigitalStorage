@@ -24,23 +24,28 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
 /// <summary>
 /// Terminal store, extract and read operations over the cells of one live network. Every call scans the network
-/// again; items only move through <see cref="CellPages"/>, so the pages stay the only record of what is stored.
+/// again; items only move through <see cref="CellPages"/>, so the pages stay the only record of what is stored. Each
+/// cell's contents are kept between calls by <see cref="CellInventoryCache"/>: an operation that ends with every move
+/// accounted for keeps them, any other ending drops them so the next read starts over.
 /// </summary>
 internal sealed class StorageService
 {
-    internal const string ModItemPrefix = "digital_storage.";
     private const string UnavailableKey = "terminal_storage_unavailable";
     private const string RestoreUnavailableKey = "storage_restore_unavailable";
     private readonly NativeNetworkScanner _scanner;
     private readonly Func<NativeGridSnapshot, Grid, bool> _isPowered;
     private readonly Action<string> _log;
     private readonly StorageDiagnostics _diagnostics;
-    private readonly HashSet<(string, NativeItemIdentityFailure)> _reportedFallbacks = new();
     private const string NoSpaceKey = "terminal_storage_reject_no_space";
     private static readonly IActionSource Player = new PlayerSource("player");
     private readonly Func<GameItem, bool> _migrate;
     private bool _viewsStale;
+    // Set when a move ended without being accounted for: a failed native move or an exception during an operation.
+    private bool _contentsUncertain;
     private readonly Dictionary<ItemKey, GameItem> _samples = new();
+    // Name, picture and search text per type. They follow from the stored state, which the key encodes, and from the
+    // language; only the amounts change between reads.
+    private Dictionary<ItemKey, TerminalEntry> _entryTexts = new();
     private bool? _restoreApplied;
 
     internal StorageService(NativeNetworkScanner scanner, Func<NativeGridSnapshot, Grid, bool> isPowered,
@@ -55,6 +60,8 @@ internal sealed class StorageService
 
     private const string UniqueComponent = "digital_storage.unique";
     private static readonly ConditionalWeakTable<GameItem, ItemKey> FallbackKeys = new();
+    private static readonly Dictionary<ItemKey, NativeItemIdentityFailure> FallbackReasons = new();
+    private readonly HashSet<(string, NativeItemIdentityFailure)> _reportedFallbacks = new();
     private static long _nextFallback;
 
     /// <summary>
@@ -68,7 +75,7 @@ internal sealed class StorageService
     internal static ItemKey? Identify(GameItem item, out NativeItemIdentityFailure failure)
     {
         failure = NativeItemIdentityFailure.None;
-        if (item == null || IsModItem(item))
+        if (item == null || StoreAdmission.IsModItem(item))
         {
             return null;
         }
@@ -80,53 +87,77 @@ internal sealed class StorageService
         }
 
         failure = result.Failure;
-
-        return FallbackKeys.GetValue(item, unread => new ItemKey(
-            string.IsNullOrWhiteSpace(unread.identifier) ? "unknown" : unread.identifier,
-            new[] { new KeyValuePair<string, string>(UniqueComponent,
-                Interlocked.Increment(ref _nextFallback).ToString(CultureInfo.InvariantCulture)) }));
-    }
-
-    /// <summary>Reads the aggregated contents of every available cell on the terminal's network.</summary>
-    internal TerminalInventorySnapshot GetCachedInventory(GameItem terminal)
-    {
-        var network = Connect(terminal);
-        if (!network.Online)
+        var reason = failure;
+        return FallbackKeys.GetValue(item, unread =>
         {
-            return new TerminalInventorySnapshot(false, Array.Empty<TerminalEntry>(), network.StorageUnavailable);
-        }
-
-        var groups = new Dictionary<ItemKey, (long Pieces, long Units, GameItem Sample)>();
-        foreach (var root in network.Cells.SelectMany(CellPages.Roots))
-        {
-            var key = Identify(root, out var failure);
-            if (key == null)
-            {
-                continue;
-            }
-
-            // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
-            if (failure != NativeItemIdentityFailure.None && _reportedFallbacks.Add((root.identifier, failure)))
-                _log($"Digital Storage: identity fallback item={root.identifier} reason={failure}");
-
-            groups[key] = groups.TryGetValue(key, out var group)
-                ? (group.Pieces + 1, group.Units + root.unitCount, group.Sample)
-                : (1, root.unitCount, root);
-        }
-
-        _samples.Clear();
-        foreach (var pair in groups)
-        {
-            _samples[pair.Key] = pair.Value.Sample;
-        }
-
-        var entries = groups.Select(pair => Entry(pair.Key, pair.Value.Pieces, pair.Value.Units, pair.Value.Sample));
-        return new TerminalInventorySnapshot(true, entries, network.StorageUnavailable);
+            var key = new ItemKey(string.IsNullOrWhiteSpace(unread.identifier) ? "unknown" : unread.identifier,
+                new[] { new KeyValuePair<string, string>(UniqueComponent,
+                    Interlocked.Increment(ref _nextFallback).ToString(CultureInfo.InvariantCulture)) });
+            FallbackReasons[key] = reason;
+            return key;
+        });
     }
 
     /// <summary>
+    /// Reads the aggregated contents of every available cell on the terminal's network: amounts from each cell's
+    /// usage per type, and one stored root per type as the entry's sample.
+    /// </summary>
+    internal TerminalInventorySnapshot GetCachedInventory(GameItem terminal)
+    {
+        var mounted = GetInventory(terminal, migratePending: false);
+        if (!mounted.Network.Online)
+        {
+            return new TerminalInventorySnapshot(false, Array.Empty<TerminalEntry>(), mounted.Network.StorageUnavailable);
+        }
+
+        // A cell that could not be mounted, such as while a save is decoding, is unavailable, never empty.
+        var unavailable = mounted.Network.StorageUnavailable || mounted.Inventories.Count < mounted.Network.Cells.Count;
+
+        var totals = new Dictionary<ItemKey, (long Pieces, long Units)>();
+        foreach (var (_, inventory) in mounted.Inventories)
+        {
+            foreach (var type in inventory.View.Usage.Types)
+            {
+                totals[type.Key] = totals.TryGetValue(type.Key, out var total)
+                    ? (total.Pieces + type.Value.Pieces, total.Units + type.Value.Units)
+                    : (type.Value.Pieces, type.Value.Units);
+            }
+        }
+
+        _samples.Clear();
+        foreach (var (cell, inventory) in mounted.Inventories)
+        {
+            foreach (var (key, root) in RootsByType(cell, inventory.View))
+            {
+                if (!_samples.ContainsKey(key)) _samples[key] = root;
+            }
+        }
+
+        var texts = new Dictionary<ItemKey, TerminalEntry>();
+        var entries = new List<TerminalEntry>(totals.Count);
+        foreach (var pair in totals)
+        {
+            if (!_samples.TryGetValue(pair.Key, out var sample)) continue;
+            // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
+            if (FallbackReasons.TryGetValue(pair.Key, out var reason) && _reportedFallbacks.Add((sample.identifier, reason)))
+                _log($"Digital Storage: identity fallback item={sample.identifier} reason={reason}");
+            if (!_entryTexts.TryGetValue(pair.Key, out var text)) text = Entry(pair.Key, 0, 0, sample);
+            texts[pair.Key] = text;
+            entries.Add(new TerminalEntry(pair.Key, pair.Value.Pieces, text.DisplayName, text.SpriteKey, text.SpriteWidth,
+                text.SpriteHeight, document: text.Document, totalUnits: pair.Value.Units));
+        }
+
+        // Only types still stored keep their texts.
+        _entryTexts = texts;
+        return new TerminalInventorySnapshot(true, entries, unavailable);
+    }
+
+    /// <summary>Drops the kept entry texts, so the next read builds them again in the current language.</summary>
+    internal void ForgetEntryTexts() => _entryTexts = new Dictionary<ItemKey, TerminalEntry>();
+
+    /// <summary>
     /// Finds a stored item of a type, used for native tooltips and item pictures. The last read's sample is reused
-    /// while it still sits on a storage page; otherwise the network is scanned again.
+    /// while it still sits on a storage page; otherwise the cells are searched by their recorded slot types.
     /// </summary>
     internal GameItem? FindSample(GameItem terminal, ItemKey key)
     {
@@ -135,10 +166,34 @@ internal sealed class StorageService
             return cached;
         }
 
-        var network = Connect(terminal);
-        return network.Online
-            ? network.Cells.SelectMany(CellPages.Roots).FirstOrDefault(root => key.Equals(Identify(root)))
-            : null;
+        var mounted = GetInventory(terminal, migratePending: false);
+        foreach (var (cell, inventory) in mounted.Inventories)
+        {
+            if (!inventory.View.Contains(key)) continue;
+            foreach (var (type, root) in RootsByType(cell, inventory.View))
+            {
+                if (key.Equals(type)) return root;
+            }
+        }
+
+        return null;
+    }
+
+    // Each stored root with its type: a strip root's type is its slot record; anchor and legacy roots are read.
+    private static IEnumerable<(ItemKey Key, GameItem Root)> RootsByType(GameItem cell, CellView view)
+    {
+        var pages = CellPages.Pages(cell);
+        for (var index = 0; index < pages.Count && index < view.Pages.Count; index++)
+        {
+            var page = view.Pages[index];
+            foreach (var root in pages[index].childItems)
+            {
+                var key = (page.Kind == PageKind.Strip
+                    ? view.KeyAt(index, StripLayout.SlotIndexAt(page.Geometry, root.modifiedShape.minX, root.modifiedShape.minY))
+                    : null) ?? Identify(root);
+                if (key != null) yield return (key, root);
+            }
+        }
     }
 
     // Only storage page grids have insertion locked by this mod (CellPages.AddPage).
@@ -168,8 +223,8 @@ internal sealed class StorageService
     {
         var network = Connect(terminal);
         var storage = new NetworkStorage();
-        var cells = new List<GameItem>();
-        if (!network.Online) return new MountedNetwork(network, storage, cells);
+        var inventories = new List<(GameItem, BasicCellInventory)>();
+        if (!network.Online) return new MountedNetwork(network, storage, inventories);
 
         foreach (var cell in network.Cells)
         {
@@ -179,11 +234,31 @@ internal sealed class StorageService
             var readOnly = CellHealth.Get(cell).Status == CellHealthStatus.ReadOnly;
             storage.Mount(inventory.View.Priority,
                 new InventoryHandler(inventory, inventory.View.Partition, allowInsertion: !readOnly));
-            cells.Add(cell);
+            inventories.Add((cell, inventory));
         }
 
-        return new MountedNetwork(network, storage, cells);
+        return new MountedNetwork(network, storage, inventories);
     }
+
+    /// <summary>
+    /// Ends an operation on mounted cells. When every move was accounted for, the cells' contents are kept as they are
+    /// now; otherwise they are dropped. Call before <see cref="CellPages.Compact"/>, whose page changes then simply
+    /// make the next read start over for that cell.
+    /// </summary>
+    internal void Settle(MountedNetwork mounted)
+    {
+        foreach (var (cell, inventory) in mounted.Inventories)
+        {
+            if (_contentsUncertain || _viewsStale) CellInventoryCache.Forget(cell);
+            else CellInventoryCache.Remember(cell, inventory.View);
+        }
+
+        _contentsUncertain = false;
+        _viewsStale = false;
+    }
+
+    /// <summary>Records that a move ended without being accounted for, so the operation's cells are read again.</summary>
+    internal void MarkUncertain() => _contentsUncertain = true;
 
     /// <summary>Stores each item independently in selection order; stored items are never rolled back.</summary>
     internal TerminalInsertionResult Store(GameItem terminal, IReadOnlyList<GameItem> items)
@@ -199,6 +274,8 @@ internal sealed class StorageService
             return TerminalInsertionResult.Create(TerminalInsertionStatus.Offline, 0, UnavailableKey);
         }
 
+        _contentsUncertain = false;
+        _viewsStale = false;
         long stored = 0;
         var candidates = 0;
         string? firstRejection = null;
@@ -208,8 +285,8 @@ internal sealed class StorageService
             var units = item.unitCount;
             if (_viewsStale)
             {
+                Settle(mounted);
                 mounted = GetInventory(terminal, migratePending: false);
-                _viewsStale = false;
             }
 
             var rejection = TryStore(mounted, item, Actionable.Modulate);
@@ -224,6 +301,8 @@ internal sealed class StorageService
                     $"size={CellPages.SizeOf(item)} reason={rejection}");
             }
         }
+
+        Settle(mounted);
 
         if (candidates == 0)
         {
@@ -240,16 +319,30 @@ internal sealed class StorageService
             firstRejection == null ? "terminal_storage_inserted" : "terminal_storage_inserted_partial");
     }
 
-    /// <summary>Gets whether one item could be stored right now, without moving anything.</summary>
-    internal bool CanStore(GameItem terminal, GameItem item)
+    /// <summary>
+    /// Gets, for each item, why it could not be stored right now as a text key, or null; nothing moves. Each item is
+    /// checked alone against the current contents. The network is mounted once for the whole list, and not at all
+    /// when every item is refused before storage is asked.
+    /// </summary>
+    internal string?[] StoreRefusals(GameItem terminal, IReadOnlyList<GameItem> items)
     {
-        if (item == null || !IsRestoreApplied())
+        var refusals = new string?[items.Count];
+        var pending = false;
+        for (var index = 0; index < items.Count; index++)
         {
-            return false;
+            refusals[index] = IsRestoreApplied() ? StoreAdmission.Refusal(items[index]) : RestoreUnavailableKey;
+            pending |= refusals[index] == null;
         }
 
+        if (!pending) return refusals;
         var mounted = GetInventory(terminal, migratePending: false);
-        return mounted.Network.Online && TryStore(mounted, item, Actionable.Simulate) == null;
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (refusals[index] != null) continue;
+            refusals[index] = mounted.Network.Online ? TryStore(mounted, items[index], Actionable.Simulate) : UnavailableKey;
+        }
+
+        return refusals;
     }
 
     /// <summary>
@@ -279,18 +372,24 @@ internal sealed class StorageService
 
         // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
         var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true), pieces);
+        _contentsUncertain = false;
         try
         {
             var result = mounted.Storage.Extract(key, long.MaxValue, destination, Actionable.Modulate, Player);
             if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
+            {
+                _contentsUncertain = true;
                 _log($"Digital Storage: extract left an item without an owner (key={key.Identifier}).");
+            }
         }
         catch (Exception error)
         {
+            _contentsUncertain = true;
             _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
         }
         finally
         {
+            Settle(mounted);
             foreach (var cell in mounted.Cells) CellPages.Compact(cell);
         }
 
@@ -324,6 +423,7 @@ internal sealed class StorageService
         var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true, firstAnchor: target.Anchor);
         long moved = 0;
         var status = TerminalExtractionStatus.Success;
+        _contentsUncertain = false;
         try
         {
             foreach (var step in batch.Steps)
@@ -341,6 +441,7 @@ internal sealed class StorageService
 
                 if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
                 {
+                    _contentsUncertain = true;
                     _log($"Digital Storage: extract left an item without an owner (key={step.Key.Identifier}).");
                     status = TerminalExtractionStatus.Failed;
                     break;
@@ -362,11 +463,13 @@ internal sealed class StorageService
         }
         catch (Exception error)
         {
+            _contentsUncertain = true;
             _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
             status = TerminalExtractionStatus.Failed;
         }
         finally
         {
+            Settle(mounted);
             foreach (var cell in mounted.Cells) CellPages.Compact(cell);
         }
 
@@ -389,8 +492,8 @@ internal sealed class StorageService
     /// <summary>Stores or simulates one item; returns the rejection text key, or null when it went in.</summary>
     private string? TryStore(MountedNetwork mounted, GameItem item, Actionable mode)
     {
-        var key = IsStorable(item) ? Identify(item) : null;
-        if (key == null) return "terminal_storage_unsupported_item";
+        if (StoreAdmission.Refusal(item) is { } refusal) return refusal;
+        if (Identify(item) is not { } key) return StoreAdmission.UnsupportedKey;
         if (mounted.Cells.Count == 0) return "terminal_storage_reject_no_cell";
         try
         {
@@ -402,7 +505,7 @@ internal sealed class StorageService
             // A verified native move can still fail in the operation's bookkeeping; the item is then
             // stored, and reporting a rejection would be wrong.
             var stored = mode == Actionable.Modulate && IsStoredIn(item, mounted.Cells);
-            _viewsStale = true;
+            if (mode == Actionable.Modulate) _viewsStale = true;
             _log($"Digital Storage: store {(stored ? "bookkeeping " : "")}failed ({error.GetType().Name}: {error.Message}).");
             return stored ? null : NoSpaceKey;
         }
@@ -411,7 +514,10 @@ internal sealed class StorageService
     private string MessageKey(TransferStep step)
     {
         if (step.Outcome == TransferOutcome.Unowned)
+        {
+            _contentsUncertain = true;
             _log("Digital Storage: a store left an item without an owner.");
+        }
         return step.Rejection switch
         {
             StoreRejection.TypeLimit => "terminal_storage_reject_type_limit",
@@ -425,16 +531,6 @@ internal sealed class StorageService
             _ => NoSpaceKey
         };
     }
-
-    /// <summary>
-    /// Rejects mod items and containers holding them: storing a drive or cell inside a cell would nest the
-    /// network inside its own storage.
-    /// </summary>
-    internal static bool IsStorable(GameItem item) =>
-        !IsModItem(item) && !GraphUtils.FindAllChildrenType<GameItem>(item).Any(IsModItem);
-
-    private static bool IsModItem(GameItem item) =>
-        item.identifier?.StartsWith(ModItemPrefix, StringComparison.Ordinal) == true;
 
     private bool IsRestoreApplied() => _restoreApplied ??= CellPageRestore.IsApplied();
 
@@ -539,16 +635,21 @@ internal sealed class CellBayReference
 /// <summary>The storage mounted for one terminal operation.</summary>
 internal sealed class MountedNetwork
 {
-    internal MountedNetwork(StorageService.Network network, NetworkStorage storage, IReadOnlyList<GameItem> cells)
+    internal MountedNetwork(StorageService.Network network, NetworkStorage storage,
+        IReadOnlyList<(GameItem Cell, BasicCellInventory Inventory)> inventories)
     {
         Network = network;
         Storage = storage;
-        Cells = cells;
+        Inventories = inventories;
+        Cells = inventories.Select(pair => pair.Cell).ToArray();
     }
 
     internal StorageService.Network Network { get; }
 
     internal NetworkStorage Storage { get; }
+
+    /// <summary>Gets the mounted cells with the inventory mounted for each.</summary>
+    internal IReadOnlyList<(GameItem Cell, BasicCellInventory Inventory)> Inventories { get; }
 
     /// <summary>Gets the mounted cells.</summary>
     internal IReadOnlyList<GameItem> Cells { get; }

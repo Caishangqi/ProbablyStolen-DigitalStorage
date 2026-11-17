@@ -75,12 +75,12 @@ internal sealed class TerminalItem
                 TerminalFeatures.AttributeCaptures,
                 (items, diagnostic) => _networkPower.StoreSelected(item, items, diagnostic),
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
-                (source, amount) => _networkPower.CanStore(item, source, amount),
+                (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
                 _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
-            new TerminalItemDrop(item, (source, amount) => _networkPower.CanStore(item, source, amount),
-                (source, amount) => _networkPower.StoreSingle(item, source, amount), message => _log.Log(message)).Attach();
+            new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
+                (source, amount) => _networkPower.StoreSingle(item, source, amount), _text, message => _log.Log(message)).Attach();
             return item;
         }
         catch

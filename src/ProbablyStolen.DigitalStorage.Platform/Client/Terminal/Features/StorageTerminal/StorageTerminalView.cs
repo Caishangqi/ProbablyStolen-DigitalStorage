@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
@@ -70,6 +72,10 @@ internal sealed class StorageTerminalView : ITerminalView
     private TerminalInventoryRefreshHandler? _refreshHandler;
     private IDisposable? _networkSubscription;
     private long _searchRevision;
+    // Prepared search documents per raw document. The platform reuses an entry's raw document while its type stays
+    // stored, so only new types are prepared; a search configuration change prepares all of them again.
+    private ConditionalWeakTable<SearchDocument, SearchDocument> _prepared = new();
+    private long _preparedRevision = -1;
     private ItemKey? _hoverKey;
     private GameItemElement? _hoverSample;
     private bool _showingTooltip;
@@ -168,7 +174,7 @@ internal sealed class StorageTerminalView : ITerminalView
         // its frame. It answers only while this view is shown.
         _dropInput = Window.root.AddComponent<TerminalDropInputHandler>();
         _dropInput.Initialize(Window, () => !_suspended && _host.IsCurrentSession(), StoreSelection, Diagnostics,
-            ShowDragHint, StoreSingle, _services.CanStore, SetDropHighlight, IsPointerOverSlots);
+            ShowDragHint, StoreSingle, _services.StoreRefusals, SetDropHighlight, IsPointerOverSlots);
         _dragGhost = new DragGhostView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
             "The terminal window root must be a RectTransform."), _pictureCapture, CellPixels);
         _selectionBand = new TerminalSelectionBandView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
@@ -505,7 +511,11 @@ internal sealed class StorageTerminalView : ITerminalView
         _grid.ShowPicture(index, entry == null ? null : _pictures.Get(entry.Key), entry != null);
     }
 
-    private void ShowDragHint(int count)
+    /// <summary>
+    /// Shows the drop hint over the terminal, or hides it when <paramref name="count"/> is zero. A null
+    /// <paramref name="refusal"/> means the drop would store; otherwise it names the refused item and why.
+    /// </summary>
+    private void ShowDragHint(int count, GameItem? refused, string? refusal)
     {
         var overlay = OverlayHandler.current;
         if (overlay == null)
@@ -521,11 +531,8 @@ internal sealed class StorageTerminalView : ITerminalView
 
         _grid.HideTooltips();
 
-        var text = _services.Text;
-        var hint = count < 0 ? text.Get("terminal_storage_drag_rejected") :
-            text.Get("terminal_storage_drag_hint", count, text.Get("terminal_name"));
         overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f),
-            new RichTextBuilder(60).AddLine(hint, ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue).Build());
+            TerminalDropHint.Build(_services.Text, count, refused, refusal));
     }
 
     private void StoreSelection(IReadOnlyList<GameItem> items)
@@ -657,7 +664,7 @@ internal sealed class StorageTerminalView : ITerminalView
             _attributes.Clear();
             var entries = snapshot.Entries.Select(entry => new TerminalEntry(entry.Key, entry.Amount, entry.DisplayName,
                 entry.SpriteKey, entry.SpriteWidth, entry.SpriteHeight, entry.Serial,
-                _services.Search.PrepareDocument(entry.Document), entry.TotalUnits)).ToArray();
+                Prepared(entry.Document), entry.TotalUnits)).ToArray();
             snapshot = new TerminalInventorySnapshot(snapshot.Online, entries, snapshot.StorageUnavailable);
             _pictures.Accept(snapshot.Entries);
             _menu.BroadcastChanges(snapshot);
@@ -665,6 +672,18 @@ internal sealed class StorageTerminalView : ITerminalView
             ApplyMenuView(preserveView, refresh: false);
             Refresh();
         });
+    }
+
+    private SearchDocument Prepared(SearchDocument document)
+    {
+        var search = _services.Search;
+        if (_preparedRevision != search.ConfigurationRevision)
+        {
+            _prepared = new ConditionalWeakTable<SearchDocument, SearchDocument>();
+            _preparedRevision = search.ConfigurationRevision;
+        }
+
+        return _prepared.GetValue(document, search.PrepareDocument);
     }
 
     private void ApplyMenuView(bool preserveView, bool refresh = true)

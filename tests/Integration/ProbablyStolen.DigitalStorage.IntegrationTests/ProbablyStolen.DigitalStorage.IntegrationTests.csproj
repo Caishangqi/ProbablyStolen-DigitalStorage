@@ -44,6 +44,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\TerminalSearchMetadata.cs" Link="Storage\TerminalSearchMetadata.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\ExternalAccessScope.cs" Link="Storage\ExternalAccessScope.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Api\StorageOutcomes.cs" Link="Api\StorageOutcomes.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoreAdmission.cs" Link="Storage\StoreAdmission.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IExternalAccess.cs" Link="Api\IExternalAccess.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationHost.cs" Link="Integration\IntegrationHost.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationPorts.cs" Link="Integration\IntegrationPorts.cs" />

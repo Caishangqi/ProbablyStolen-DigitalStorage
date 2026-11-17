@@ -89,7 +89,7 @@ public static class RootDrainSimulator
                 appended++;
             }
 
-            view.RecordRelocated(root.Page, view.SlotAt(root.Page, root.X, root.Y), plan.Page, plan.Slot);
+            view.RecordRelocated(root.Page, view.SlotAt(root.Page, root.X, root.Y), plan.Page, plan.Slot, root.Key);
             placements.Add(new ForecastPlacement(root, plan.Page, plan.Slot));
         }
 

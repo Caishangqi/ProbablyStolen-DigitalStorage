@@ -1,6 +1,7 @@
 """Resource checks exercise the actual preparation functions with temporary assets."""
 
 import hashlib
+import re
 import shutil
 import sys
 import tempfile
@@ -59,6 +60,16 @@ class ContentContractTests(unittest.TestCase):
 
     def test_actual_contract_and_resources_pass(self):
         check_content(self.root, self.output)
+
+    def test_terminal_drop_refusal_reasons_have_text_in_every_language(self):
+        source = (REPOSITORY / "src/ProbablyStolen.DigitalStorage.Client/Terminal/Features/StorageTerminal"
+                  / "DropRefusalReasons.cs").read_text(encoding="utf-8")
+        keys = set(re.findall(r'"((?:terminal|storage)_[a-z_]+)"', source))
+        self.assertIn("terminal_drag_reason_not_owned", keys)
+        for language in ("en", "zh"):
+            texts = read_localization(REPOSITORY / "packaging/resources/Localization" / (language + ".csv"))
+            self.assertEqual(set(), keys - set(texts), language)
+            self.assertIn("terminal_storage_drag_refused", texts)
 
     def test_storage_diagnostics_setting_and_localization_are_wired(self):
         settings = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Platform/Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")

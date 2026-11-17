@@ -199,7 +199,36 @@ internal static class CellPages
     /// </exception>
     internal static CellView Read(GameItem cell, Func<GameItem, ItemKey?> identify, CellWriteState writeState)
     {
+        var (pages, usage) = ReadContent(cell, identify);
+        return ViewOf(cell, pages, usage, writeState);
+    }
+
+    /// <summary>
+    /// Like <see cref="Read"/>, but reuses the contents kept from the last read or operation while the pages still hold
+    /// exactly the same roots; only the cell's settings are read again. See <see cref="CellInventoryCache"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">As for <see cref="Read"/>, when the pages must be read again.</exception>
+    internal static CellView ReadCached(GameItem cell, CellWriteState writeState)
+    {
+        if (CellInventoryCache.TryGet(cell, out var pages, out var usage)) return ViewOf(cell, pages, usage, writeState);
+        var view = Read(cell, StorageService.Identify, writeState);
+        CellInventoryCache.Remember(cell, view);
+        return view;
+    }
+
+    /// <summary>Builds a cell view over page contents, reading the cell's current settings.</summary>
+    private static CellView ViewOf(GameItem cell, IReadOnlyList<PageView> pages, CellUsage usage, CellWriteState writeState)
+    {
         var tier = StorageCellTier.FromCellId(cell.identifier) ?? throw new InvalidOperationException("Unknown storage cell tier.");
+        var typeLimit = CellTypeLimitSource.EffectiveOrBase(cell);
+        return new CellView(CellRules.For(tier), typeLimit, pages, usage, CellPartitionTags.Read(cell),
+            DrivePriorityTag.ReadForCell(cell), writeState, CellUpgradeInventory.Read(cell));
+    }
+
+    // Reads every root on the pages, with its type; the slow part of a read.
+    private static (IReadOnlyList<PageView> Pages, CellUsage Usage) ReadContent(GameItem cell, Func<GameItem, ItemKey?> identify)
+    {
+        _ = StorageCellTier.FromCellId(cell.identifier) ?? throw new InvalidOperationException("Unknown storage cell tier.");
         if (!CellTags.TryReadLayout(cell, out var layout)) throw new InvalidOperationException("The cell layout cannot be read.");
         var pages = Pages(cell);
         if (pages.Count != layout!.Pages.Count)
@@ -210,22 +239,23 @@ internal static class CellPages
         for (var index = 0; index < pages.Count; index++)
         {
             var geometry = layout.Pages[index];
-            var slots = new List<int>();
+            var slots = new List<(int Slot, ItemKey? Key)>();
             foreach (var root in pages[index].childItems)
             {
                 var size = SizeOf(root);
+                var slot = -1;
                 if (geometry.Kind == PageKind.Strip)
                 {
-                    var slot = StripLayout.SlotIndexAt(geometry, root.modifiedShape.minX, root.modifiedShape.minY);
+                    slot = StripLayout.SlotIndexAt(geometry, root.modifiedShape.minX, root.modifiedShape.minY);
                     if (!size.Equals(geometry.SlotSize) || slot < 0)
                         throw new InvalidOperationException("A root is off its slot grid. " + StorageDiagnostics.Context(() =>
                             $"page={index} expected_slot={geometry.SlotSize.Width}x{geometry.SlotSize.Height} actual={size.Width}x{size.Height} " +
                             $"x={root.modifiedShape.minX} y={root.modifiedShape.minY} slot={slot} " + NativeStorageDiagnosticContext.Item(root)));
-                    slots.Add(slot);
                 }
 
                 var key = identify(root) ?? throw new InvalidOperationException($"A root on page {index} has no type. " +
                     StorageDiagnostics.Context(() => NativeStorageDiagnosticContext.Item(root)));
+                if (geometry.Kind == PageKind.Strip) slots.Add((slot, key));
                 usage.Add(key, root.unitCount, CellUsage.AreaOf(size, root.unitCount));
             }
 
@@ -234,9 +264,7 @@ internal static class CellPages
                 : PageView.Unslotted(geometry, pages[index].childItems.Count));
         }
 
-        var typeLimit = CellTypeLimitSource.EffectiveOrBase(cell);
-        return new CellView(CellRules.For(tier), typeLimit, views, usage, CellPartitionTags.Read(cell),
-            DrivePriorityTag.ReadForCell(cell), writeState, CellUpgradeInventory.Read(cell));
+        return (views, usage);
     }
 
     /// <summary>

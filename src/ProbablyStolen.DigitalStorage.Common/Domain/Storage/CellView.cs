@@ -17,15 +17,20 @@ public enum CellWriteState
 }
 
 /// <summary>Projection of one page: its geometry and which roots it holds.</summary>
-/// <remarks>Strip pages track occupied slots; anchor and legacy pages only count their roots.</remarks>
+/// <remarks>
+/// Strip pages track occupied slots and the type in each, so roots of one type are found without reading every item;
+/// anchor and legacy pages only count their roots.
+/// </remarks>
 public sealed class PageView
 {
     private readonly bool[]? _occupied;
+    private readonly ItemKey?[]? _keys;
 
-    private PageView(PageGeometry geometry, bool[]? occupied, int rootCount)
+    private PageView(PageGeometry geometry, bool[]? occupied, ItemKey?[]? keys, int rootCount)
     {
         Geometry = geometry;
         _occupied = occupied;
+        _keys = keys;
         RootCount = rootCount;
     }
 
@@ -33,19 +38,29 @@ public sealed class PageView
     /// <exception cref="ArgumentException">The geometry is not a strip page, or a slot is outside it or repeated.</exception>
     public static PageView Strip(PageGeometry geometry, IEnumerable<int> occupiedSlots)
     {
+        if (occupiedSlots == null) throw new ArgumentNullException(nameof(occupiedSlots));
+        return Strip(geometry, occupiedSlots.Select(slot => (slot, (ItemKey?)null)));
+    }
+
+    /// <summary>Creates a strip page projection that also records the type held in each occupied slot.</summary>
+    /// <exception cref="ArgumentException">The geometry is not a strip page, or a slot is outside it or repeated.</exception>
+    public static PageView Strip(PageGeometry geometry, IEnumerable<(int Slot, ItemKey? Key)> occupiedSlots)
+    {
         if (geometry.Kind != PageKind.Strip) throw new ArgumentException("Only strip pages have slots.", nameof(geometry));
         if (occupiedSlots == null) throw new ArgumentNullException(nameof(occupiedSlots));
         var occupied = new bool[geometry.SlotCount];
+        var keys = new ItemKey?[geometry.SlotCount];
         var count = 0;
-        foreach (var slot in occupiedSlots)
+        foreach (var (slot, key) in occupiedSlots)
         {
             if (slot < 0 || slot >= occupied.Length || occupied[slot])
                 throw new ArgumentException($"Slot {slot} is outside the page or repeated.", nameof(occupiedSlots));
             occupied[slot] = true;
+            keys[slot] = key;
             count++;
         }
 
-        return new PageView(geometry, occupied, count);
+        return new PageView(geometry, occupied, keys, count);
     }
 
     /// <summary>Creates an anchor or legacy page projection holding <paramref name="rootCount"/> roots.</summary>
@@ -54,7 +69,7 @@ public sealed class PageView
     {
         if (geometry.Kind == PageKind.Strip) throw new ArgumentException("Strip pages track slots.", nameof(geometry));
         if (rootCount < 0) throw new ArgumentException("A root count cannot be negative.", nameof(rootCount));
-        return new PageView(geometry, null, rootCount);
+        return new PageView(geometry, null, null, rootCount);
     }
 
     /// <summary>Gets the page geometry.</summary>
@@ -72,6 +87,9 @@ public sealed class PageView
     /// <summary>Gets whether a strip slot is occupied; always false for anchor and legacy pages.</summary>
     public bool IsOccupied(int slot) => _occupied != null && slot >= 0 && slot < _occupied.Length && _occupied[slot];
 
+    /// <summary>Gets the type recorded in an occupied strip slot, or null when it is free, unknown or not a strip slot.</summary>
+    public ItemKey? KeyAt(int slot) => IsOccupied(slot) ? _keys![slot] : null;
+
     /// <summary>Gets the lowest free strip slot, or -1 when the page is full or not a strip page.</summary>
     public int FirstFreeSlot()
     {
@@ -81,13 +99,14 @@ public sealed class PageView
         return -1;
     }
 
-    internal PageView Clone() => new(Geometry, (bool[]?)_occupied?.Clone(), RootCount);
+    internal PageView Clone() => new(Geometry, (bool[]?)_occupied?.Clone(), (ItemKey?[]?)_keys?.Clone(), RootCount);
 
-    internal void Occupy(int slot)
+    internal void Occupy(int slot, ItemKey? key)
     {
         if (_occupied == null || slot < 0 || slot >= _occupied.Length || _occupied[slot])
             throw new InvalidOperationException($"Slot {slot} is not free on this page.");
         _occupied[slot] = true;
+        _keys![slot] = key;
         RootCount++;
     }
 
@@ -102,6 +121,7 @@ public sealed class PageView
             if (slot < 0 || slot >= _occupied.Length || !_occupied[slot])
                 throw new InvalidOperationException($"Slot {slot} is not occupied on this page.");
             _occupied[slot] = false;
+            _keys![slot] = null;
         }
 
         RootCount--;
@@ -109,8 +129,9 @@ public sealed class PageView
 }
 
 /// <summary>
-/// Projection of one storage cell for one operation. It is built from the live pages and updated in place as
-/// roots move during that operation; it is never kept across frames.
+/// Projection of one storage cell: its pages with the type in each strip slot, and per-type usage. Moves update it in
+/// place after they are verified, so the page contents can be kept between operations as long as the pages they
+/// describe have not changed in any other way.
 /// </summary>
 public sealed class CellView
 {
@@ -242,7 +263,7 @@ public sealed class CellView
     public void RecordStored(int page, int slot, ItemKey key, long units, BoundingSize size)
     {
         var area = CellUsage.AreaOf(size, units);
-        PageAt(page).Occupy(slot);
+        PageAt(page).Occupy(slot, key);
         try
         {
             Usage.Add(key, units, area);
@@ -282,11 +303,12 @@ public sealed class CellView
     /// <param name="fromSlot">The source slot, or -1 when the source is an anchor or legacy page.</param>
     /// <param name="toPage">The target strip page.</param>
     /// <param name="toSlot">The target slot.</param>
-    public void RecordRelocated(int fromPage, int fromSlot, int toPage, int toSlot)
+    /// <param name="key">The root's type; when null, the type recorded in the source slot moves with it.</param>
+    public void RecordRelocated(int fromPage, int fromSlot, int toPage, int toSlot, ItemKey? key = null)
     {
         var target = PageAt(toPage);
         var source = PageAt(fromPage);
-        target.Occupy(toSlot);
+        target.Occupy(toSlot, key ?? source.KeyAt(fromSlot));
         try
         {
             source.Release(fromSlot);
@@ -297,6 +319,9 @@ public sealed class CellView
             throw;
         }
     }
+
+    /// <summary>Gets the type recorded in a strip slot, or null when it is free, unknown or not a strip slot.</summary>
+    public ItemKey? KeyAt(int page, int slot) => PageAt(page).KeyAt(slot);
 
     private PageView PageAt(int page) =>
         page >= 0 && page < _pages.Count ? _pages[page] : throw new ArgumentOutOfRangeException(nameof(page));

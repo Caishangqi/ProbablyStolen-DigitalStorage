@@ -21,7 +21,7 @@ internal sealed class StorageTerminalServices
         IReadOnlyList<IEntryAttributeCapture> attributeCaptures,
         Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
-        Func<GameItem, int, bool> canStore, Func<ItemKey, GameItem?> findSample,
+        Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
         Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, Action<string> writeDiagnostic,
         Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search)
     {
@@ -33,7 +33,7 @@ internal sealed class StorageTerminalServices
         AttributeCaptures = attributeCaptures ?? throw new ArgumentNullException(nameof(attributeCaptures));
         StoreSelection = storeSelection ?? throw new ArgumentNullException(nameof(storeSelection));
         StoreSingle = storeSingle ?? throw new ArgumentNullException(nameof(storeSingle));
-        CanStore = canStore ?? throw new ArgumentNullException(nameof(canStore));
+        StoreRefusals = storeRefusals ?? throw new ArgumentNullException(nameof(storeRefusals));
         FindSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
         DiagnosticsEnabled = diagnosticsEnabled ?? throw new ArgumentNullException(nameof(diagnosticsEnabled));
         IdentityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
@@ -53,7 +53,11 @@ internal sealed class StorageTerminalServices
     internal IReadOnlyList<IEntryAttributeCapture> AttributeCaptures { get; }
     internal Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> StoreSelection { get; }
     internal Func<GameItem, int, Action<string>, TerminalInsertionResult> StoreSingle { get; }
-    internal Func<GameItem, int, bool> CanStore { get; }
+    /// <summary>
+    /// Gets why each dragged item could not be stored as a text key, or null when it could, reading the network once.
+    /// The amount is the single drag's quantity; null for a group drag, which moves whole stacks.
+    /// </summary>
+    internal Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> StoreRefusals { get; }
     internal Func<ItemKey, GameItem?> FindSample { get; }
     internal Func<bool> DiagnosticsEnabled { get; }
 
