@@ -1,10 +1,12 @@
-0.5.9
+0.5.10
 
-Updated item tooltips and added more detail to storage error logs.
+Added selection boxes and drag-out controls to the terminal. Select several displayed slots and drag their items into your inventory or a container.
 
-- Controller tooltips now show the total power demand of the connected network in the game's own power display.
-- Storage cell, module and network device tooltips are handled separately. If one section fails, the remaining sections can still appear.
-- Errors such as an unavailable storage cell, a failed module display update or a module bay restore failure now include the exception message, stack trace and relevant item or page details in Player.log.
-- Added Storage diagnostics under Debug in the mod settings. It is off by default and records extra storage page and module bay structure details when enabled. Errors are still logged when it is off.
-- Repeated storage errors are deduplicated and diagnostic output is limited. A logging failure will not interrupt item transfers.
-- The reported issue where an existing storage cell becomes unavailable is still under investigation.
+- Hold the left mouse button over an empty slot or a gap in the terminal to select items on the current page. Drag from a selected slot to take all items in the selection. Merged slots use their full group, even when a search matches only one item type within it.
+- Each selected slot has one item picture that follows the pointer, keeping the slots' relative positions. A slot containing many items still shows one picture, and the preview continues to follow outside the terminal window.
+- Dragging a single slot shows the requested item count. Each mouse wheel notch changes it by one; right-click halves it, rounding up, so 11 becomes 6. The next drag starts with the full amount currently available.
+- Over a visible inventory grid, the game's green cell marks the first item's attempted position. Remaining items find space automatically in the same inventory. The highlight does not guarantee enough room; capacity is checked item by item when you release.
+- Items move whole, without splitting stacks. If an item does not fit, the transfer stops and that item returns to its source. Earlier successful transfers stay in the destination, the rest stay in storage, and the result shows the number actually moved.
+- Use the title bar and outer window borders to move the terminal. The content area handles selection and item dragging. Search fields, buttons, scrollbars and native inventories keep their own controls, and dragging items does not also move the window.
+- Fixed normal left-click extraction being blocked by drag input. Quantity updates keep valid selections and limit the requested count. Changes to search, sorting, pages or grouping rules cancel stale gestures so they cannot take items from a different page.
+- Fixed dragging becoming unavailable after rule or module changes. The terminal and partition editor now share the item picture preview.
