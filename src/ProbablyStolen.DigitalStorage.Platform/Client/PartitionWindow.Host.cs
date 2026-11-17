@@ -4,6 +4,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using TMPro;
@@ -72,10 +73,8 @@ internal sealed partial class PartitionWindow
         _grid = null;
         _scrollbar = null;
         _dropHighlight = null;
+        _ghost?.Dispose();
         _ghost = null;
-        _ghostView = null;
-        _ghostIcon = null;
-        _ghostLayers.Clear();
         _status = null;
         _count = null;
     }
@@ -117,7 +116,8 @@ internal sealed partial class PartitionWindow
         _dropdown = new PopupDropdown(window, _search.MatchesText);
         window.root.AddComponent<SampleDropHandler>().Initialize(window, InputShield, OnSample, IsGridSampleTarget, OwnsWheel);
         window.root.AddComponent<FrameHandler>().Initialize(Tick);
-        CreateGhost(window.Rect);
+        _ghost?.Dispose();
+        _ghost = new DragGhostView(window.Rect, _pictures, CellPixels);
         if (_opened.Repaired) Message("partition_repaired", _opened.DroppedRules);
         Render();
     }

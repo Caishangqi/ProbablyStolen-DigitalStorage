@@ -4,6 +4,7 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
@@ -206,17 +207,21 @@ internal sealed class InventoryRootSink : IRootSink
 {
     private readonly GameGridInventory _destination;
     private readonly bool _wholeRootOnly;
+    private readonly GridDropAnchor? _firstAnchor;
+    private bool _placedFirst;
 
-    /// <summary>Creates a sink into a player inventory.</summary>
+    /// <summary>Creates a sink into a native grid inventory.</summary>
     /// <param name="destination">The inventory that receives roots.</param>
     /// <param name="wholeRootOnly">
     /// Whether a root the destination can only take in part stays stored. The native partial accept splits a new item
     /// off without copying the root's full state, so the terminal never asks for it.
     /// </param>
-    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false)
+    /// <param name="firstAnchor">An optional first-root cell; it is consumed only after a confirmed whole-root move.</param>
+    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false, GridDropAnchor? firstAnchor = null)
     {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
         _wholeRootOnly = wholeRootOnly;
+        _firstAnchor = firstAnchor;
     }
 
     /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
@@ -226,27 +231,42 @@ internal sealed class InventoryRootSink : IRootSink
     internal long MovedUnits { get; private set; }
 
     /// <summary>
-    /// Accepts one root. A simulation cannot run the native slot search without moving the root, so it always
-    /// reports a move. A root the destination only partly takes ends as <see cref="TransferOutcome.Returned"/>.
+    /// Accepts one root. Simulation only checks target eligibility; complete capacity is checked after the root has
+    /// been removed from its page. That native search is part of the formal transfer and is never a hover probe.
     /// </summary>
     public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
     {
-        if (mode == Actionable.Simulate) return TransferStep.Moved;
+        if (mode == Actionable.Simulate)
+            return IsTargetUsable() ? TransferStep.Moved : TransferStep.Rejected(StoreRejection.PhysicalLimit);
+
         var item = (root.Origin as INativeRootSource)?.Resolve(root)
             ?? throw new InvalidOperationException($"The root {root} cannot be resolved.");
         var page = item.parentInventory;
-        if (page == null) throw new InvalidOperationException("The root has no page.");
+        if (page == null || !Owns(page, item)) return TransferStep.Unowned;
+        if (!IsTargetUsable()) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
 
         var original = item.modifiedShape;
         var requested = item.unitCount;
         var moved = 0;
+        SlotMarker? slot = null;
         Exception? error = null;
         try
         {
-            if (!page.Expel(item)) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
-            var slot = _destination.TryFindOneValidInventorySlot(item, keepOrientation: true);
-            if (slot != null && (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
-                moved = slot.TryAcceptOnce(requested);
+            if (requested <= 0) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+            if (!page.Expel(item))
+                return Owns(page, item) ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Unowned;
+
+            // The target can change between the initial qualification and the actual native move.
+            if (IsTargetUsable())
+            {
+                slot = !_placedFirst && _firstAnchor.HasValue
+                    ? _destination.TryInventorySlot(item, requested,
+                        new GridShapeBuilder(item.modifiedShape).SetPosition(_firstAnchor.Value.X, _firstAnchor.Value.Y).Build(),
+                        item.modifiedState)
+                    : _destination.TryFindOneValidInventorySlot(item, keepOrientation: true);
+                if (slot != null && (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
+                    moved = slot.TryAcceptOnce(requested);
+            }
         }
         catch (Exception exception)
         {
@@ -258,10 +278,37 @@ internal sealed class InventoryRootSink : IRootSink
             NativeItemMove.Report(result, item, "extract");
         }
 
-        MovedUnits += moved;
-        if (moved == requested) return TransferStep.Moved;
-        var home = item.parentInventory == page && NativeItemMove.IsSafe(item);
+        var targetOwnsAcceptedItem = moved > 0 && OwnsTarget(slot, item);
+        if (moved == requested && targetOwnsAcceptedItem)
+        {
+            _placedFirst = true;
+            MovedUnits += moved;
+            return TransferStep.Moved;
+        }
+
+        // A whole-root transfer must never turn a short native acceptance into a successful step. The pre-check
+        // prevents this in the normal path; an unexpected native shortfall is still stopped after recovery.
+        var home = Owns(page, item) && NativeItemMove.IsSafe(item);
+        if (_wholeRootOnly)
+            return moved == 0 && home ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Unowned;
+
+        if (targetOwnsAcceptedItem) MovedUnits += moved;
         if (!home) return TransferStep.Unowned;
         return moved == 0 ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Returned;
+    }
+
+    private bool IsTargetUsable() =>
+        _destination.handler != null && _destination.handler.gameObject.activeInHierarchy &&
+        !_destination.IsInsertLocked() && GeneralHelper.MayPlayerInsertInto(_destination);
+
+    private static bool Owns(GameInventory inventory, GameItem item) =>
+        item.parentInventory == inventory && inventory.childItems.Contains(item);
+
+    private bool OwnsTarget(SlotMarker? slot, GameItem item)
+    {
+        if (slot == null || slot.inventory != _destination) return false;
+        return slot.targetItem != null
+            ? Owns(_destination, slot.targetItem)
+            : slot.item != null && Owns(_destination, slot.item);
     }
 }

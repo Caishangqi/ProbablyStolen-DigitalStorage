@@ -60,6 +60,9 @@ internal sealed class GridNetworkPowerCoordinator
     internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces) =>
         _storage.ExtractPieces(terminal, key, pieces);
 
+    internal TerminalExtractionResult ExtractBatch(GameItem terminal, TerminalDragBatch batch,
+        InventoryDropTarget target) => _storage.ExtractBatchTo(terminal, batch, target);
+
     internal GridPowerResult OnControllerCycleEnd(GameItem controller)
     {
         var snapshot = _scanner.Capture(controller);

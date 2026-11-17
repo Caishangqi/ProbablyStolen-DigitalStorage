@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -93,6 +94,27 @@ internal sealed class ItemSlotGrid
 
     /// <summary>Gets a slot's button, or null outside the grid.</summary>
     internal CustomUIElement? Button(int index) => index >= 0 && index < _buttons.Length ? _buttons[index] : null;
+
+    internal bool TryGetScreenBounds(int index, Camera? camera, out PointerRectangle bounds)
+    {
+        bounds = default;
+        var button = Button(index);
+        if (button == null) return false;
+        var corners = new Vector3[4];
+        button.Rect.GetWorldCorners(corners);
+        var min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        var max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        foreach (var corner in corners)
+        {
+            var point = RectTransformUtility.WorldToScreenPoint(camera, corner);
+            min = Vector2.Min(min, point);
+            max = Vector2.Max(max, point);
+        }
+        bounds = new PointerRectangle(min.x, min.y, max.x, max.y);
+        return bounds.HasArea;
+    }
+
+    internal void SetSelected(int index, bool selected) => SetTone(index, selected ? SlotTone.Selected : SlotTone.Normal);
 
     /// <summary>Shows an unoccupied slot: no picture and no badge; clickable only when it can be a target.</summary>
     internal void SetEmpty(int index, bool interactable = false)

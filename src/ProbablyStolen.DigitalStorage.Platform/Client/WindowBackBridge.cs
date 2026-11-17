@@ -20,6 +20,18 @@ public static class WindowBackBridge
         return entry;
     }
 
+    internal static bool IsFocused(CustomUIWindow window)
+    {
+        var registration = Windows.FirstOrDefault(entry => ReferenceEquals(entry.Window, window));
+        if (registration == null || !registration.Active()) return false;
+        var stamp = registration.Stamp;
+        var paper = PaperStamp(StoreUIManager.Instance);
+        if (paper.HasValue && paper.Value >= stamp) return false;
+        if (WindowsHandler.current != null && WindowsHandler.current.visibleWindows.Any(native =>
+                native.canMove && native.focusStamp >= stamp)) return false;
+        return !Windows.Any(entry => !ReferenceEquals(entry.Window, window) && entry.Active() && entry.Stamp > stamp);
+    }
+
     /// <summary>Handles back only when a registered window is ahead of every native escape target.</summary>
     public static bool Dispatch(StoreUIManager store)
     {
@@ -96,6 +108,7 @@ public static class WindowBackBridge
         private readonly WindowBackCoordinator.Registration _registration;
         internal readonly RectTransform Viewport;
         internal long Stamp;
+        internal CustomUIWindow Window => _window;
 
         internal WindowRegistration(CustomUIWindow window, RectTransform viewport, Action back)
         {

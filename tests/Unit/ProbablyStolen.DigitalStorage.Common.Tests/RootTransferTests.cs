@@ -61,6 +61,61 @@ public sealed class RootTransferTests
         Assert.That(source.Snapshot().Count(), Is.EqualTo(1));
     }
 
+    [Test]
+    public void MoveFirst_RejectedModulationRestoresRoot()
+    {
+        var source = new MemorySource(Root(1, 0, 0, Apple, 4));
+        var sink = new MemorySink(source) { RejectAfterSimulation = true };
+
+        var step = RootTransfer.MoveFirst(source, sink, MigrationSource.Instance);
+
+        Assert.That(step.Outcome, Is.EqualTo(TransferOutcome.Rejected));
+        Assert.That(sink.Calls, Is.EqualTo(new[] { Actionable.Simulate, Actionable.Modulate }));
+        Assert.That(source.Snapshot().Single().Units, Is.EqualTo(4));
+        Assert.That(sink.AcceptedUnits, Is.Zero);
+    }
+
+    [Test]
+    public void MoveFirst_PartialReceiveRestoresCurrentRoot()
+    {
+        var source = new MemorySource(Root(1, 0, 0, Apple, 4));
+        var sink = new MemorySink(source) { PartialOnCall = 1 };
+
+        var step = RootTransfer.MoveFirst(source, sink, MigrationSource.Instance);
+
+        Assert.That(step.Outcome, Is.EqualTo(TransferOutcome.Returned));
+        Assert.That(source.Snapshot().Single().Units, Is.EqualTo(4));
+        Assert.That(sink.AcceptedUnits, Is.Zero, "A partial root is not a destination success.");
+    }
+
+    [Test]
+    public void MoveFirst_UnknownOwnershipNeverReportsSuccess()
+    {
+        var source = new MemorySource(Root(1, 0, 0, Apple, 4));
+        var sink = new MemorySink(source) { FailOnCall = 1, Failure = TransferOutcome.Unowned };
+
+        var step = RootTransfer.MoveFirst(source, sink, MigrationSource.Instance);
+
+        Assert.That(step.Outcome, Is.EqualTo(TransferOutcome.Unowned));
+        Assert.That(step.IsMoved, Is.False);
+        Assert.That(sink.AcceptedUnits, Is.Zero);
+    }
+
+    [Test]
+    public void MoveFirst_RepeatedAttemptsConserveUnits()
+    {
+        var source = new MemorySource(Root(1, 0, 0, Apple, 4));
+        var sink = new MemorySink(source) { FailOnCall = 1, Failure = TransferOutcome.Returned };
+
+        Assert.That(RootTransfer.MoveFirst(source, sink, MigrationSource.Instance).Outcome,
+            Is.EqualTo(TransferOutcome.Returned));
+        Assert.That(RootTransfer.MoveFirst(source, sink, MigrationSource.Instance).Outcome,
+            Is.EqualTo(TransferOutcome.Moved));
+
+        Assert.That(source.Snapshot().Sum(root => root.Units) + sink.AcceptedUnits, Is.EqualTo(4));
+        Assert.That(sink.Received, Has.Count.EqualTo(1));
+    }
+
     [TestCase(TransferOutcome.Returned)]
     [TestCase(TransferOutcome.Unowned)]
     public void Drain_StopsAtAFailedNativeMove(TransferOutcome failure)
@@ -134,7 +189,10 @@ public sealed class RootTransferTests
 
         internal List<Actionable> Calls { get; } = new();
         internal List<RootSnapshot> Received { get; } = new();
+        internal long AcceptedUnits { get; private set; }
         internal StoreRejection? Reject { get; set; }
+        internal bool RejectAfterSimulation { get; set; }
+        internal int PartialOnCall { get; set; } = -1;
         internal int FailOnCall { get; set; } = -1;
         internal TransferOutcome Failure { get; set; }
         internal bool KeepInSource { get; set; }
@@ -144,10 +202,14 @@ public sealed class RootTransferTests
             Calls.Add(mode);
             if (Reject is { } reason) return TransferStep.Rejected(reason);
             if (mode == Actionable.Simulate) return TransferStep.Moved;
-            if (++_modulations == FailOnCall)
+            if (RejectAfterSimulation) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+            var modulation = ++_modulations;
+            if (modulation == PartialOnCall) return TransferStep.Returned;
+            if (modulation == FailOnCall)
                 return Failure == TransferOutcome.Returned ? TransferStep.Returned : TransferStep.Unowned;
             if (!KeepInSource) _source.Remove(root);
             Received.Add(root);
+            AcceptedUnits += root.Units;
             return TransferStep.Moved;
         }
     }

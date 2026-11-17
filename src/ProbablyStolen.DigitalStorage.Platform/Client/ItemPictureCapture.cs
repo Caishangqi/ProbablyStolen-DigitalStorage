@@ -56,6 +56,42 @@ internal sealed class ItemPictureCapture
         return new ItemPicture(layers, LoadSprite(spriteKey));
     }
 
+    /// <summary>Captures the terminal's own picture without retaining the terminal entity.</summary>
+    internal ItemPicture Capture(GameItem terminal)
+    {
+        if (terminal == null) throw new ArgumentNullException(nameof(terminal));
+        Sprite? fallback = null;
+        try
+        {
+            if (terminal.useSpriteFromMod)
+            {
+                var mod = ModLoader.Mods.Find(candidate => candidate.Manifest.ID == terminal.spriteAtlasPath);
+                if (mod != null) mod.Sprites.TryGetValue(terminal.spritePath, out fallback);
+            }
+            else
+            {
+                fallback = RenderHandler.TryLoadFromAtlas(terminal.spriteAtlasPath, terminal.spritePath);
+            }
+        }
+        catch { /* A missing sprite does not prevent capturing native layers. */ }
+
+        try
+        {
+            if (terminal is GameItemElement element && !element.IsDestroyed())
+            {
+                NativeItemView.Redraw(element);
+                return new ItemPicture(NativeItemView.Capture(element), fallback);
+            }
+        }
+        catch (Exception error)
+        {
+            try { _writeDiagnostic($"Digital Storage: {_owner} terminal picture unavailable ({error.GetType().Name}); using sprite fallback."); }
+            catch { /* Diagnostics cannot prevent fallback display. */ }
+        }
+
+        return new ItemPicture(null, fallback);
+    }
+
     /// <summary>Builds the fallback picture after a failed capture, logging each key once per session.</summary>
     internal ItemPicture Failed(ItemKey key, string spriteKey, Exception error)
     {

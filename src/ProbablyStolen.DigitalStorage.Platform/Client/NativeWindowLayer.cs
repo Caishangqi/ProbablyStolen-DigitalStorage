@@ -67,9 +67,21 @@ internal static class NativeWindowLayer
         return viewport;
     }
 
+    internal static bool IsFocused(CustomUIWindow window) => WindowBackBridge.IsFocused(window);
+
     internal static void Detach(CustomUIWindow? window)
     {
-        if (window?.root != null) window.root.GetComponent<RaiseOnPress>()?.Release();
+        if (window?.root != null)
+        {
+            window.root.GetComponent<RaiseOnPress>()?.Release();
+            window.root.GetComponent<TerminalDragBlocks>()?.Release();
+        }
+    }
+
+    internal static void RebindTerminalDrag(CustomUIWindow window)
+    {
+        if (window?.root == null) return;
+        window.root.GetComponent<TerminalDragBlocks>()?.Rebind();
     }
 
     private static RectTransform? RaisedRoot() =>
@@ -113,6 +125,76 @@ internal static class NativeWindowLayer
     internal static void BlockWindowDrag(GameObject target)
     {
         if (target != null && target.GetComponent<WindowDragBlocker>() == null) target.AddComponent<WindowDragBlocker>();
+    }
+
+    internal static void RestrictTerminalDrag(CustomUIWindow window, TreeNodeRender shield, Func<Vector2, bool> isMoveArea)
+    {
+        shield.gameObject.AddComponent<TerminalShieldFilter>().IsMoveArea = isMoveArea;
+        BlockWindowDrag(shield.gameObject);
+        window.root.AddComponent<TerminalDragBlocks>().Initialize(window, shield);
+    }
+
+    internal static bool AllowsTerminalGesture(CustomUIWindow window, Vector2 point)
+    {
+        if (EventSystem.current == null) return false;
+        var filter = window.root.GetComponentInChildren<TerminalShieldFilter>(true);
+        if (filter?.IsMoveArea?.Invoke(point) == true) return false;
+        var hits = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = point }, hits);
+        return hits.Count > 0 && hits[0].gameObject != null &&
+            hits[0].gameObject.transform.IsChildOf(window.root.transform);
+    }
+
+    private sealed class TerminalShieldFilter : MonoBehaviour, ICanvasRaycastFilter
+    {
+        internal Func<Vector2, bool>? IsMoveArea;
+        public bool IsRaycastLocationValid(Vector2 point, Camera camera) =>
+            ItemMouseDragHandler.current?.IsDraggingItem == true ||
+            ItemMultiSelectHandler.current?.IsGroupDragging == true || IsMoveArea?.Invoke(point) != true;
+    }
+
+    private sealed class TerminalDragBlocks : MonoBehaviour
+    {
+        private CustomUIWindow? _window;
+        private TreeNodeRender? _shield;
+
+        internal void Initialize(CustomUIWindow window, TreeNodeRender shield)
+        {
+            _window = window;
+            _shield = shield;
+        }
+
+        private void LateUpdate() => Rebind();
+
+        internal void Rebind()
+        {
+            if (_window == null || _shield == null) return;
+            foreach (var graphic in _window.root.GetComponentsInChildren<Graphic>(true))
+            {
+                var node = graphic.transform;
+                if (node == transform || node == _shield.transform || node.IsChildOf(_shield.transform)) continue;
+                var header = _window.frame?.titleText?.transform.parent;
+                var close = _window.frame?.closeButton?.transform;
+                if (header != null && (node == header || node.IsChildOf(header)) &&
+                    (close == null || node != close && !node.IsChildOf(close))) continue;
+                var current = node;
+                var hasOwnDrag = false;
+                while (current != null && current != transform)
+                {
+                    if (current.GetComponent<IDragHandler>() != null) { hasOwnDrag = true; break; }
+                    current = current.parent;
+                }
+                if (!hasOwnDrag) BlockWindowDrag(graphic.gameObject);
+            }
+        }
+
+        internal void Release()
+        {
+            enabled = false;
+            _window = null;
+            _shield = null;
+        }
+
     }
 
     /// <summary>

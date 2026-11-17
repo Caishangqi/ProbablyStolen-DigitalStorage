@@ -37,6 +37,12 @@ public sealed class ProjectGraphTests
             ["Client"] = new HashSet<string>(StringComparer.Ordinal) { "netstandard", "ProbablyStolen.DigitalStorage.Api.Core", "ProbablyStolen.DigitalStorage.Common" }
         };
 
+    private static readonly string[] ForbiddenProductDependencies =
+    {
+        "NeoForge", "net.neoforged", "Minecraft", "net.minecraft", "NUnit", "NUnit3TestAdapter",
+        "nunit.framework", "Microsoft.NET.Test.Sdk", "Microsoft.TestPlatform", "testhost", "xunit", "MSTest"
+    };
+
     private static string RepositoryRoot => GetBuildMetadata("RepositoryRoot");
 
     private static string GetBuildMetadata(string key) => typeof(ProjectGraphTests).Assembly
@@ -83,6 +89,8 @@ public sealed class ProjectGraphTests
     [TestCase("Compat", "Common")]
     [TestCase("Compat", "Client")]
     [TestCase("Compat", "Platform")]
+    [TestCase("Api", "Client")]
+    [TestCase("Api.Core", "Client")]
     public void DependencyRule_RejectsForbiddenProjectEdge(string source, string target)
     {
         var references = AllowedReferences[source]
@@ -112,6 +120,8 @@ public sealed class ProjectGraphTests
     [TestCase("Api.Core", "ProbablyStolen.DigitalStorage.Common")]
     [TestCase("Api.Core", "Assembly-CSharp")]
     [TestCase("Client", "Unexpected.Runtime")]
+    [TestCase("Client", "NeoForge")]
+    [TestCase("Client", "NUnit")]
     public void CompiledCoreAssembly_RejectsForbiddenReference(string module, string assemblyName)
     {
         using var fixture = CreateMetadataFixture(assemblyName);
@@ -146,6 +156,33 @@ public sealed class ProjectGraphTests
         var error = Assert.Throws<InvalidOperationException>(new Action(() => ValidateProductProject(document, module)));
 
         Assert.That(error!.Message, Does.Contain("QFSW.QC"));
+    }
+
+    [Test]
+    public void ProductProjects_DoNotDeclareNeoForgeOrTestRuntimeDependencies()
+    {
+        foreach (var module in AllowedReferences.Keys)
+        {
+            var document = XDocument.Load(GetProductProjectPath(module));
+            var dependencies = document.Descendants("Reference")
+                .Select(element => (string?)element.Attribute("Include") ?? string.Empty)
+                .Concat(document.Descendants("PackageReference")
+                    .Select(element => (string?)element.Attribute("Include") ?? string.Empty));
+
+            Assert.That(dependencies.Where(IsForbiddenProductDependency), Is.Empty, module);
+        }
+    }
+
+    [TestCase("Platform", "Reference", "NeoForge")]
+    [TestCase("Mod", "PackageReference", "NUnit")]
+    public void ProductProject_RejectsNeoForgeOrTestRuntimeDependency(string module, string elementName, string dependency)
+    {
+        var document = XDocument.Load(GetProductProjectPath(module));
+        document.Root!.Add(new XElement("ItemGroup", new XElement(elementName, new XAttribute("Include", dependency))));
+
+        var error = Assert.Throws<InvalidOperationException>(new Action(() => ValidateProductProject(document, module)));
+
+        Assert.That(error!.Message, Does.Contain(module).And.Contain(dependency));
     }
 
     [Test]
@@ -195,6 +232,15 @@ public sealed class ProjectGraphTests
                     throw new InvalidOperationException($"{module} declares forbidden assembly {name}.");
                 }
             }
+        }
+
+        var declaredDependencies = document.Descendants("Reference")
+            .Select(element => ((string?)element.Attribute("Include") ?? string.Empty).Split(',')[0])
+            .Concat(document.Descendants("PackageReference")
+                .Select(element => (string?)element.Attribute("Include") ?? string.Empty));
+        foreach (var dependency in declaredDependencies.Where(IsForbiddenProductDependency))
+        {
+            throw new InvalidOperationException($"{module} declares forbidden runtime dependency {dependency}.");
         }
 
         if (document.Descendants("PackageReference").Any())
@@ -255,6 +301,13 @@ public sealed class ProjectGraphTests
     }
 
     private static bool RequiresGame(string module) => module is "Api" or "Platform" or "Compat" or "Mod";
+
+    private static bool IsForbiddenProductDependency(string name)
+    {
+        return ForbiddenProductDependencies.Any(prefix =>
+            name.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string GetProductProjectPath(string module)
     {

@@ -71,6 +71,7 @@ internal sealed class TerminalItem
             var storage = new StorageTerminalServices(_text, _view,
                 () => _networkPower.ReadTerminalInventory(item),
                 (entry, pieces) => _networkPower.ExtractPiecesToPlayer(item, entry.Key, pieces),
+                (batch, target) => _networkPower.ExtractBatch(item, batch, target),
                 TerminalFeatures.AttributeCaptures,
                 (items, diagnostic) => _networkPower.StoreSelected(item, items, diagnostic),
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),

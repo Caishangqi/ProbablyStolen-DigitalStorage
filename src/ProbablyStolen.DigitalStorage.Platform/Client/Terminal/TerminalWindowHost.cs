@@ -257,6 +257,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         WindowPositionMemory.Restore(PositionOwner, _window);
         WindowPositionMemory.Track(PositionOwner, _window);
         _shield = NativeWindowLayer.AttachInputShield(_window, HostShieldId);
+        NativeWindowLayer.RestrictTerminalDrag(_window, _shield, IsWindowMoveArea);
         _diagnostics.Record("input_shield", "native_node=true placement_target=false bounds=window");
 
         var handler = new UniversalTerminalHandler(_registry, CreateCurrentTerminalStore(), WriteDiagnostic);
@@ -265,6 +266,34 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             CreateFeatureData());
         var host = _host;
         _dock = DockView.Create(_window, Text, Icons, bar, () => host.Context);
+    }
+
+    internal bool IsWindowMoveArea(Vector2 point)
+    {
+        if (_window == null || _window.frame == null) return false;
+        var canvas = _window.root.GetComponentInParent<Canvas>();
+        var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        var close = _window.frame.closeButton;
+        if (close != null && RectTransformUtility.RectangleContainsScreenPoint(close.transform as RectTransform, point, camera))
+            return false;
+        var header = _window.frame.titleText?.transform.parent as RectTransform;
+        if (header != null && RectTransformUtility.RectangleContainsScreenPoint(header, point, camera)) return true;
+        var image = _window.root.GetComponent<Image>();
+        if (image == null || image.sprite == null || image.type != Image.Type.Sliced ||
+            !RectTransformUtility.ScreenPointToLocalPointInRectangle(_window.Rect, point, camera, out var local)) return false;
+        var rect = _window.Rect.rect;
+        if (!rect.Contains(local)) return false;
+        var border = image.sprite.border / image.pixelsPerUnit;
+        return local.x < rect.xMin + border.x || local.x > rect.xMax - border.z ||
+            local.y < rect.yMin + border.y || local.y > rect.yMax - border.w;
+    }
+
+    internal bool IsContentArea(Vector2 point)
+    {
+        if (_window == null || IsWindowMoveArea(point)) return false;
+        var canvas = _window.root.GetComponentInParent<Canvas>();
+        var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        return RectTransformUtility.RectangleContainsScreenPoint(_window.Rect, point, camera);
     }
 
     private int CountRows()
@@ -373,6 +402,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
             DisposeCurrentView();
             view.Build(_viewHost);
+            NativeWindowLayer.RebindTerminalDrag(_window!);
             view.Resume();
             view.RestoreState(state);
             _currentView = view;
@@ -406,6 +436,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _viewHost.gameObject.SetActive(false);
         _dock?.SetShown(false);
         _subHost.gameObject.SetActive(true);
+        NativeWindowLayer.RebindTerminalDrag(_window!);
         var screen = subScreen as SubScreen;
         _subScreen = screen;
         var shown = false;
@@ -452,6 +483,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _viewHost.gameObject.SetActive(true);
         _dock?.SetShown(true);
         _window?.root.GetComponent<NativeWindowSizer>()?.SetLeftExtent(TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap);
+        NativeWindowLayer.RebindTerminalDrag(_window!);
         _currentView?.OnReturnFromSubScreen();
     }
 

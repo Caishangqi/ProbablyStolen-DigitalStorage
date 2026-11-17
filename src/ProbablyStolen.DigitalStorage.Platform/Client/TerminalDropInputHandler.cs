@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using GestureButton = ProbablyStolen.DigitalStorage.Client.Interaction.Drag.PointerButton;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -32,11 +34,30 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
     private float _nextObservation;
     private string _lastObservation = string.Empty;
     private string _hitDetails = "none";
+    private Func<PointerGesture, float?, bool>? _gesture;
+    private Func<bool>? _allowsPrimaryClick;
+    private readonly PrimaryClickGate _primaryClicks = new();
+    private bool _ownsGesture;
+    private KeyCode _gestureKey;
+    private int _consumedGestureFrame = -1;
+
+    internal bool OwnsGesture => _ownsGesture;
+    internal bool SuppressesViewInput => _ownsGesture || _consumedGestureFrame == Time.frameCount;
+    internal bool SuppressesPrimaryClick => _primaryClicks.SuppressesClick(_ownsGesture,
+        _ownsGesture && _allowsPrimaryClick?.Invoke() == true, _consumedGestureFrame == Time.frameCount);
+
+    internal void SetGestureHandler(Func<PointerGesture, float?, bool>? gesture, Func<bool>? allowsPrimaryClick = null)
+    {
+        CancelGesture();
+        _gesture = gesture;
+        _allowsPrimaryClick = gesture == null ? null : allowsPrimaryClick;
+    }
 
     public override List<KeyCode> keyListeners => new[]
     {
         ItemMultiSelectHandler.current?.key ?? KeyCode.Mouse0,
-        ItemMouseDragHandler.current?.key ?? KeyCode.Mouse0
+        ItemMouseDragHandler.current?.key ?? KeyCode.Mouse0,
+        KeyCode.Mouse1
     }.Distinct().ToList();
 
     internal void Initialize(CustomUIWindow window, Func<bool> isCurrentSession,
@@ -123,8 +144,70 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
         return Array.Empty<GameItem>();
     }
 
+    private static PointerGesture Gesture(PointerGesturePhase phase, GestureButton button, Vector3 position,
+        Vector3 delta = default, float wheel = 0f) => new(phase, button, new PointerPoint(position.x, position.y),
+        delta.x, delta.y, wheel,
+        Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift),
+        Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt),
+        Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl));
+
+    protected override void OnEventPress(ISet<KeyCode> keysPressed)
+    {
+        if (_ownsGesture)
+        {
+            if (keysPressed.Contains(KeyCode.Mouse1))
+                _gesture?.Invoke(Gesture(PointerGesturePhase.Press, GestureButton.Secondary, Input.mousePosition), null);
+            return;
+        }
+        var key = ItemMultiSelectHandler.current?.key ?? ItemMouseDragHandler.current?.key ?? KeyCode.Mouse0;
+        if (!keysPressed.Contains(key) || _gesture == null || !IsCurrent || _window == null ||
+            !NativeWindowLayer.AllowsTerminalGesture(_window, Input.mousePosition) ||
+            ItemMouseDragHandler.current?.GetCurrentItem() != null ||
+            ItemMultiSelectHandler.current?.IsGroupDragging == true) return;
+        var threshold = ItemMultiSelectHandler.current?.dragThreshold;
+        _ownsGesture = _gesture(Gesture(PointerGesturePhase.Press, GestureButton.Primary, Input.mousePosition), threshold);
+        if (_ownsGesture)
+        {
+            _primaryClicks.BeginPress();
+            _gestureKey = key;
+        }
+    }
+
+    protected override void OnEventMouseMove(Vector3 position, Vector3 delta)
+    {
+        if (_ownsGesture) _gesture?.Invoke(Gesture(PointerGesturePhase.Move, GestureButton.Primary, position, delta), null);
+    }
+
+    protected override void OnEventMouseScroll(Vector2 delta)
+    {
+        if (_ownsGesture) _gesture?.Invoke(Gesture(PointerGesturePhase.Wheel, GestureButton.Primary, Input.mousePosition,
+            wheel: delta.y), null);
+    }
+
+    protected override void OnEventReset() => CancelGesture();
+
+    private void CancelGesture()
+    {
+        if (_ownsGesture)
+        {
+            _primaryClicks.Invalidate();
+            _gesture?.Invoke(Gesture(PointerGesturePhase.Cancel, GestureButton.Primary, Input.mousePosition), null);
+        }
+        _ownsGesture = false;
+    }
+
     protected override void OnEventRelease(ISet<KeyCode> keysReleased)
     {
+        if (_ownsGesture && keysReleased.Contains(_gestureKey))
+        {
+            var allowedClick = _allowsPrimaryClick?.Invoke() == true;
+            _ownsGesture = false;
+            var consumed = _gesture?.Invoke(Gesture(PointerGesturePhase.Release, GestureButton.Primary,
+                Input.mousePosition), null) == true;
+            _consumedRelease = _primaryClicks.CompleteRelease(allowedClick, consumed);
+            if (_consumedRelease) _consumedGestureFrame = Time.frameCount;
+            return;
+        }
         var items = DraggedItems(out var groupDrag, out var amount);
         var group = ItemMultiSelectHandler.current;
         var single = ItemMouseDragHandler.current;
@@ -196,6 +279,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
         RefreshPriority();
         if (!IsCurrent)
         {
+            CancelGesture();
             ResetPreview();
             ClearHint();
             _setHighlight?.Invoke(TerminalDropHighlight.Hidden);
@@ -298,6 +382,8 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
             return true;
         }
 
+        if (_ownsGesture) return true;
+
         // Unity controls use EventSystem independently. Suppress idle native clicks/hover behind this window.
         // Active native drags keep their updates so their ghosts, rotation and quantity controls still work.
         var activeDrag = DraggedItems(out _, out _).Length > 0 ||
@@ -313,6 +399,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
 
     private void OnDisable()
     {
+        CancelGesture();
         ResetPreview();
         ClearHint();
         _setHighlight?.Invoke(TerminalDropHighlight.Hidden);

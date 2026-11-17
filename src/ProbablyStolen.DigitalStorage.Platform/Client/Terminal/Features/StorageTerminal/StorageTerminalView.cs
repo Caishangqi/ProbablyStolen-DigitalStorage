@@ -2,12 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
+using GestureButton = ProbablyStolen.DigitalStorage.Client.Interaction.Drag.PointerButton;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -57,6 +61,12 @@ internal sealed class StorageTerminalView : ITerminalView
     private CustomUIElement? _status;
     private Image? _dropHighlight;
     private TerminalDropInputHandler? _dropInput;
+    private TerminalDragController? _dragController;
+    private TerminalDragTargetResolver? _dragTargetResolver;
+    private TerminalDropAnchorView? _dropAnchor;
+    private DragGhostView? _dragGhost;
+    private bool _multiGhostPrepared;
+    private TerminalSelectionBandView? _selectionBand;
     private TerminalInventoryRefreshHandler? _refreshHandler;
     private IDisposable? _networkSubscription;
     private long _searchRevision;
@@ -106,6 +116,7 @@ internal sealed class StorageTerminalView : ITerminalView
             onTyping: query =>
             {
                 _services.SearchText = query ?? string.Empty;
+                CancelDrag();
                 _screen.SetSearchText(query);
                 Refresh();
             });
@@ -119,12 +130,22 @@ internal sealed class StorageTerminalView : ITerminalView
         // New slot panels hold no overlays yet, whatever the layer drew on the previous ones.
         _decorations.Reset();
         _grid.Build(builder, Columns * rows,
-            index => Extract(index, IsShiftHeld() ? TerminalClick.All : TerminalClick.Stack),
-            index => Extract(index, TerminalClick.Half));
+            index =>
+            {
+                if (_dropInput?.SuppressesPrimaryClick == true) return;
+                Extract(index, IsShiftHeld() ? TerminalClick.All : TerminalClick.Stack);
+            },
+            index =>
+            {
+                if (_dropInput?.SuppressesViewInput == true) return;
+                Extract(index, TerminalClick.Half);
+            });
+        _grid.DisableClickTint();
         builder.End();
         _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
             TerminalWindowMetrics.GetGridHeight(rows), TerminalWindowMetrics.ScrollbarHandle, row =>
             {
+                CancelDrag();
                 _screen.SetScroll(row);
                 Refresh();
             });
@@ -148,6 +169,19 @@ internal sealed class StorageTerminalView : ITerminalView
         _dropInput = Window.root.AddComponent<TerminalDropInputHandler>();
         _dropInput.Initialize(Window, () => !_suspended && _host.IsCurrentSession(), StoreSelection, Diagnostics,
             ShowDragHint, StoreSingle, _services.CanStore, SetDropHighlight, IsPointerOverSlots);
+        _dragGhost = new DragGhostView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
+            "The terminal window root must be a RectTransform."), _pictureCapture, CellPixels);
+        _selectionBand = new TerminalSelectionBandView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
+            "The terminal window root must be a RectTransform."));
+        _dragTargetResolver = new TerminalDragTargetResolver(Window, () => !_suspended && _host.IsCurrentSession(),
+            _dragGhostTransform(), _selectionBandTransform());
+        _dropAnchor = new TerminalDropAnchorView();
+        _dragController = new TerminalDragController(() => IsDragSessionCurrent(),
+            CurrentDragPage, () => _host.Pipeline.Revision,
+            (shown, current, ids, revision, amount) => _menu.CreateDragBatch(shown, current, ids, revision, amount),
+            ResolveDragTarget, _services.ExtractBatch, CompleteDragBatch, HighlightGroups,
+            ShowSelectionBand, ShowDragGhost, HideDragGhost, SetDragTargetFeedback, IsDragPointCurrent);
+        _dropInput.SetGestureHandler(HandleDragGesture, () => _dragController?.AllowsPrimaryClick == true);
         // On the root as well, so the per-frame session check keeps running while the view is hidden.
         _refreshHandler = Window.root.AddComponent<TerminalInventoryRefreshHandler>();
         _refreshHandler.Initialize(PollSnapshot);
@@ -157,6 +191,7 @@ internal sealed class StorageTerminalView : ITerminalView
     public void Resume()
     {
         if (_container == null) return;
+        CancelDrag();
         _suspended = false;
         _menu.SetSort(_services.Settings.SortOrder, _services.Settings.SortDirection);
         _networkSubscription?.Dispose();
@@ -177,6 +212,7 @@ internal sealed class StorageTerminalView : ITerminalView
     public void Suspend()
     {
         _suspended = true;
+        CancelDrag();
         _networkSubscription?.Dispose();
         _networkSubscription = null;
         HideHoverTooltip();
@@ -193,6 +229,7 @@ internal sealed class StorageTerminalView : ITerminalView
     public void RestoreState(object? state)
     {
         if (state is not StorageTerminalViewState stored) return;
+        CancelDrag();
         _services.SearchText = stored.SearchText;
         _screen.SetSearchText(stored.SearchText);
         _searchInput?.SetTextWithoutNotify(stored.SearchText);
@@ -219,11 +256,24 @@ internal sealed class StorageTerminalView : ITerminalView
     public void Dispose()
     {
         _suspended = true;
+        CancelDrag();
         HideHoverTooltip();
         _networkSubscription?.Dispose();
         _networkSubscription = null;
-        if (_dropInput != null) UnityEngine.Object.Destroy(_dropInput);
+        if (_dropInput != null)
+        {
+            _dropInput.SetGestureHandler(null);
+            UnityEngine.Object.Destroy(_dropInput);
+        }
         if (_refreshHandler != null) UnityEngine.Object.Destroy(_refreshHandler);
+        _dragGhost?.Dispose();
+        _selectionBand?.Dispose();
+        _dropAnchor?.Dispose();
+        _dropAnchor = null;
+        _dragController = null;
+        _dragTargetResolver = null;
+        _dragGhost = null;
+        _selectionBand = null;
         _dropInput = null;
         _refreshHandler = null;
         _inputHighlighter?.Dispose();
@@ -248,6 +298,7 @@ internal sealed class StorageTerminalView : ITerminalView
 
     private void ApplySort()
     {
+        CancelDrag();
         _menu.SetSort(_services.Settings.SortOrder, _services.Settings.SortDirection);
         ApplyMenuView(preserveView: true);
     }
@@ -266,6 +317,188 @@ internal sealed class StorageTerminalView : ITerminalView
     }
 
     private void SetDropHighlight(TerminalDropHighlight state) => ItemSlotGrid.SetDropHighlight(_dropHighlight, state);
+
+    private bool HandleDragGesture(PointerGesture gesture, float? nativeThreshold)
+    {
+        var controller = _dragController;
+        if (controller == null || !gesture.IsValid) return false;
+        switch (gesture.Phase)
+        {
+            case PointerGesturePhase.Press when gesture.Button == GestureButton.Primary:
+                var page = CurrentDragPage();
+                var candidates = BuildDragCandidates(page);
+                var slotIndex = _grid.IndexAt(new Vector2(gesture.Position.X, gesture.Position.Y), EventCamera(), page.Slots.Count);
+                var region = DragRegionAt(gesture.Position, slotIndex, page);
+                var slotId = slotIndex >= 0 ? page.Slots[slotIndex].Group?.Id : null;
+                return controller.Press(gesture.Position, region, slotId, page, candidates, nativeThreshold);
+            case PointerGesturePhase.Press when gesture.Button == GestureButton.Secondary:
+                controller.Halve(gesture.Position);
+                return controller.OwnsGesture;
+            case PointerGesturePhase.Move:
+                controller.Move(gesture.Position);
+                return controller.OwnsGesture;
+            case PointerGesturePhase.Wheel:
+                controller.Wheel(gesture.WheelSteps, gesture.Position);
+                return controller.OwnsGesture;
+            case PointerGesturePhase.Release when gesture.Button == GestureButton.Primary:
+                return controller.Release(gesture.Position);
+            case PointerGesturePhase.Cancel:
+                controller.Cancel();
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private IReadOnlyList<DragSelectionCandidate<string>> BuildDragCandidates(StorageScreenPage page)
+    {
+        var candidates = new List<DragSelectionCandidate<string>>();
+        for (var index = 0; index < page.Slots.Count; index++)
+        {
+            var group = page.Slots[index].Group;
+            if (group == null || group.Total <= 0 ||
+                !_grid.TryGetScreenBounds(index, EventCamera(), out var bounds) || !bounds.HasArea) continue;
+            candidates.Add(new DragSelectionCandidate<string>(group.Id, bounds, index));
+        }
+        return candidates;
+    }
+
+    private TerminalDragRegion DragRegionAt(PointerPoint point, int slotIndex, StorageScreenPage page)
+    {
+        var container = _container;
+        var screenPoint = new Vector2(point.X, point.Y);
+        var camera = EventCamera();
+        if (container == null || !RectTransformUtility.RectangleContainsScreenPoint(container, screenPoint, camera) ||
+            !NativeWindowLayer.AllowsTerminalGesture(Window, screenPoint) ||
+            IsControlArea(_searchInput?.transform as RectTransform, screenPoint, camera) ||
+            IsControlArea(_scrollbar?.transform as RectTransform, screenPoint, camera))
+            return TerminalDragRegion.Other;
+        if (slotIndex >= 0 && slotIndex < page.Slots.Count)
+        {
+            var group = page.Slots[slotIndex].Group;
+            return group != null && group.Total > 0 ? TerminalDragRegion.Slot : TerminalDragRegion.Content;
+        }
+
+        return TerminalDragRegion.Content;
+    }
+
+    private static bool IsControlArea(RectTransform? rect, Vector2 point, Camera? camera) =>
+        rect != null && RectTransformUtility.RectangleContainsScreenPoint(rect, point, camera);
+
+    private bool ResolveDragTarget(PointerPoint point, out InventoryDropTarget? target,
+        out TerminalDragTargetState state)
+    {
+        if (_dragTargetResolver != null) return _dragTargetResolver.TryResolveCandidate(point, out target, out state);
+        target = null;
+        state = TerminalDragTargetState.Rejected;
+        return false;
+    }
+
+    private void CompleteDragBatch(TerminalExtractionResult? result, Exception? error)
+    {
+        if (!IsDragSessionCurrent()) return;
+        if (error != null)
+        {
+            Diagnostics?.Record("extract_batch_failed", $"error={error.GetType().Name}");
+            _messageKey = "terminal_storage_no_items";
+            _messageAmount = 0;
+        }
+        else if (result != null)
+        {
+            Diagnostics?.Record("extract_batch_result",
+                $"status={result.Status} requested={result.RequestedAmount} extracted={result.ExtractedAmount}");
+            _messageKey = result.MessageKey;
+            _messageAmount = result.ExtractedAmount;
+        }
+        Refresh(ReadSnapshot(), preserveView: true);
+    }
+
+    private void HighlightGroups(IReadOnlyList<string> selectedIds)
+    {
+        var selected = new HashSet<string>(selectedIds, StringComparer.Ordinal);
+        var slots = _screen.GetPage().Slots;
+        for (var index = 0; index < slots.Count; index++)
+        {
+            var group = slots[index].Group;
+            _grid.SetSelected(index, group != null && selected.Contains(group.Id));
+        }
+    }
+
+    private void ShowSelectionBand(PointerRectangle? bounds)
+    {
+        if (bounds.HasValue) _selectionBand?.Show(bounds.Value, EventCamera());
+        else _selectionBand?.Hide();
+    }
+
+    private void ShowDragGhost(PointerPoint point, string? amount)
+    {
+        var controller = _dragController;
+        if (controller == null || _dragGhost == null) return;
+        if (controller.Phase == TerminalDragPhase.DraggingSelection)
+        {
+            if (!_multiGhostPrepared)
+            {
+                var selected = new HashSet<string>(controller.SelectedIds, StringComparer.Ordinal);
+                var groups = _screen.GetPage().Slots.Select(slot => slot.Group)
+                    .Where(group => group != null && selected.Contains(group.Id))
+                    .ToDictionary(group => group!.Id, group => group!, StringComparer.Ordinal);
+                var pictures = new List<ItemPicture?>();
+                var offsets = new List<DragGhostOffset>();
+                foreach (var candidate in controller.Candidates)
+                {
+                    if (!groups.TryGetValue(candidate.Id, out var group)) continue;
+                    pictures.Add(_pictures.Get(group.Representative.Key));
+                    offsets.Add(new DragGhostOffset(candidate.Bounds, controller.Origin));
+                }
+                _dragGhost.BeginMultiple(pictures, offsets);
+                _multiGhostPrepared = true;
+            }
+            _dragGhost.MoveMultiple(point, EventCamera());
+            return;
+        }
+        var selectedId = controller.SelectedIds.FirstOrDefault();
+        var single = _screen.GetPage().Slots.Select(slot => slot.Group)
+            .FirstOrDefault(candidate => candidate != null && candidate.Id == selectedId);
+        _dragGhost.Show(single == null ? null : _pictures.Get(single.Representative.Key), point, EventCamera(), amount, 0.8f);
+    }
+
+    private void HideDragGhost()
+    {
+        _multiGhostPrepared = false;
+        _dragGhost?.Hide();
+    }
+
+    private void SetDragTargetFeedback(TerminalDragTargetState state, InventoryDropTarget? target)
+    {
+        if (state == TerminalDragTargetState.Pending && target?.Anchor != null)
+        {
+            _dropAnchor?.Show(target);
+            SetDropHighlight(TerminalDropHighlight.Hidden);
+            return;
+        }
+        _dropAnchor?.Hide();
+        SetDropHighlight(state switch
+        {
+            TerminalDragTargetState.Pending => TerminalDropHighlight.Hover,
+            TerminalDragTargetState.Rejected => TerminalDropHighlight.Rejected,
+            _ => TerminalDropHighlight.Hidden
+        });
+    }
+
+    private bool IsDragSessionCurrent() => !_suspended && Application.isFocused && _host.IsCurrentSession() &&
+        Window.IsVisible && NativeWindowLayer.IsFocused(Window);
+
+    private bool IsDragPointCurrent(PointerPoint point) => IsDragSessionCurrent() &&
+        RectTransformUtility.RectangleContainsScreenPoint(Window.Rect, new Vector2(point.X, point.Y), EventCamera());
+
+    // Only the revision actually projected into the screen may label its groups.
+    private StorageScreenPage CurrentDragPage() => _screen.GetPage(_pipelineRevision);
+
+    private void CancelDrag() => _dragController?.Cancel();
+
+    private Transform? _dragGhostTransform() => Window.root.transform.Find("drag_ghost");
+
+    private Transform? _selectionBandTransform() => Window.root.transform.Find("terminal_selection_band");
 
     private void SyncSlotPicture(int index, TerminalEntry? entry)
     {
@@ -355,10 +588,13 @@ internal sealed class StorageTerminalView : ITerminalView
 
     private void PollSnapshot()
     {
-        if (_container == null || !_host.IsCurrentSession() || _suspended) return;
+        if (_container == null) return;
+        if (_dragController?.Phase != TerminalDragPhase.Idle && !IsDragSessionCurrent()) CancelDrag();
+        if (!_host.IsCurrentSession() || _suspended) return;
         var search = _services.Search;
         if (_searchRevision != search.ConfigurationRevision)
         {
+            CancelDrag();
             _searchRevision = search.ConfigurationRevision;
             Refresh();
         }
@@ -393,6 +629,7 @@ internal sealed class StorageTerminalView : ITerminalView
     /// </summary>
     private void ApplyWheel()
     {
+        if (_dropInput?.SuppressesViewInput == true) return;
         var delta = Input.mouseScrollDelta.y;
         if (delta == 0f || _scrollbar == null || !Window.IsVisible || _suspended || _host.Shield == null) return;
         if (ItemMouseDragHandler.current?.IsDraggingItem == true ||
@@ -425,16 +662,17 @@ internal sealed class StorageTerminalView : ITerminalView
             _pictures.Accept(snapshot.Entries);
             _menu.BroadcastChanges(snapshot);
             _storageUnavailable = snapshot.StorageUnavailable;
-            ApplyMenuView(preserveView);
+            ApplyMenuView(preserveView, refresh: false);
+            Refresh();
         });
     }
 
-    private void ApplyMenuView(bool preserveView)
+    private void ApplyMenuView(bool preserveView, bool refresh = true)
     {
         if (!_menu.GetLinkState().IsConnected) _screen.SetOffline();
         else if (preserveView) _screen.UpdateEntriesInOrder(_menu.GetEntries());
         else _screen.SetEntriesInOrder(_menu.GetEntries());
-        Refresh();
+        if (refresh) Refresh();
     }
 
     private static bool IsShiftHeld() => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
@@ -442,7 +680,10 @@ internal sealed class StorageTerminalView : ITerminalView
     /// <summary>Takes from a slot: left click one piece, right click half of its pieces, Shift + left click all.</summary>
     private void Extract(int index, TerminalClick click)
     {
-        if (!_host.IsCurrentSession())
+        var suppressed = click == TerminalClick.Half
+            ? _dropInput?.SuppressesViewInput
+            : _dropInput?.SuppressesPrimaryClick;
+        if (suppressed == true || !_host.IsCurrentSession())
         {
             return;
         }
@@ -483,6 +724,7 @@ internal sealed class StorageTerminalView : ITerminalView
     private void Regroup()
     {
         if (_container == null) return;
+        CancelDrag();
         _pipelineRevision = _host.Pipeline.Revision;
         _attributes.Clear();
         _menu.SetProjection(Project);
@@ -706,6 +948,7 @@ internal sealed class StorageTerminalView : ITerminalView
             _grid.SetEntry(index, available ? _pictures.Get(slot.Entry.Key) : null, available, available, slot.QuantityBadge);
         }
 
+        _dragController?.SynchronizePage();
         _status?.SetText(_messageKey == null && _storageUnavailable
             ? text.Get("terminal_storage_unavailable")
             : _messageKey == null ? page.State switch

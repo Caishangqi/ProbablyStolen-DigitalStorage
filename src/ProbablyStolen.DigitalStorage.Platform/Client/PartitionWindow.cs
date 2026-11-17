@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -11,6 +12,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -53,7 +55,6 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private readonly PartitionHoverHintCoordinator _hoverHint;
     private readonly PartitionRuleTooltip _ruleTooltip = new();
     private readonly Dictionary<int, RichText> _ruleHints = new();
-    private readonly List<Image> _ghostLayers = new();
     private CustomUIWindow? _window;
     private RectTransform? _body;
     private CustomUIElement? _status;
@@ -62,9 +63,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private TerminalScrollbar? _scrollbar;
     private Image? _dropHighlight;
     private TerminalDropHighlight _dropState = TerminalDropHighlight.Hidden;
-    private RectTransform? _ghost;
-    private RectTransform? _ghostView;
-    private Image? _ghostIcon;
+    private DragGhostView? _ghost;
     private RuleDraft? _detail;
     private ItemAttributeSet? _detailSample;
     private int _scrollRow;
@@ -542,7 +541,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _pointer.Cancel();
         if (_gestures.PressSlot >= 0) _gestures.Cancel();
         _dragSource = -1;
-        if (_ghost != null) _ghost.gameObject.SetActive(false);
+        _ghost?.Hide();
         SetTarget(-1);
         _hoverHint.Hide();
     }
@@ -561,28 +560,6 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         ItemSlotGrid.SetDropHighlight(_dropHighlight, state);
     }
 
-    private void CreateGhost(RectTransform parent)
-    {
-        var root = new GameObject("partition_drag_ghost", typeof(RectTransform));
-        root.transform.SetParent(parent, false);
-        root.AddComponent<LayoutElement>().ignoreLayout = true;
-        var group = root.AddComponent<CanvasGroup>();
-        group.alpha = 0.8f;
-        group.blocksRaycasts = false;
-        group.interactable = false;
-        _ghost = (RectTransform)root.transform;
-        _ghost.sizeDelta = new Vector2(CellPixels, CellPixels);
-        _ghostIcon = new GameObject("partition_drag_icon", typeof(RectTransform)).AddComponent<Image>();
-        _ghostIcon.transform.SetParent(root.transform, false);
-        _ghostIcon.preserveAspect = true;
-        _ghostIcon.raycastTarget = false;
-        Stretch(_ghostIcon.rectTransform);
-        _ghostView = (RectTransform)new GameObject("partition_drag_view", typeof(RectTransform)).transform;
-        _ghostView.SetParent(root.transform, false);
-        Stretch(_ghostView);
-        root.SetActive(false);
-    }
-
     private static void Stretch(RectTransform rect)
     {
         rect.anchorMin = Vector2.zero;
@@ -593,16 +570,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     private void ShowGhost(Vector2 mouse, Camera? camera)
     {
-        if (_ghost == null || _ghost.parent is not RectTransform parent) return;
-        if (!_ghost.gameObject.activeSelf)
-        {
-            _pictures.Show(_ghostView, _ghostLayers, _ghostIcon, Picture(_draft.At(_dragSource)?.DisplayKey), true);
-            _ghost.gameObject.SetActive(true);
-            _ghost.SetAsLastSibling();
-        }
-
-        if (RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, mouse, camera, out var world))
-            _ghost.position = world;
+        _ghost?.Show(Picture(_draft.At(_dragSource)?.DisplayKey), new PointerPoint(mouse.x, mouse.y), camera, null, 0.8f);
     }
 
     private static Camera? CameraOf(CustomUIWindow window)

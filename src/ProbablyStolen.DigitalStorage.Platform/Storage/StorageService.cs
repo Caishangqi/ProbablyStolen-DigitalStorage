@@ -306,6 +306,86 @@ internal sealed class StorageService
             pieces, moved, "terminal_storage_extracted");
     }
 
+    /// <summary>Moves a display-ordered batch of whole roots into the resolved destination.</summary>
+    internal TerminalExtractionResult ExtractBatchTo(GameItem terminal, TerminalDragBatch batch,
+        InventoryDropTarget target)
+    {
+        if (batch == null) throw new ArgumentNullException(nameof(batch));
+        if (target == null) throw new ArgumentNullException(nameof(target));
+        var requested = batch.RequestedPieces;
+        if (requested <= 0 || batch.Steps.Count == 0)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.InvalidAmount, requested, 0,
+                "terminal_storage_invalid_amount");
+
+        var mounted = GetInventory(terminal);
+        if (!mounted.Network.Online)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, requested, 0, UnavailableKey);
+
+        var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true, firstAnchor: target.Anchor);
+        long moved = 0;
+        var status = TerminalExtractionStatus.Success;
+        try
+        {
+            foreach (var step in batch.Steps)
+            {
+                var limited = new PieceLimitSink(sink, step.Pieces);
+                ExtractResult result;
+                try
+                {
+                    result = mounted.Storage.Extract(step.Key, long.MaxValue, limited, Actionable.Modulate, Player);
+                }
+                finally
+                {
+                    moved += limited.Accepted;
+                }
+
+                if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
+                {
+                    _log($"Digital Storage: extract left an item without an owner (key={step.Key.Identifier}).");
+                    status = TerminalExtractionStatus.Failed;
+                    break;
+                }
+
+                // RequestFilled is the limiter's normal stop, not a destination refusal.
+                if (limited.Accepted == step.Pieces &&
+                    (result.StoppedBy.Outcome == TransferOutcome.SourceEmpty ||
+                     result.StoppedBy.Rejection == StoreRejection.RequestFilled))
+                    continue;
+
+                status = result.StoppedBy.Outcome == TransferOutcome.SourceEmpty
+                    ? TerminalExtractionStatus.NoItems
+                    : result.StoppedBy.Outcome == TransferOutcome.Rejected
+                        ? TerminalExtractionStatus.TargetRejected
+                        : TerminalExtractionStatus.Failed;
+                break;
+            }
+        }
+        catch (Exception error)
+        {
+            _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
+            status = TerminalExtractionStatus.Failed;
+        }
+        finally
+        {
+            foreach (var cell in mounted.Cells) CellPages.Compact(cell);
+        }
+
+        // Earlier successful roots can remain moved, but unknown ownership or an unexpected
+        // recovery failure must stay Failed rather than looking like an ordinary partial transfer.
+        if (status != TerminalExtractionStatus.Failed && moved > 0 && moved < requested)
+            status = TerminalExtractionStatus.Partial;
+        else if (status == TerminalExtractionStatus.Success && moved == 0)
+            status = TerminalExtractionStatus.NoItems;
+        var message = status switch
+        {
+            TerminalExtractionStatus.Success or TerminalExtractionStatus.Partial => "terminal_storage_extracted",
+            TerminalExtractionStatus.NoItems => "terminal_storage_no_items",
+            TerminalExtractionStatus.TargetRejected => "terminal_storage_target_rejected",
+            _ => UnavailableKey
+        };
+        return TerminalExtractionResult.Create(status, requested, moved, message);
+    }
+
     /// <summary>Stores or simulates one item; returns the rejection text key, or null when it went in.</summary>
     private string? TryStore(MountedNetwork mounted, GameItem item, Actionable mode)
     {

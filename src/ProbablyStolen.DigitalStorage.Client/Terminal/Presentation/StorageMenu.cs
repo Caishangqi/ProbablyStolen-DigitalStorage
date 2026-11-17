@@ -124,6 +124,69 @@ public sealed class StorageMenu
     public IReadOnlyList<DisplayEntry> GetEntries() => _repository.GetView();
 
     /// <summary>
+    /// Validates a captured page against the current final page and expands selected groups into ordered member steps.
+    /// A null result means the captured selection is stale, hidden, duplicated, or absent from the current repository.
+    /// </summary>
+    /// <param name="shownPage">The page captured when the drag began.</param>
+    /// <param name="currentPage">The latest page at release time.</param>
+    /// <param name="selectedDisplayIds">The group IDs captured by the selection model.</param>
+    /// <param name="currentPresentationRevision">The latest pipeline revision observed by the caller.</param>
+    /// <param name="requestedPieces">A single-group request, or null for full groups.</param>
+    public TerminalDragBatch? CreateDragBatch(StorageScreenPage shownPage, StorageScreenPage currentPage,
+        IEnumerable<string> selectedDisplayIds, long currentPresentationRevision, long? requestedPieces = null)
+    {
+        if (shownPage == null) throw new ArgumentNullException(nameof(shownPage));
+        if (currentPage == null) throw new ArgumentNullException(nameof(currentPage));
+        if (selectedDisplayIds == null) throw new ArgumentNullException(nameof(selectedDisplayIds));
+        if (!_linkState.IsConnected || shownPage.ViewRevision != currentPage.ViewRevision ||
+            shownPage.PresentationRevision != currentPage.PresentationRevision ||
+            currentPage.PresentationRevision != currentPresentationRevision)
+            return null;
+
+        var selected = selectedDisplayIds.ToArray();
+        if (selected.Length == 0 || selected.Any(string.IsNullOrEmpty) ||
+            selected.Length != selected.Distinct(StringComparer.Ordinal).Count()) return null;
+        if (requestedPieces.HasValue && (selected.Length != 1 || requestedPieces.Value <= 0)) return null;
+
+        if (!TryGetVisibleGroups(shownPage, out var shownGroups) ||
+            !TryGetVisibleGroups(currentPage, out var currentGroups)) return null;
+        var shownById = shownGroups.ToDictionary(pair => pair.Id, StringComparer.Ordinal);
+        var currentById = currentGroups.ToDictionary(pair => pair.Id, StringComparer.Ordinal);
+        var repositoryById = GetEntries().Where(group => group != null)
+            .GroupBy(group => group.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
+
+        var orderedSelected = currentGroups.Where(group => selected.Contains(group.Id, StringComparer.Ordinal)).ToArray();
+        if (orderedSelected.Length != selected.Length) return null;
+
+        var steps = new List<TerminalDragStep>();
+        long totalRequested = 0;
+        foreach (var currentGroup in orderedSelected)
+        {
+            if (!shownById.TryGetValue(currentGroup.Id, out var shownGroup) ||
+                !SameMembersInOrder(shownGroup, currentGroup) ||
+                !repositoryById.TryGetValue(currentGroup.Id, out var repositoryGroup) ||
+                repositoryGroup.Total <= 0 || !SameMembersInOrder(currentGroup, repositoryGroup) ||
+                currentGroup.Total <= 0) return null;
+            if (currentGroup.Members.Any(member => !Equals(GetStackBySerial(member.Serial), member.Key))) return null;
+
+            var request = requestedPieces ?? currentGroup.Total;
+            request = Math.Min(request, currentGroup.Total);
+            if (request <= 0) return null;
+            foreach (var step in GroupExtractionPlan.Steps(currentGroup, request))
+            {
+                steps.Add(new TerminalDragStep(currentGroup.Id, step.Member.Serial, step.Member.Key, step.Pieces));
+                totalRequested = checked(totalRequested + step.Pieces);
+            }
+        }
+
+        return steps.Count == 0
+            ? null
+            : new TerminalDragBatch(currentPage.ViewRevision, currentPage.PresentationRevision,
+                orderedSelected.Select(group => group.Id).ToArray(), steps, totalRequested);
+    }
+
+    /// <summary>
     /// Takes pieces from a shown slot: members in group order, each by its real key, until the request is met or a
     /// member cannot be taken completely. The group must still be shown with the same members; otherwise nothing moves
     /// and the caller refreshes. Moved pieces stay moved when a later member fails.
@@ -182,6 +245,31 @@ public sealed class StorageMenu
 
     private static TerminalExtractionResult NoItems(long requested) =>
         TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, requested, 0, "terminal_storage_no_items");
+
+    private static bool TryGetVisibleGroups(StorageScreenPage page, out IReadOnlyList<DisplayEntry> groups)
+    {
+        var result = new List<DisplayEntry>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var slot in page.Slots)
+        {
+            if (slot.Group == null || slot.Group.Total <= 0) continue;
+            if (!ids.Add(slot.Group.Id))
+            {
+                groups = Array.Empty<DisplayEntry>();
+                return false;
+            }
+
+            result.Add(slot.Group);
+        }
+
+        groups = result;
+        return true;
+    }
+
+    private static bool SameMembersInOrder(DisplayEntry left, DisplayEntry right) =>
+        left.Members.Count == right.Members.Count && left.Members.Zip(right.Members,
+            (leftMember, rightMember) => leftMember.Serial == rightMember.Serial &&
+                Equals(leftMember.Key, rightMember.Key)).All(match => match);
 
     private static bool SameMembers(DisplayEntry shown, DisplayEntry current) =>
         shown.Members.Select(member => member.Serial).OrderBy(serial => serial)

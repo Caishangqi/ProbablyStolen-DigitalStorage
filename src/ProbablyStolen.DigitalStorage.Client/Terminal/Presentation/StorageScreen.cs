@@ -102,12 +102,14 @@ public static class TerminalQuantityFormatter
 public sealed class StorageScreenPage
 {
     internal StorageScreenPage(TerminalDisplayState state, string searchText, int scrollRow, int maxScroll,
-        IReadOnlyList<TerminalSlotView> slots)
+        long viewRevision, long presentationRevision, IReadOnlyList<TerminalSlotView> slots)
     {
         State = state;
         SearchText = searchText;
         ScrollRow = scrollRow;
         MaxScroll = maxScroll;
+        ViewRevision = viewRevision;
+        PresentationRevision = presentationRevision;
         Slots = new ReadOnlyCollection<TerminalSlotView>(slots.ToArray());
     }
 
@@ -116,6 +118,12 @@ public sealed class StorageScreenPage
 
     /// <summary>Gets the current raw search query.</summary>
     public string SearchText { get; }
+
+    /// <summary>Gets the revision of the visible group and slot mapping.</summary>
+    public long ViewRevision { get; }
+
+    /// <summary>Gets the revision supplied by the active presentation pipeline.</summary>
+    public long PresentationRevision { get; }
 
     /// <summary>Gets the zero-based first visible row.</summary>
     public int ScrollRow { get; }
@@ -154,6 +162,8 @@ public sealed class StorageScreen
     private bool _filterDirty = true;
     private string? _filterText;
     private long _filterConfigurationRevision = -1;
+    private long _viewRevision;
+    private long _presentationRevision;
     private StorageScreenPage? _page;
 
     /// <summary>Gets the fixed number of columns.</summary>
@@ -164,6 +174,20 @@ public sealed class StorageScreen
 
     /// <summary>Gets the fixed sprite cell size in logical pixels.</summary>
     public int CellPixels { get; }
+
+    /// <summary>Gets the revision of the current visible group and slot mapping.</summary>
+    public long ViewRevision => _viewRevision;
+
+    /// <summary>Gets the presentation pipeline revision used for new pages.</summary>
+    public long PresentationRevision => _presentationRevision;
+
+    /// <summary>Changes the presentation revision without changing the storage mapping.</summary>
+    public void SetPresentationRevision(long revision)
+    {
+        if (_presentationRevision == revision) return;
+        _presentationRevision = revision;
+        _page = null;
+    }
 
     /// <summary>Gets the rows moved per wheel notch or track click, <c>max(1, rows / 6)</c>.</summary>
     public int PageSize => Math.Max(1, Rows / 6);
@@ -177,7 +201,7 @@ public sealed class StorageScreen
         if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
         if (Rows == rows) return;
         Rows = rows;
-        _page = null;
+        BumpViewRevision();
         ClampScroll();
     }
 
@@ -232,11 +256,13 @@ public sealed class StorageScreen
     public void UpdateEntries(IEnumerable<TerminalEntry> entries)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
+        var next = entries.Where(entry => entry != null).OrderBy(entry => entry.DisplayName,
+            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key).Select(DisplayEntry.Single).ToArray();
+        var mappingChanged = !SameDisplayMapping(_entries, next);
         _entries.Clear();
-        _entries.AddRange(entries.Where(entry => entry != null).OrderBy(entry => entry.DisplayName,
-            StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.Key).Select(DisplayEntry.Single));
+        _entries.AddRange(next);
         _baseState = TerminalDisplayState.Ready;
-        InvalidateEntries();
+        InvalidateEntries(mappingChanged);
         ClampScroll();
     }
 
@@ -249,10 +275,12 @@ public sealed class StorageScreen
     public void UpdateEntriesInOrder(IEnumerable<DisplayEntry> entries)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
+        var next = entries.Where(entry => entry != null).ToArray();
+        var mappingChanged = !SameDisplayMapping(_entries, next);
         _entries.Clear();
-        _entries.AddRange(entries.Where(entry => entry != null));
+        _entries.AddRange(next);
         _baseState = TerminalDisplayState.Ready;
-        InvalidateEntries();
+        InvalidateEntries(mappingChanged);
         ClampScroll();
     }
 
@@ -272,7 +300,7 @@ public sealed class StorageScreen
         if (string.Equals(_searchText, query, StringComparison.Ordinal)) return;
         _searchText = query;
         _scrollRow = 0;
-        _page = null;
+        BumpViewRevision();
     }
 
     /// <summary>Moves to an explicitly clamped first visible row.</summary>
@@ -281,7 +309,7 @@ public sealed class StorageScreen
         var clamped = Math.Max(0, Math.Min(row, GetMaxScroll()));
         if (clamped == _scrollRow) return;
         _scrollRow = clamped;
-        _page = null;
+        BumpViewRevision();
     }
 
     /// <summary>Moves the first visible row by a clamped number of rows.</summary>
@@ -313,7 +341,15 @@ public sealed class StorageScreen
         var state = _baseState == TerminalDisplayState.Ready && filtered.Length == 0
             ? TerminalDisplayState.Empty
             : _baseState;
-        return _page = new StorageScreenPage(state, _searchText, _scrollRow, maxScroll, slots);
+        return _page = new StorageScreenPage(state, _searchText, _scrollRow, maxScroll,
+            _viewRevision, _presentationRevision, slots);
+    }
+
+    /// <summary>Gets the page after recording the current presentation pipeline revision.</summary>
+    public StorageScreenPage GetPage(long presentationRevision)
+    {
+        SetPresentationRevision(presentationRevision);
+        return GetPage();
     }
 
     /// <summary>Shares the cached query result with input coloring, including render-before-input-callback order.</summary>
@@ -323,6 +359,11 @@ public sealed class StorageScreen
     {
         if (!_filterDirty && _filterConfigurationRevision == _search.ConfigurationRevision &&
             string.Equals(_filterText, query, StringComparison.Ordinal)) return _filteredEntries;
+        if (_filterConfigurationRevision >= 0 && _filterConfigurationRevision != _search.ConfigurationRevision)
+        {
+            BumpViewRevision();
+        }
+
         var predicate = _search.CreatePredicate(query);
         // Each member is matched on its own, so the parts of an AND or a negation never come from different members.
         var filtered = _entries.Where(group => group.Members.Any(member => predicate(member.Document))).ToArray();
@@ -334,12 +375,46 @@ public sealed class StorageScreen
         return filtered;
     }
 
-    private void InvalidateEntries()
+    private void InvalidateEntries(bool mappingChanged = true)
     {
         _filterDirty = true;
         _filteredEntries = Array.Empty<DisplayEntry>();
+        if (mappingChanged) BumpViewRevision();
+        else _page = null;
+    }
+
+    private void BumpViewRevision()
+    {
+        _viewRevision = checked(_viewRevision + 1);
         _page = null;
     }
+
+    private static bool SameDisplayMapping(IReadOnlyList<DisplayEntry> left, IReadOnlyList<DisplayEntry> right)
+    {
+        if (left.Count != right.Count) return false;
+        for (var groupIndex = 0; groupIndex < left.Count; groupIndex++)
+        {
+            var leftGroup = left[groupIndex];
+            var rightGroup = right[groupIndex];
+            if (!string.Equals(leftGroup.Id, rightGroup.Id, StringComparison.Ordinal) ||
+                leftGroup.Members.Count != rightGroup.Members.Count) return false;
+            for (var memberIndex = 0; memberIndex < leftGroup.Members.Count; memberIndex++)
+            {
+                var leftMember = leftGroup.Members[memberIndex];
+                var rightMember = rightGroup.Members[memberIndex];
+                if (leftMember.Serial != rightMember.Serial || !Equals(leftMember.Key, rightMember.Key) ||
+                    !SamePresentation(leftMember, rightMember)) return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool SamePresentation(TerminalEntry left, TerminalEntry right) =>
+        string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal) &&
+        string.Equals(left.SpriteKey, right.SpriteKey, StringComparison.Ordinal) &&
+        left.SpriteWidth == right.SpriteWidth && left.SpriteHeight == right.SpriteHeight &&
+        left.Document.HasSameContent(right.Document);
 
     private static TerminalSearchService CreateDefaultSearch()
     {

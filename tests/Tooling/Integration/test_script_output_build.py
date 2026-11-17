@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from digital_storage_tools.trx import validate
+
 ROOT = Path(__file__).resolve().parents[3]
 ARCHITECTURE = ROOT / "tests/Architecture/ProbablyStolen.DigitalStorage.ArchitectureTests/ProbablyStolen.DigitalStorage.ArchitectureTests.csproj"
 
@@ -15,9 +17,10 @@ class ScriptArtifactsIntegrationTests(unittest.TestCase):
             command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                        str(ROOT / "scripts/build.ps1"), "-Target", "Core", "-ArtifactsPath", str(output)]
             subprocess.run(command, cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            result = subprocess.run(["dotnet", "test", str(ARCHITECTURE), "--no-build", "--no-restore",
-                                     "--configuration", "Debug", f"-p:ArtifactsPath={output}"],
-                                    cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            self.assertIn("69", result.stdout)
+            subprocess.run(["dotnet", "test", str(ARCHITECTURE), "--no-build", "--no-restore",
+                            "--configuration", "Debug", f"-p:ArtifactsPath={output}",
+                            "--logger", "trx;LogFileName=architecture.trx", "--results-directory", str(root / "results")],
+                           cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            self.assertGreater(validate(root / "results" / "architecture.trx"), 0)
             self.assertTrue((output / "bin" / "ProbablyStolen.DigitalStorage.Common" / "debug" /
                              "ProbablyStolen.DigitalStorage.Common.dll").is_file())

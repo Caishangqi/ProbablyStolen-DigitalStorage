@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
 
@@ -16,6 +17,7 @@ internal sealed class StorageTerminalServices
 {
     internal StorageTerminalServices(ModText text, ITerminalViewSettings settings,
         Func<TerminalInventorySnapshot> readSnapshot, Func<TerminalEntry, long, TerminalExtractionResult> extract,
+        Func<TerminalDragBatch, InventoryDropTarget, TerminalExtractionResult> extractBatch,
         IReadOnlyList<IEntryAttributeCapture> attributeCaptures,
         Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
@@ -27,6 +29,7 @@ internal sealed class StorageTerminalServices
         Settings = settings ?? throw new ArgumentNullException(nameof(settings));
         ReadSnapshot = readSnapshot ?? throw new ArgumentNullException(nameof(readSnapshot));
         Extract = extract ?? throw new ArgumentNullException(nameof(extract));
+        ExtractBatch = extractBatch ?? throw new ArgumentNullException(nameof(extractBatch));
         AttributeCaptures = attributeCaptures ?? throw new ArgumentNullException(nameof(attributeCaptures));
         StoreSelection = storeSelection ?? throw new ArgumentNullException(nameof(storeSelection));
         StoreSingle = storeSingle ?? throw new ArgumentNullException(nameof(storeSingle));
@@ -44,6 +47,8 @@ internal sealed class StorageTerminalServices
     internal Func<TerminalInventorySnapshot> ReadSnapshot { get; }
     /// <summary>Takes up to the given pieces of one entry into the player's inventory.</summary>
     internal Func<TerminalEntry, long, TerminalExtractionResult> Extract { get; }
+    /// <summary>Moves a validated display batch to its target after release-time checks.</summary>
+    internal Func<TerminalDragBatch, InventoryDropTarget, TerminalExtractionResult> ExtractBatch { get; }
     /// <summary>Reads named attributes from samples for an active storage projector.</summary>
     internal IReadOnlyList<IEntryAttributeCapture> AttributeCaptures { get; }
     internal Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> StoreSelection { get; }
