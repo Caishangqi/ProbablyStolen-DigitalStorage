@@ -25,8 +25,8 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ControllerTooltipDetail.cs" Link="Client\ControllerTooltipDetail.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\DriveTooltipDetail.cs" Link="Client\DriveTooltipDetail.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\TooltipComposition.cs" Link="Composition\TooltipComposition.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ControllerTooltipBridge.cs" Link="Client\ControllerTooltipBridge.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\ControllerTooltipPatch.cs" Link="Client\ControllerTooltipPatch.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\NetworkPowerTooltipBridge.cs" Link="Client\NetworkPowerTooltipBridge.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\NetworkPowerTooltipPatch.cs" Link="Client\NetworkPowerTooltipPatch.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentCoordinator.cs" Link="Content\ItemContentCoordinator.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\StorageDiagnostics.cs" Link="Diagnostics\StorageDiagnostics.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentPriceRules.cs" Link="Content\ItemContentPriceRules.cs" />

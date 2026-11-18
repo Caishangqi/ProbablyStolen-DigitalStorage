@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Registries;
+using ProbablyStolen.DigitalStorage.Mod.Patches;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
@@ -44,8 +45,7 @@ public sealed class NativeTooltipDispatcherTests
         ModHook.RaiseTooltip(builder, item);
         Assert.That(builder.Lines, Is.EqualTo(new[]
         {
-            "network_tooltip_state", "mech_machinery_required_energy", "mech_machinery_per_day",
-            "network_module_stats_scope", " mech_container_tooltip"
+            "network_tooltip_state", "network_tooltip_total_power:3", " mech_container_tooltip"
         }));
         Assert.That(settings.Calls, Is.EqualTo(1));
         Assert.That(power.Calls, Is.EqualTo(1));
@@ -79,22 +79,37 @@ public sealed class NativeTooltipDispatcherTests
     }
 
     [Test]
-    public void Composition_ReusesProjectionSnapshotAndCapturesFreshlyPerNextTooltip()
+    public void Composition_CapturesFreshlyOncePerControllerTooltip()
     {
         var settings = new Settings();
         using var composition = Create(settings, new GridNetworkPowerCoordinator(), new List<string>());
         composition.Enable();
         Assert.That(ModHook.TooltipSubscriberCount, Is.EqualTo(1));
-        var item = new GameItem(ControllerItem.ItemId);
-        using (ControllerTooltipBridge.Begin(item))
+        var item = new GameItemElement(ControllerItem.ItemId);
+        var grid = new GameGridInventory();
+        grid.Place(item);
+        var builder = new RichTextBuilder();
+        NetworkPowerTooltipPatch.Prefix(item, out var scope);
+        try
         {
-            var builder = new RichTextBuilder();
             ModHook.RaiseTooltip(builder, item);
-            Assert.That(settings.Calls, Is.EqualTo(1));
-            Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", " mech_container_tooltip" }), string.Join("|", builder.Lines));
         }
+        finally
+        {
+            NetworkPowerTooltipPatch.Finalizer(null, scope);
+        }
+        Assert.That(settings.Calls, Is.EqualTo(1));
+        Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", "network_tooltip_total_power:3", " mech_container_tooltip" }));
 
-        ModHook.RaiseTooltip(new RichTextBuilder(), item);
+        NetworkPowerTooltipPatch.Prefix(item, out scope);
+        try
+        {
+            ModHook.RaiseTooltip(new RichTextBuilder(), item);
+        }
+        finally
+        {
+            NetworkPowerTooltipPatch.Finalizer(null, scope);
+        }
         Assert.That(settings.Calls, Is.EqualTo(2));
     }
 
@@ -120,7 +135,7 @@ public sealed class NativeTooltipDispatcherTests
         Assert.That(builder.Lines, Is.EqualTo(new[] { "cell" }));
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
         ModHook.RaiseTooltip(new RichTextBuilder(), new GameItem(ControllerItem.ItemId));
-        Assert.That(ControllerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
+        Assert.That(NetworkPowerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
         composition.Dispose();
     }
 
@@ -156,7 +171,23 @@ public sealed class NativeTooltipDispatcherTests
         ModHook.RaiseTooltip(builder, drive);
         Assert.That(settings.Calls, Is.EqualTo(3));
         Assert.That(power.Calls, Is.EqualTo(1));
-        Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", "network_tooltip_drive_slots", " mech_container_tooltip" }));
+        Assert.That(builder.Lines, Is.EqualTo(new[]
+        {
+            "network_tooltip_state", "network_tooltip_device_power:2", "network_tooltip_drive_slots", " mech_container_tooltip"
+        }));
+
+        terminal.modifiedState.GetTag(MachineryHelper.MACHINERY_DRAWN_POWER).Enable().SetInt(19);
+        builder = new RichTextBuilder();
+        ModHook.RaiseTooltip(builder, terminal);
+        Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", "network_tooltip_device_power:1", " mech_container_tooltip" }));
+
+        controller.modifiedState.GetTag(MachineryHelper.MACHINERY_DRAWN_POWER).Enable().SetInt(19);
+        builder = new RichTextBuilder();
+        ModHook.RaiseTooltip(builder, controller);
+        Assert.That(builder.Lines, Is.EqualTo(new[]
+        {
+            "network_tooltip_state", "network_tooltip_total_power:6", " mech_container_tooltip"
+        }));
     }
 
     [Test]
@@ -166,10 +197,10 @@ public sealed class NativeTooltipDispatcherTests
         composition.Enable();
         var builder = new RichTextBuilder
         {
-            OnAdd = value => { if (value == "mech_machinery_required_energy") composition.Dispose(); }
+            OnAdd = value => { if (value == "network_tooltip_total_power:3") composition.Dispose(); }
         };
         ModHook.RaiseTooltip(builder, new GameItem(ControllerItem.ItemId));
-        Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", "mech_machinery_required_energy" }));
+        Assert.That(builder.Lines, Is.EqualTo(new[] { "network_tooltip_state", "network_tooltip_total_power:3" }));
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
     }
 
@@ -205,7 +236,7 @@ public sealed class NativeTooltipDispatcherTests
         ModHook.ThrowAfterTooltipSubscription = true;
         Assert.Throws<InvalidOperationException>((Action)composition.Enable);
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
-        Assert.That(ControllerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
+        Assert.That(NetworkPowerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
         Assert.Throws<ObjectDisposedException>((Action)composition.Enable);
         composition.Dispose();
     }
@@ -221,9 +252,9 @@ public sealed class NativeTooltipDispatcherTests
         ModHook.RaiseTooltip(new RichTextBuilder(), cell);
 
         var item = new GameItem(ControllerItem.ItemId);
-        var builder = new RichTextBuilder { ThrowOn = "mech_machinery_required_energy" };
+        var builder = new RichTextBuilder { ThrowOn = "network_tooltip_total_power:3" };
         ModHook.RaiseTooltip(builder, item);
-        builder = new RichTextBuilder { ThrowOn = "mech_machinery_required_energy" };
+        builder = new RichTextBuilder { ThrowOn = "network_tooltip_total_power:3" };
         ModHook.RaiseTooltip(builder, item);
 
         Assert.That(errors, Has.Count.EqualTo(2), string.Join("|", errors));
@@ -271,7 +302,12 @@ public sealed class NativeTooltipDispatcherTests
         {
             Calls++;
             OnRead?.Invoke();
-            return 3;
+            return kind switch
+            {
+                GridNodeKind.Terminal => 1,
+                GridNodeKind.Drive => 2,
+                _ => 3
+            };
         }
     }
 }

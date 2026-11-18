@@ -111,8 +111,9 @@ network_power_drive_desc,Game power units used by each connected drive each nigh
 network_power_terminal_name,Terminal power draw
 network_power_terminal_desc,Game power units used by each connected terminal each night. Default: 1.
 network_tooltip_state,Network state: {0}
+network_tooltip_device_power,Adds to network power use: {0}/day
+network_tooltip_total_power,Total network power use: {0}/day
 network_tooltip_drive_slots,Occupied drive slots: {0}/{1}
-network_module_stats_scope,Module stats do not affect storage network power use or add item throughput or quality bonuses.
 network_status_online,Online
 network_status_unpowered,No power; network offline
 network_status_no_controller,No controller

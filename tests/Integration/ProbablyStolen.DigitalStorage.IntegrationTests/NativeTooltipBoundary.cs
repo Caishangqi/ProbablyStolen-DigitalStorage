@@ -39,7 +39,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Localization
 {
     internal sealed class ModText
     {
-        internal string Get(string key, params object[] args) => key;
+        internal string Get(string key, params object[] args) => key == "network_tooltip_device_power" ||
+            key == "network_tooltip_total_power" ? $"{key}:{args[0]}" : key;
     }
 }
 
@@ -50,10 +51,11 @@ namespace ProbablyStolen.DigitalStorage.Platform.Network
     internal sealed class GridNetworkPowerCoordinator
     {
         internal int Calls { get; private set; }
+        internal bool Powered { get; set; }
         internal bool IsPowered(NativeGridSnapshot snapshot, Grid grid)
         {
             Calls++;
-            return false;
+            return Powered;
         }
     }
 }

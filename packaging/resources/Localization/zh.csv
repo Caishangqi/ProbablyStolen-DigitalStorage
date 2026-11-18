@@ -110,9 +110,10 @@ network_power_drive_name,驱动器耗电
 network_power_drive_desc,每晚结算时，每台接入网络的驱动器消耗的游戏功率单位。默认: 2。
 network_power_terminal_name,终端耗电
 network_power_terminal_desc,每晚结算时，每台接入网络的终端消耗的游戏功率单位。默认: 1。
-network_tooltip_state,网络状态: {0}
+network_tooltip_state,网络状态：{0}
+network_tooltip_device_power,计入网络耗能：{0}/天
+network_tooltip_total_power,网络总耗能：{0}/天
 network_tooltip_drive_slots,驱动器已占用槽位: {0}/{1}
-network_module_stats_scope,模块属性不影响存储网络耗电，也不提供物品吞吐或质量加成。
 network_status_online,在线
 network_status_unpowered,未供电，网络离线
 network_status_no_controller,无控制器

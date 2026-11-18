@@ -48,6 +48,7 @@ public sealed class TagState
     public int valueInt;
     public bool valueEnabled;
     public bool GetBool() => valueEnabled;
+    public int GetInt() => valueInt;
     public TagState Clone() => new() { valueInt = valueInt, valueEnabled = valueEnabled };
     public TagState Enable() { valueEnabled = true; return this; }
     public TagState SetInt(int value) { valueInt = value; return this; }
@@ -68,6 +69,12 @@ internal static class MachineryHelper
 {
     internal const string MACHINERY_DRAWN_POWER = "machinery_drawn_power";
     internal const string MACHINERY_DRAWN_POWER_BASE = "MACHINERY_DRAWN_POWER_BASE";
+
+    public static void CreateMachineryTooltip(RichTextBuilder builder, GameItem item)
+    {
+        if (item.GetTagReadonly(MACHINERY_DRAWN_POWER).GetInt() > 0)
+            builder.AddLine("native_power", true, RenderHandler.ColorPalette.LightCyan);
+    }
 }
 
 public class GameItem
@@ -97,10 +104,11 @@ public class GameItem
 
     internal bool IsTag(string tag) => tag == "CONTAINER_TAG" || tag == "CONTAINER_TOOLTIP_TAG"
         ? ContainerTooltip
-        : Stuck && tag == ModuleHelper.MODULE_STUCK_TAG;
+        : (Stuck && tag == ModuleHelper.MODULE_STUCK_TAG) ||
+          (modifiedState.dict.TryGetValue(tag, out var value) && value.valueEnabled);
     internal TagState GetTagReadonly(string tag) => ReceivingModuleBonus && tag == "IS_RECEIVING_BONUS_FROM_MODULE_BOOL"
         ? new TagState().Enable()
-        : new TagState();
+        : modifiedState.GetTag(tag).Clone();
 
     internal List<T> FindAdjacentType<T>() => parentInventory is GameGridInventory grid
         ? grid.Neighbors(this).OfType<T>().ToList()

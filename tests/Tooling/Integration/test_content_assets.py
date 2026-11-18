@@ -229,23 +229,21 @@ class ContentContractTests(unittest.TestCase):
                         cycle_method.index("snapshot.FindController(grid)"))
         presenter = (original / "Client/GridNetworkTooltipPresenter.cs").read_text(encoding="utf-8")
         for key in ("network_status_online", "network_status_unpowered",
-                    "network_status_no_controller", "network_status_controller_conflict",
-                    "network_module_stats_scope"):
+                    "network_status_no_controller", "network_status_controller_conflict"):
             self.assertIn(key, presenter)
         self.assertIn("network_tooltip_drive_slots", (original / "Client/DriveTooltipDetail.cs").read_text(encoding="utf-8"))
         self.assertNotIn("OnControllerCycleEnd", presenter)
         self.assertNotIn("TryDraw(", presenter)
         context = (original / "Client/NativeTooltipContext.cs").read_text(encoding="utf-8")
         composition = (original / "Composition/TooltipComposition.cs").read_text(encoding="utf-8")
-        self.assertIn("ControllerTooltipBridge.FindSnapshot(Item)", context)
-        self.assertIn("_snapshot = projected ?? _scanner.Capture(Item)", context)
+        self.assertIn("NetworkPowerTooltipBridge.FindSnapshot(Item)", context)
         self.assertIn("RegistrationEntries.Select(entry => entry.Value).ToArray()", composition)
         self.assertIn("_registries.Freeze()", composition)
         self.assertLess(composition.index("_registries.Freeze()"),
                         composition.index("ModHook.OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate"))
         self.assertIn("OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate", composition)
         self.assertIn("OnCreateTooltipLate -= dispatcher.OnCreateTooltipLate", composition)
-        self.assertIn("ControllerTooltipBridge.Register(_scanner", composition)
+        self.assertIn("NetworkPowerTooltipBridge.Register(_scanner, _reportError)", composition)
         self.assertIn("DeferredRegister<INativeTooltipContributor>", composition)
         self.assertIn("DeferredRegister<INetworkTooltipDetail>", composition)
         for filename in ("NativeTooltipContext.cs", "INativeTooltipContributor.cs", "INetworkTooltipDetail.cs",

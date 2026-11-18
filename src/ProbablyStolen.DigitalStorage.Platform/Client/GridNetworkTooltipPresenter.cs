@@ -45,6 +45,14 @@ internal sealed class GridNetworkTooltipPresenter : INativeTooltipContributor
         context.Builder.AddLine(_text.Get("network_tooltip_state", _text.Get(GetStatusKey(status))),
             ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
 
+        var node = snapshot.FindNode(item);
+        if (node.Kind is GridNodeKind.Drive or GridNodeKind.Terminal)
+        {
+            if (!context.IsActive) return;
+            context.Builder.AddLine(_text.Get("network_tooltip_device_power", node.PowerUsage),
+                ignoreEmpty: true, RenderHandler.ColorPalette.LightCyan);
+        }
+
         foreach (var detail in _details)
         {
             if (!context.IsActive) return;
@@ -56,10 +64,6 @@ internal sealed class GridNetworkTooltipPresenter : INativeTooltipContributor
             }
         }
 
-        if (!context.IsActive) return;
-        if (item.GetTagReadonly("IS_RECEIVING_BONUS_FROM_MODULE_BOOL").GetBool())
-            context.Builder.AddLine(_text.Get("network_module_stats_scope"),
-                ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
         if (!context.IsActive) return;
         AddOpenHint(context.Builder, item);
     }

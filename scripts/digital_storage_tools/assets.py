@@ -387,7 +387,8 @@ def check_content(project: Path, output: Path) -> None:
         "workbench_status_empty",
     ))
     keys.update((
-        "network_tooltip_state", "network_tooltip_drive_slots", "network_module_stats_scope",
+        "network_tooltip_state", "network_tooltip_drive_slots",
+        "network_tooltip_device_power", "network_tooltip_total_power",
         "network_status_online", "network_status_unpowered",
         "network_status_no_controller", "network_status_controller_conflict",
         "network_power_controller_name", "network_power_controller_desc",

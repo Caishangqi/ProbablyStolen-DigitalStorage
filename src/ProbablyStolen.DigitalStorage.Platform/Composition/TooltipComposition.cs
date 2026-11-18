@@ -41,7 +41,7 @@ internal sealed class TooltipComposition : IDisposable
             e.Create<INetworkTooltipDetail>(detailsId);
         };
         var details = DeferredRegister<INetworkTooltipDetail>.Create(_registries, detailsId);
-        details.Register("controller", () => new ControllerTooltipDetail());
+        details.Register("controller", () => new ControllerTooltipDetail(text));
         details.Register("drive", () => new DriveTooltipDetail(text));
         var contributors = DeferredRegister<INativeTooltipContributor>.Create(_registries, contributorsId);
         contributors.Register("cell", () => new CellTooltipContributor(cells));
@@ -75,7 +75,7 @@ internal sealed class TooltipComposition : IDisposable
             _service = new NativeTooltipService(rgbFrame, _reportError);
             TerminalTooltipPresenter.SetService(_service);
 #endif
-            _projection = ControllerTooltipBridge.Register(_scanner, _reportError);
+            _projection = NetworkPowerTooltipBridge.Register(_scanner, _reportError);
             _subscribed = true;
             ModHook.OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate;
         }
