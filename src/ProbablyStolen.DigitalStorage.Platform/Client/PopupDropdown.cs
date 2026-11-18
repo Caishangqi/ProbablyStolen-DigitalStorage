@@ -39,6 +39,7 @@ internal sealed class PopupDropdown
     private RectTransform? _popup;
     private RectTransform? _anchor;
     private RectTransform? _list;
+    private PopupDropdownHover? _hover;
     private IReadOnlyList<DropdownOption> _options = Array.Empty<DropdownOption>();
     private int _selected;
     private Action<int>? _choose;
@@ -113,10 +114,14 @@ internal sealed class PopupDropdown
     }
 
     internal void Open(CustomUIElement field, IReadOnlyList<DropdownOption> options, int selected, Action<int> choose,
-        string? searchPlaceholder = null)
+        string? searchPlaceholder = null, float? preferredWidth = null, IDropdownOptionHover? hover = null)
     {
         Close();
-        if (!_window.IsAlive || field.root == null) return;
+        if (!_window.IsAlive || field.root == null)
+        {
+            hover?.Dispose();
+            return;
+        }
         _anchor = field.Rect;
         _options = options;
         _selected = selected;
@@ -158,23 +163,34 @@ internal sealed class PopupDropdown
         builder.BeginScroll(listHeight);
         _list = builder.CurrentContainer;
         builder.End();
+        if (hover != null)
+        {
+            var scroll = root.GetComponentInChildren<ScrollRect>();
+            _hover = (scroll != null ? scroll.gameObject : root).AddComponent<PopupDropdownHover>();
+            _hover.Initialize(_popup, scroll, hover, Close);
+        }
         RebuildList();
 
         var width = Math.Max(_anchor.rect.width, MinimumWidth);
         var height = searchHeight + listHeight + 2 * Padding;
-        _popup.sizeDelta = new Vector2(width, height);
-        Place(width, height);
+        Place(width, height, preferredWidth);
         _popup.SetAsLastSibling();
         searchInput?.ActivateInputField();
     }
 
     internal void Close()
     {
-        if (_popup != null) UnityEngine.Object.Destroy(_popup.gameObject);
+        var popup = _popup;
+        var hover = _hover;
         _popup = null;
         _anchor = null;
         _list = null;
+        _hover = null;
         _choose = null;
+        hover?.Release();
+        if (popup == null) return;
+        if (hover != null) popup.gameObject.SetActive(false);
+        UnityEngine.Object.Destroy(popup.gameObject);
     }
 
     /// <summary>Closes the list when the player presses outside it and outside its field; call every frame.</summary>
@@ -189,6 +205,7 @@ internal sealed class PopupDropdown
 
     private void RebuildList()
     {
+        _hover?.InvalidateHover();
         if (_list == null || !_window.IsAlive) return;
         CustomUIBuilder.ClearContainer(_list);
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _list);
@@ -202,6 +219,7 @@ internal sealed class PopupDropdown
                 : option.Label;
             builder.AddPointerButton(label, () => Choose(chosen));
             StyleRow(builder.Last, index == _selected);
+            if (_hover != null && !string.IsNullOrWhiteSpace(option.Detail)) _hover.Bind(builder.Last.root, index);
         }
     }
 
@@ -266,7 +284,7 @@ internal sealed class PopupDropdown
         rect.anchoredPosition = Vector2.zero;
     }
 
-    private void Place(float width, float height)
+    private void Place(float width, float height, float? preferredWidth)
     {
         if (_popup == null || _anchor == null) return;
         var parent = _window.Rect;
@@ -281,6 +299,8 @@ internal sealed class PopupDropdown
             var min = parent.InverseTransformPoint(corners[0]);
             var max = parent.InverseTransformPoint(corners[2]);
             bounds = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+            if (preferredWidth.HasValue && bounds.width > 0f)
+                width = Mathf.Min(bounds.width, Mathf.Max(width, preferredWidth.Value));
         }
 
         var below = bottomLeft.y - 2f;

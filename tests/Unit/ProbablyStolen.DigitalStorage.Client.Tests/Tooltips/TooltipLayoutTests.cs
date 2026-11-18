@@ -117,6 +117,61 @@ public sealed class TooltipLayoutTests
     }
 
     [Test]
+    public void Arrange_PopupSideFits_PrefersRightOverPreviousBelow()
+    {
+        var popup = new TooltipRect(120, 100, 150, 100);
+        var result = Arrange(popup, new TooltipPanelMeasure("a", 0, 100, 40), previous: TooltipDirection.Below,
+            obstacles: new[] { popup }, preferHorizontal: true);
+
+        Assert.That(result.Direction, Is.EqualTo(TooltipDirection.Right));
+        Assert.That(result.ViewportBounds.X, Is.EqualTo(popup.Right + TooltipLayoutEngine.DefaultGap));
+        Assert.That(result.Overlap, Is.Zero);
+    }
+
+    [Test]
+    public void Arrange_PopupRightBlockedByNativeTooltip_UsesLeftSide()
+    {
+        var popup = new TooltipRect(120, 100, 150, 100);
+        var native = new TooltipRect(275, 100, 80, 60);
+        var result = Arrange(popup, new TooltipPanelMeasure("a", 0, 100, 40), previous: TooltipDirection.Right,
+            obstacles: new[] { popup, native }, preferHorizontal: true);
+
+        Assert.That(result.Direction, Is.EqualTo(TooltipDirection.Left));
+        Assert.That(result.ViewportBounds.Right, Is.EqualTo(popup.X - TooltipLayoutEngine.DefaultGap));
+        Assert.That(result.Overlap, Is.Zero);
+    }
+
+    [TestCase(true, 70, (int)TooltipDirection.Right, 102, false)]
+    [TestCase(true, 215, (int)TooltipDirection.Right, 245, false)]
+    [TestCase(false, 70, (int)TooltipDirection.Below, 278, true)]
+    public void Arrange_SideHasRoomBelowNativeTooltip_ShiftsOnlyForPopupPreference(bool preferHorizontal,
+        double obstacleHeight, int direction, double y, bool clipped)
+    {
+        var viewport = new TooltipRect(0, 0, 480, 310);
+        var popup = new TooltipRect(4, 30, 320, 246);
+        var native = new TooltipRect(326, 30, 120, obstacleHeight);
+        var result = TooltipLayoutEngine.Arrange(popup, viewport, new[] { new TooltipPanelMeasure("a", 0, 120, 60) },
+            new[] { popup, native }, preferHorizontal: preferHorizontal);
+
+        Assert.That(result.Direction, Is.EqualTo((TooltipDirection)direction));
+        Assert.That(result.ViewportBounds.Y, Is.EqualTo(y));
+        Assert.That(result.IsClipped, Is.EqualTo(clipped));
+        Assert.That(result.Overlap, Is.Zero);
+    }
+
+    [Test]
+    public void Arrange_PopupSidesClampIntoPopup_UsesVerticalSpace()
+    {
+        var popup = new TooltipRect(40, 100, 320, 100);
+        var result = Arrange(popup, new TooltipPanelMeasure("a", 0, 100, 40), previous: TooltipDirection.Right,
+            obstacles: new[] { popup }, preferHorizontal: true);
+
+        Assert.That(result.Direction, Is.EqualTo(TooltipDirection.Below));
+        Assert.That(result.ViewportBounds.Y, Is.EqualTo(popup.Bottom + TooltipLayoutEngine.DefaultGap));
+        Assert.That(result.Overlap, Is.Zero);
+    }
+
+    [Test]
     public void Arrange_UsesAvailableHeightAndKeepsPanelOrder()
     {
         var result = Arrange(new TooltipRect(180, 120, 20, 20),
@@ -152,11 +207,11 @@ public sealed class TooltipLayoutTests
 
     private static TooltipLayoutResult Arrange(TooltipRect anchor, TooltipPanelMeasure first,
         TooltipPanelMeasure? second = null, TooltipDirection? previous = null,
-        TooltipRect[]? obstacles = null, double maxVisibleHeight = double.PositiveInfinity)
+        TooltipRect[]? obstacles = null, double maxVisibleHeight = double.PositiveInfinity, bool preferHorizontal = false)
     {
         var panels = second.HasValue ? new[] { first, second.Value } : new[] { first };
         return TooltipLayoutEngine.Arrange(anchor, Viewport, panels, obstacles ?? System.Array.Empty<TooltipRect>(),
-            previous, maxVisibleHeight: maxVisibleHeight);
+            previous, maxVisibleHeight: maxVisibleHeight, preferHorizontal: preferHorizontal);
     }
 }
 

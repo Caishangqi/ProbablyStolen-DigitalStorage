@@ -21,6 +21,7 @@ internal sealed class StackingRulesScreen : SubScreen
 {
     private const float Gap = 4f;
     private const float FieldWidth = 180f;
+    private const float FieldPickerWidth = 320f;
     private const float ModeWidth = 96f;
     private const float ColorInputWidth = 84f;
     private const float CountWidth = 110f;
@@ -230,24 +231,33 @@ internal sealed class StackingRulesScreen : SubScreen
     /// <summary>Opens the attribute menu for a row, or for a new row when <paramref name="row"/> is -1.</summary>
     private void OpenFieldPicker(CustomUIElement anchor, int row)
     {
+        if (_dropdown == null || !((ITerminalViewHost)Window).IsCurrentSession()) return;
+        if (_dropdown.IsOpenFor(anchor))
+        {
+            _dropdown.Close();
+            return;
+        }
+
         var options = _editor.MenuOptions(StoredKeys());
-        var labels = options.Select(option => new DropdownOption(FieldName(option.Field.Id),
-            option.AbsentFromInventory ? Window.Text.Get("stacking_field_absent") : DescriptionOf(option.Field))).ToList();
+        var absence = Window.Text.Get("stacking_field_absent");
+        var details = options.Select(option => (Title: FieldName(option.Field.Id),
+            Description: DescriptionOf(option.Field), Absence: option.AbsentFromInventory ? absence : null)).ToArray();
+        // The leading title uses the row's width first. The muted summary takes the remaining space before ellipsis.
+        var labels = details.Select(detail => new DropdownOption(detail.Title, detail.Absence ?? detail.Description)).ToArray();
         var config = _editor.Config;
         var current = row < 0 ? -1 : options.ToList().FindIndex(option => option.Field.Id == config.Rules[row].FieldId);
-        Toggle(anchor, labels, current, choice =>
+        _dropdown.Open(anchor, labels, current, choice =>
         {
             var id = options[choice].Field.Id;
             Edit(() => (row < 0 ? _editor.AddOrLocate(id) : _editor.ReplaceField(row, id)) >= 0);
-        }, Window.Text.Get("stacking_search"));
+        }, Window.Text.Get("stacking_search"), preferredWidth: FieldPickerWidth, hover: new StackingFieldTooltip(details));
     }
 
-    private void Toggle(CustomUIElement field, IReadOnlyList<DropdownOption> options, int selected, Action<int> choose,
-        string? searchPlaceholder = null)
+    private void Toggle(CustomUIElement field, IReadOnlyList<DropdownOption> options, int selected, Action<int> choose)
     {
         if (_dropdown == null || !((ITerminalViewHost)Window).IsCurrentSession()) return;
         if (_dropdown.IsOpenFor(field)) _dropdown.Close();
-        else _dropdown.Open(field, options, selected, choose, searchPlaceholder);
+        else _dropdown.Open(field, options, selected, choose);
     }
 
     private void Edit(Func<bool> edit)

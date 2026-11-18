@@ -118,7 +118,7 @@ internal static class TooltipLayoutEngine
     public static TooltipLayoutResult Arrange(TooltipRect anchor, TooltipRect viewport,
         IReadOnlyList<TooltipPanelMeasure> panels, IReadOnlyList<TooltipRect> obstacles,
         TooltipDirection? previousDirection = null, double gap = DefaultGap, double margin = DefaultMargin,
-        double maxVisibleHeight = double.PositiveInfinity)
+        double maxVisibleHeight = double.PositiveInfinity, bool preferHorizontal = false)
     {
         if (panels == null || panels.Count == 0) throw new ArgumentException("At least one panel is required.", nameof(panels));
         if (obstacles == null) throw new ArgumentNullException(nameof(obstacles));
@@ -153,13 +153,18 @@ internal static class TooltipLayoutEngine
         {
             var candidate = BuildCandidate((TooltipDirection)rank, anchor, viewport, contentHeight, naturalWidth,
                 obstacles, gap, margin, maxVisibleHeight);
-            if (candidate.IsFullFit && (!fullFit.HasValue || IsPreferred(candidate, fullFit.Value, previousDirection)))
+            if (candidate.IsFullFit && (!fullFit.HasValue || IsPreferred(candidate, fullFit.Value, previousDirection, preferHorizontal)))
                 fullFit = candidate;
             if (candidate.Overlap <= 0.0001 && (!collisionFree.HasValue || candidate.VisibleHeight > collisionFree.Value.VisibleHeight))
                 collisionFree = candidate;
             if (!fallback.HasValue || candidate.Overlap < fallback.Value.Overlap ||
                 (candidate.Overlap.Equals(fallback.Value.Overlap) && candidate.VisibleHeight > fallback.Value.VisibleHeight))
                 fallback = candidate;
+        }
+
+        if (preferHorizontal && (fullFit == null || fullFit.Value.Direction is TooltipDirection.Below or TooltipDirection.Above))
+        {
+            fullFit = FindShiftedSide(gap) ?? (gap > 0 ? FindShiftedSide(0) : null) ?? fullFit;
         }
 
         var selected = (fullFit ?? collisionFree ?? fallback)!.Value;
@@ -177,17 +182,31 @@ internal static class TooltipLayoutEngine
         }
         return new TooltipLayoutResult(selected.Direction, placements, selected.VisibleHeight,
             contentHeight > selected.VisibleHeight + 0.0001, selected.Overlap, contentHeight, selected.Bounds);
+
+        Candidate? FindShiftedSide(double obstacleGap)
+        {
+            Candidate? best = null;
+            for (var rank = (int)TooltipDirection.Right; rank <= (int)TooltipDirection.Left; rank++)
+            {
+                var candidate = BuildCandidate((TooltipDirection)rank, anchor, viewport, contentHeight, naturalWidth,
+                    obstacles, gap, margin, maxVisibleHeight);
+                var shifted = ShiftSideCandidate(candidate, anchor, viewport, obstacles, contentHeight, gap, margin, obstacleGap);
+                if (shifted is { } fit && (!best.HasValue || IsPreferred(fit, best.Value, previousDirection, preferHorizontal)))
+                    best = fit;
+            }
+            return best;
+        }
     }
 
     internal static int Compare(TooltipPanelMeasure left, TooltipPanelMeasure right) => left.Order != right.Order
         ? left.Order.CompareTo(right.Order)
         : string.CompareOrdinal(left.Id, right.Id);
 
-    private static bool IsPreferred(Candidate candidate, Candidate current, TooltipDirection? previous)
+    private static bool IsPreferred(Candidate candidate, Candidate current, TooltipDirection? previous, bool preferHorizontal)
     {
         var candidateVertical = candidate.Direction is TooltipDirection.Below or TooltipDirection.Above;
         var currentVertical = current.Direction is TooltipDirection.Below or TooltipDirection.Above;
-        if (candidateVertical != currentVertical) return candidateVertical;
+        if (candidateVertical != currentVertical) return candidateVertical != preferHorizontal;
         if (previous.HasValue)
         {
             var candidatePrevious = candidate.Direction == previous.Value;
@@ -224,10 +243,47 @@ internal static class TooltipLayoutEngine
         y = Clamp(y, bottom, bottom + usableHeight - visibleHeight);
         var group = new TooltipRect(x, y, width, visibleHeight);
 
-        var overlap = 0d;
-        for (var index = 0; index < obstacles.Count; index++) overlap += group.Clip(obstacles[index]).Area;
+        var overlap = MeasureOverlap(group, obstacles);
         var fullFit = visibleHeight.Equals(contentHeight) && overlap <= 0 && viewport.Contains(group);
         return new Candidate(direction, visibleHeight, overlap, fullFit, group);
+    }
+
+    private static Candidate? ShiftSideCandidate(Candidate candidate, TooltipRect anchor, TooltipRect viewport,
+        IReadOnlyList<TooltipRect> obstacles, double contentHeight, double gap, double margin, double obstacleGap)
+    {
+        var bounds = candidate.Bounds;
+        if (!bounds.Height.Equals(contentHeight)) return null;
+        if (candidate.Direction == TooltipDirection.Right ? bounds.X < anchor.Right + gap : bounds.Right > anchor.X - gap)
+            return null;
+
+        var inset = Math.Min(margin, viewport.Height / 2d);
+        var nearestDistance = double.PositiveInfinity;
+        Candidate? nearest = null;
+        foreach (var obstacle in obstacles)
+        {
+            if (obstacle.Right <= bounds.X || obstacle.X >= bounds.Right) continue;
+            Consider(obstacle.Y - obstacleGap - bounds.Height);
+            Consider(obstacle.Bottom + obstacleGap);
+        }
+        return nearest;
+
+        void Consider(double y)
+        {
+            if (y < viewport.Y + inset || y + bounds.Height > viewport.Bottom - inset) return;
+            var distance = Math.Abs(y - bounds.Y);
+            if (distance >= nearestDistance) return;
+            var shifted = new TooltipRect(bounds.X, y, bounds.Width, bounds.Height);
+            if (MeasureOverlap(shifted, obstacles) > 0) return;
+            nearestDistance = distance;
+            nearest = new Candidate(candidate.Direction, candidate.VisibleHeight, overlap: 0, fullFit: true, shifted);
+        }
+    }
+
+    private static double MeasureOverlap(TooltipRect bounds, IReadOnlyList<TooltipRect> obstacles)
+    {
+        var overlap = 0d;
+        for (var index = 0; index < obstacles.Count; index++) overlap += bounds.Clip(obstacles[index]).Area;
+        return overlap;
     }
 
     private static double Clamp(double value, double minimum, double maximum) => Math.Min(Math.Max(value, minimum), Math.Max(minimum, maximum));

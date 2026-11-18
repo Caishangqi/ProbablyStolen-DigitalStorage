@@ -38,12 +38,16 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         _mainThreadId = Thread.CurrentThread.ManagedThreadId;
     }
 
-    public ITooltip CreateTooltip(object owner)
+    public ITooltip CreateTooltip(object owner) => CreateGroup(owner, preferPopupAnchor: false);
+
+    internal ITooltip CreatePopupTooltip(RectTransform popup) => CreateGroup(popup.gameObject, preferPopupAnchor: true);
+
+    private TooltipGroup CreateGroup(object owner, bool preferPopupAnchor)
     {
         if (owner == null) throw new ArgumentNullException(nameof(owner));
         ThrowIfDisposed();
         ThrowIfWrongThread();
-        var group = new TooltipGroup(this, owner);
+        var group = new TooltipGroup(this, owner, preferPopupAnchor);
         _groups.Add(group);
         EnsureDriver();
         return group;
@@ -118,14 +122,17 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         return registration;
     }
 
-    public bool TryConsumeScroll(bool altHeld, float wheelDelta, int frameId)
+    public bool TryConsumeScroll(bool altHeld, float wheelDelta, int frameId) =>
+        TryConsumeScroll(altHeld, wheelDelta, frameId, null);
+
+    internal bool TryConsumeScroll(bool altHeld, float wheelDelta, int frameId, ITooltip? target)
     {
         ThrowIfWrongThread();
         if (_disposed || !altHeld || wheelDelta == 0f || _lastConsumedFrame == frameId || _visibleGroupCount == 0) return false;
         for (var index = _groups.Count - 1; index >= 0; index--)
         {
             var group = _groups[index];
-            if (!group.IsVisible) continue;
+            if (!group.IsVisible || (target != null && !ReferenceEquals(target, group))) continue;
             if (!IsOwnerAlive(group.Owner)) { group.Dispose(); continue; }
             group.PrepareForScroll(frameId);
             if (!group.IsVisible || !group.IsOverflowing) continue;
@@ -332,6 +339,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
     {
         private readonly NativeTooltipService _service;
         private readonly object _owner;
+        private readonly bool _preferPopupAnchor;
         private readonly Dictionary<string, TooltipPanel> _panels = new(StringComparer.Ordinal);
         private readonly ClientLayout.TooltipScrollState _scroll = new();
         private readonly List<TooltipPanel> _activePanels = new();
@@ -353,8 +361,8 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         private string _source = string.Empty;
         private readonly ClientLayout.TooltipLayoutFrameGate _layoutFrame = new();
 
-        internal TooltipGroup(NativeTooltipService service, object owner)
-        { _service = service; _owner = owner; }
+        internal TooltipGroup(NativeTooltipService service, object owner, bool preferPopupAnchor)
+        { _service = service; _owner = owner; _preferPopupAnchor = preferPopupAnchor; }
         internal object Owner => _owner;
         internal bool IsVisible => _visible;
         internal bool IsOverflowing => _layoutFrame.IsValid && _scroll.IsOverflowing;
@@ -479,8 +487,9 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             var nativeRect = native?.handler != null && native.IsVisible()
                 ? NativeWindowRect(native, parent, parentLeft, parentTop)
                 : (ClientLayout.TooltipRect?)null;
-            if (!nativeRect.HasValue && _anchor == null && !_screenPosition.HasValue) { Hide(); return; }
-            var anchor = nativeRect
+            var placementNative = _preferPopupAnchor ? null : nativeRect;
+            if (!placementNative.HasValue && _anchor == null && !_screenPosition.HasValue) { Hide(); return; }
+            var anchor = placementNative
                 ?? (_anchor == null
                     ? ScreenAnchor(parent, canvas, _screenPosition!.Value, parentLeft, parentTop)
                     : LayoutRect(parent, _anchor, parentLeft, parentTop));
@@ -500,6 +509,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             foreach (var panel in _activePanels) if (!panel.Ensure(_content)) return;
 
             if (nativeRect.HasValue) _obstacles.Add(nativeRect.Value);
+            if (_preferPopupAnchor) _obstacles.Add(anchor);
             var naturalWidth = 1d;
             foreach (var panel in _activePanels)
             {
@@ -513,7 +523,8 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
                 if (!panel.Reflow(characters)) { Hide(); return; }
                 _measures.Add(panel.Measure());
             }
-            var result = ClientLayout.TooltipLayoutEngine.Arrange(anchor, viewport, _measures, _obstacles, _direction);
+            var result = ClientLayout.TooltipLayoutEngine.Arrange(anchor, viewport, _measures, _obstacles, _direction,
+                preferHorizontal: _preferPopupAnchor);
 
             _direction = result.Direction;
             _scroll.Update(_source, result.ContentHeight, result.VisibleHeight, 12);
