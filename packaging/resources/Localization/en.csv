@@ -147,6 +147,11 @@ terminal_view_direction_name,Sort direction
 terminal_view_direction_desc,Ascending or descending order. You can also use the button on the left of the terminal. Your choice is saved.
 terminal_view_size_name,Terminal height
 terminal_view_size_desc,How much of the screen height the terminal uses. You can also use the button on the left of the terminal. Your choice is saved.
+terminal_keep_open_name,Keep Open
+terminal_keep_open_desc,Keep the storage terminal open when you press Esc. The × button still closes it.
+terminal_keep_open_tip,Keep Open: {0}
+terminal_keep_open_enabled,On. Esc leaves the terminal open. Click × to close it.
+terminal_keep_open_disabled,Off. Esc can close the terminal.
 partition_view_size_name,Partition window height
 partition_view_size_desc,How much of the screen height the cell partition window uses. You can also use the button on the left of that window. Your choice is saved.
 terminal_hint_title,Controls

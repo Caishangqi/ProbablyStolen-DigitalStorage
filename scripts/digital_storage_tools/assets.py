@@ -40,7 +40,7 @@ BUTTON_ASSETS = (
     "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
     "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
     "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_placeholder",
-    "button_stack", "button_add", "annotation_square", "button_sample_attributes",
+    "button_stack", "button_add", "button_keep_open_off", "button_keep_open_on", "annotation_square", "button_sample_attributes",
 )
 for button in BUTTON_ASSETS:
     ASSETS[button] = ((16, 16), (16, 16))
@@ -433,7 +433,7 @@ def check_content(project: Path, output: Path) -> None:
         "partition_hint_title", "partition_hint_left", "partition_hint_right", "partition_hint_middle",
         "config_section_terminal_view", "terminal_view_sort_name", "terminal_view_sort_desc",
         "terminal_view_direction_name", "terminal_view_direction_desc", "terminal_view_size_name", "terminal_view_size_desc", "partition_view_size_name",
-        "partition_view_size_desc",
+        "partition_view_size_desc", "terminal_keep_open_name", "terminal_keep_open_desc",
         "terminal_hint_title", "terminal_hint_left", "terminal_hint_right", "terminal_hint_shift",
         "config_section_power", "config_section_debug",
         "config_section_terminal_search",
@@ -462,6 +462,7 @@ def check_content(project: Path, output: Path) -> None:
         "integration_itemdetails_section", "integration_itemdetails_label", "integration_itemdetails_tooltip", "tooltip_scroll_hint",
         "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
         "terminal_button_stacking_tip",
+        "terminal_keep_open_tip", "terminal_keep_open_enabled", "terminal_keep_open_disabled",
         "terminal_tooltip_total_units",
         "stacking_marker_color", "stacking_marker_placeholder", "stacking_marker_color_tip", "stacking_marker_invalid",
         "stacking_info_title", "stacking_info_kinds", "stacking_info_rules", "stacking_info_rule",

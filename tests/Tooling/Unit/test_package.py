@@ -148,11 +148,11 @@ class PackageValidationTests(unittest.TestCase):
             validate_package_directory(self.package_directory, False)
 
     def test_earlier_build_missing_only_resources_is_replaceable(self) -> None:
-        newest = [name for name in RESOURCE_FILES if name.startswith("Textures/") and name.count("/") == 1][-2:]
-        for name in newest:
+        missing_resources = ("Textures/button_keep_open_on.png",)
+        for name in missing_resources:
             (self.package_directory / name).unlink()
         inventory = validate_package_directory(self.package_directory, False, allow_earlier_build=True)
-        self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) - set(newest))
+        self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) - set(missing_resources))
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory, False)
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):

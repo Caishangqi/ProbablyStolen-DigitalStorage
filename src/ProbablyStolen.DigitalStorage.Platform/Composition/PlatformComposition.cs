@@ -188,7 +188,8 @@ public sealed class PlatformComposition : IDisposable
         var drive = new DriveItem(appearance, windows, inventory, networkEvents);
         var controller = new ControllerItem(appearance, windows);
         var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
-            networkPowerSettings.GetItemIdentityLog);
+            networkPowerSettings.GetItemIdentityLog, networkPowerSettings.GetTerminalKeepOpen,
+            networkPowerSettings.SetTerminalKeepOpen);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,

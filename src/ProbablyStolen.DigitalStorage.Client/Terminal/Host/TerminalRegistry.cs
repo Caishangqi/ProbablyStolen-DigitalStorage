@@ -26,6 +26,7 @@ public sealed class TerminalRegistry
     private readonly List<IEntryTooltipContributor> _contributors = new();
     private readonly List<TooltipPanelDefinition> _panels = new() { TooltipPanelDefinition.Hint };
     private readonly HashSet<string> _extensionIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<bool>> _finalBackGuards = new(StringComparer.Ordinal);
     private bool _frozen;
 
     /// <summary>Creates an empty registry.</summary>
@@ -87,6 +88,38 @@ public sealed class TerminalRegistry
     {
         if (setting == null) throw new ArgumentNullException(nameof(setting));
         return AddButton(new SettingToggleButton<T>(setting, _config), order, placement, terminalId, _ => true);
+    }
+
+    /// <summary>Adds a final window-close guard; a repeated id is refused and logged.</summary>
+    public bool AddFinalBackGuard(string id, Func<bool> allowsClose)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("A guard id is required.", nameof(id));
+        if (allowsClose == null) throw new ArgumentNullException(nameof(allowsClose));
+        EnsureOpen();
+        if (!_finalBackGuards.TryAdd(id, allowsClose))
+        {
+            _diagnostic($"terminal_registry refused=back_guard id={id} reason=duplicate");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Checks registered final-close guards. A failed read is logged and does not block closing.</summary>
+    public bool AllowsFinalBackClose()
+    {
+        if (!_frozen) throw new InvalidOperationException("The terminal registry is not frozen.");
+        foreach (var guard in _finalBackGuards.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            try
+            {
+                if (!guard.Value()) return false;
+            }
+            catch (Exception error)
+            {
+                _diagnostic($"terminal_registry back_guard_failed id={guard.Key} error={error.GetType().Name}");
+            }
+        }
+        return true;
     }
 
     /// <summary>Adds a storage view projector; a repeated id is refused and logged.</summary>

@@ -20,6 +20,7 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.deployment import *
 from digital_storage_tools.deployment import _REPARSE_POINT
 from digital_storage_tools.package import DATA_RESOURCE_FILES, PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES
+from digital_storage_tools.package import PRE_KEEP_OPEN_CURRENT_FILES
 
 class DeploymentTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -174,6 +175,17 @@ class DeploymentTests(unittest.TestCase):
                          set(CURRENT_FILES) - set(PRE_BUTTON_CURRENT_FILES))
         self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
         self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_BUTTON_CURRENT_FILES))
+
+    def test_pre_keep_open_upgrade_and_removal_plans_preserve_the_old_layout(self) -> None:
+        self._install_layout(PRE_KEEP_OPEN_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
+        before = self.installed_contents()
+        changes = plan_deployment(self.package, self.game, self.target)
+        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"}, {
+            "Textures/button_keep_open_off.png", "Textures/button_keep_open_on.png",
+        })
+        self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
+        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_KEEP_OPEN_CURRENT_FILES))
+        self.assertEqual(self.installed_contents(), before)
 
     def test_update_replaces_only_changed_owned_files(self) -> None:
         self._install_initial_package()
@@ -563,5 +575,4 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(Path, "lstat", new=reparse_directory):
             with self.assertRaisesRegex(DeploymentError, "Digital Storage directory must not be"):
                 plan_removal(self.game, self.target)
-
 

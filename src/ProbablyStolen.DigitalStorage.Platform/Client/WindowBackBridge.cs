@@ -12,9 +12,9 @@ public static class WindowBackBridge
     private static readonly WindowBackCoordinator Coordinator = new();
     private static readonly List<WindowRegistration> Windows = new();
 
-    internal static IDisposable Register(CustomUIWindow window, RectTransform viewport, Action back)
+    internal static IDisposable Register(CustomUIWindow window, RectTransform viewport, Func<bool> tryBack)
     {
-        var entry = new WindowRegistration(window, viewport, back);
+        var entry = new WindowRegistration(window, viewport, tryBack);
         Windows.Add(entry);
         entry.Focus();
         return entry;
@@ -110,11 +110,11 @@ public static class WindowBackBridge
         internal long Stamp;
         internal CustomUIWindow Window => _window;
 
-        internal WindowRegistration(CustomUIWindow window, RectTransform viewport, Action back)
+        internal WindowRegistration(CustomUIWindow window, RectTransform viewport, Func<bool> tryBack)
         {
             _window = window;
             Viewport = viewport;
-            _registration = Coordinator.Register(Active, back);
+            _registration = Coordinator.Register(Active, tryBack);
         }
 
         internal bool Active() => _window.IsAlive && _window.IsVisible && Viewport != null && Viewport.gameObject.activeInHierarchy;

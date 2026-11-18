@@ -66,6 +66,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<TerminalSortDirection> _sortDirection;
     private readonly ConfigEntry<TerminalSize> _size;
     private readonly ConfigEntry<TerminalSize> _partitionSize;
+    private readonly ConfigEntry<bool> _terminalKeepOpen;
     private bool _invalidPinyinModeLogged;
 
     internal DigitalStorageSettings(string modId, ModText text)
@@ -131,6 +132,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("terminal_view_sort_name"), () => text.Get("terminal_view_sort_desc"));
         _sortDirection = config.DefineEnum(SortDirectionKey, TerminalSortDirection.Ascending, view,
             () => text.Get("terminal_view_direction_name"), () => text.Get("terminal_view_direction_desc"));
+        _terminalKeepOpen = config.Define("terminal_keep_open", false, view,
+            () => text.Get("terminal_keep_open_name"), tooltip: () => text.Get("terminal_keep_open_desc"));
         _size = config.DefineEnum(SizeKey, TerminalSize.Small, view,
             () => text.Get("terminal_view_size_name"), () => text.Get("terminal_view_size_desc"));
         _partitionSize = config.DefineEnum(PartitionSizeKey, TerminalSize.Medium, view,
@@ -144,7 +147,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
             (_identifierSearchMode, search), (_searchHighlighting, search),
-            (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view)
+            (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view), (_terminalKeepOpen, view)
         })
         {
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
@@ -164,6 +167,10 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             SectionSetter.Invoke(pair.Key, new object[] { _text.Get(pair.Value) });
         }
     }
+
+    internal bool GetTerminalKeepOpen() => _terminalKeepOpen.Value;
+
+    internal void SetTerminalKeepOpen(bool value) => _terminalKeepOpen.Set(value);
 
     internal SearchConfiguration GetSearchConfiguration(string? confirmedLocale, Action<string>? warning = null)
     {

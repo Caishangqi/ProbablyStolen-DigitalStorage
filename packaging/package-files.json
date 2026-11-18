@@ -57,7 +57,9 @@
     "Textures/button_add.png",
     "Textures/annotation_square.png",
     "Textures/window_frame.png",
-    "Textures/button_sample_attributes.png"
+    "Textures/button_sample_attributes.png",
+    "Textures/button_keep_open_off.png",
+    "Textures/button_keep_open_on.png"
   ],
   "legacy": [
     "manifest.xml",

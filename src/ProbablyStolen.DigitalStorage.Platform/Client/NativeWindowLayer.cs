@@ -20,7 +20,7 @@ internal static class NativeWindowLayer
     /// </summary>
     /// <param name="window">The window to move.</param>
     /// <param name="viewportName">The viewport object name.</param>
-    /// <param name="back">Handles one back action for this window.</param>
+    /// <param name="back">Returns whether this window handled one back action.</param>
     /// <param name="diagnostics">Records the window size and position, or null.</param>
     /// <param name="raised">
     /// Whether the window joins the raised layer of focused native windows. A native window that gains focus moves to
@@ -32,7 +32,7 @@ internal static class NativeWindowLayer
     /// <param name="leftExtent">
     /// Design width drawn left of the window outside its frame (the terminal dock), fitted and clamped with it.
     /// </param>
-    internal static RectTransform? Attach(CustomUIWindow window, string viewportName, Action back, TerminalDiagnostics? diagnostics = null,
+    internal static RectTransform? Attach(CustomUIWindow window, string viewportName, Func<bool> back, TerminalDiagnostics? diagnostics = null,
         bool raised = false, float leftExtent = 0f)
     {
         var native = RenderHandler.current;
@@ -208,7 +208,7 @@ internal static class NativeWindowLayer
         private RectTransform? _viewport;
         private WindowBackBridge.WindowRegistration? _registration;
 
-        internal void Initialize(CustomUIWindow window, RectTransform viewport, Action back)
+        internal void Initialize(CustomUIWindow window, RectTransform viewport, Func<bool> back)
         {
             _viewport = viewport;
             _registration = (WindowBackBridge.WindowRegistration)WindowBackBridge.Register(window, viewport, back);

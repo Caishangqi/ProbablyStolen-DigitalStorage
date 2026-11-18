@@ -304,11 +304,14 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     }
 
     /// <summary>The back key returns from a sub-screen first; only then does it close the window.</summary>
-    private void Back()
+    private bool Back()
     {
-        if (_subScreen is ITerminalBackHandler screenBack && screenBack.HandleBack()) return;
-        if (_currentView is ITerminalBackHandler viewBack && viewBack.HandleBack()) return;
-        if (_host?.HandleBack() != true) _window?.Close();
+        if (_subScreen is ITerminalBackHandler screenBack && screenBack.HandleBack()) return true;
+        if (_currentView is ITerminalBackHandler viewBack && viewBack.HandleBack()) return true;
+        if (_host?.HandleBack() == true) return true;
+        if (!_registry.AllowsFinalBackClose()) return false;
+        _window?.Close();
+        return true;
     }
 
     private void AttachToNativeWindowLayer()

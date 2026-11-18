@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Diagnostics;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.KeepOpen;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Modules;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
@@ -26,12 +27,14 @@ internal static class TerminalFeatures
         new StackingAttributeCapture()
     };
 
-    internal static TerminalRegistry Create(IConfigManager config, Action<string> log, Func<bool> identityLogEnabled)
+    internal static TerminalRegistry Create(IConfigManager config, Action<string> log, Func<bool> identityLogEnabled,
+        Func<bool> keepOpen, Action<bool> setKeepOpen)
     {
         var registry = new TerminalRegistry(config, log);
         StorageTerminalFeature.Register(registry, window => ((TerminalWindowHost)window).CreateStorageView());
         ModulesFeature.Register(registry, window => new TerminalModulesScreen((TerminalWindowHost)window));
         TerminalStyleFeature.Register(registry);
+        KeepOpenFeature.Register(registry, keepOpen, setKeepOpen);
         StackingFeature.Register(registry, window => new StackingRulesScreen((TerminalWindowHost)window,
             ((TerminalWindow)window).Storage), log, identityLogEnabled);
         DiagnosticsFeature.Register(registry, window => new DiagnosticTerminalView((TerminalWindowHost)window),

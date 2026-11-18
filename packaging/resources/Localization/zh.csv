@@ -147,6 +147,11 @@ terminal_view_direction_name,排序方向
 terminal_view_direction_desc,按升序或降序排列。也可用终端左侧按钮切换，设置会自动保存。
 terminal_view_size_name,终端高度
 terminal_view_size_desc,终端窗口占屏幕高度的比例。也可用终端左侧按钮切换，设置会自动保存。
+terminal_keep_open_name,保持打开
+terminal_keep_open_desc,开启后按 Esc 会保留存储终端。右上角的 × 仍可关闭窗口。
+terminal_keep_open_tip,保持打开：{0}
+terminal_keep_open_enabled,已开启。按 Esc 保留终端，点击 × 可关闭。
+terminal_keep_open_disabled,已关闭。按 Esc 可关闭终端。
 partition_view_size_name,分区窗口高度
 partition_view_size_desc,元件分区窗口占屏幕高度的比例。也可用分区窗口左侧按钮切换，设置会自动保存。
 terminal_hint_title,操作

@@ -46,6 +46,32 @@ public sealed class TerminalRegistryTests
     }
 
     [Test]
+    public void FinalBackGuards_DefaultAllowRejectDuplicatesAndApplyDenials()
+    {
+        var registry = New();
+        registry.AddTerminal(Storage());
+        Assert.That(registry.AddFinalBackGuard("keep", () => false), Is.True);
+        Assert.That(registry.AddFinalBackGuard("keep", () => true), Is.False);
+        registry.Freeze();
+
+        Assert.That(registry.AllowsFinalBackClose(), Is.False);
+        Assert.That(_log, Has.Some.Contains("duplicate"));
+    }
+
+    [Test]
+    public void FinalBackGuardFailureLogsAndAllowsOtherGuardsToRun()
+    {
+        var registry = New();
+        registry.AddTerminal(Storage());
+        registry.AddFinalBackGuard("broken", () => throw new InvalidOperationException());
+        registry.AddFinalBackGuard("deny", () => false);
+        registry.Freeze();
+
+        Assert.That(registry.AllowsFinalBackClose(), Is.False);
+        Assert.That(_log, Has.Some.Contains("back_guard_failed"));
+    }
+
+    [Test]
     public void Freeze_RequiresTheStorageTerminalAndClosesRegistration()
     {
         var registry = New();
