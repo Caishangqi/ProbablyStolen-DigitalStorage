@@ -50,6 +50,28 @@ internal sealed class GridDropAnchorTests
     }
 
     [Test]
+    public void FootprintCenter_UsesTheHitCellForAllFiveRejectedCounterDrops()
+    {
+        var releases = new[] { new PointerPoint(5.79f, 0.65f), new PointerPoint(7.20f, 0.67f),
+            new PointerPoint(3.48f, 0.74f), new PointerPoint(6.36f, 0.35f), new PointerPoint(0.74f, 0.28f) };
+        foreach (var release in releases)
+        {
+            Assert.That(GridDropAnchor.TryFromLocal(release, 1, 18, 4, out var anchor), Is.True);
+            var center = anchor.FootprintCenter(1, 1, 4);
+            Assert.That(center, Is.EqualTo(new PointerPoint(anchor.X + 0.5f, 2f)));
+            Assert.That(Math.Round(center.Y - 2f), Is.Zero, "Native snapping must start the bottle on row zero.");
+        }
+    }
+
+    [TestCase(1, 1, 56f, 40f)]
+    [TestCase(4, 1, 80f, 40f)]
+    [TestCase(2, 3, 64f, 56f)]
+    public void FootprintCenter_UsesOrientedSizeFromTopLeft(int width, int height, float x, float y)
+    {
+        Assert.That(new GridDropAnchor(3, 2).FootprintCenter(16, width, height), Is.EqualTo(new PointerPoint(x, y)));
+    }
+
+    [Test]
     public void TryFromLocal_RejectsOverflowBeforeConvertingToInteger()
     {
         Assert.That(GridDropAnchor.TryFromLocal(new PointerPoint(float.MaxValue, 0), float.Epsilon,

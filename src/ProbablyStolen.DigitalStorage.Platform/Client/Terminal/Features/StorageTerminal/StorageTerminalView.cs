@@ -138,7 +138,6 @@ internal sealed class StorageTerminalView : ITerminalView
         _grid.Build(builder, Columns * rows,
             index =>
             {
-                if (_dropInput?.SuppressesPrimaryClick == true) return;
                 Extract(index, IsShiftHeld() ? TerminalClick.All : TerminalClick.Stack);
             },
             index =>
@@ -180,7 +179,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _selectionBand = new TerminalSelectionBandView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
             "The terminal window root must be a RectTransform."));
         _dragTargetResolver = new TerminalDragTargetResolver(Window, () => !_suspended && _host.IsCurrentSession(),
-            _dragGhostTransform(), _selectionBandTransform());
+            _dragGhostTransform(), _selectionBandTransform(), Diagnostics);
         _dropAnchor = new TerminalDropAnchorView();
         _dragController = new TerminalDragController(() => IsDragSessionCurrent(),
             CurrentDragPage, () => _host.Pipeline.Revision,
@@ -486,7 +485,7 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         if (state == TerminalDragTargetState.Pending && target?.Anchor != null)
         {
-            _dropAnchor?.Show(target);
+            _dropAnchor?.Show(target, _dragController?.PreviewUsesAnchor == true);
             SetDropHighlight(TerminalDropHighlight.Hidden);
             return;
         }
@@ -712,10 +711,12 @@ internal sealed class StorageTerminalView : ITerminalView
         var suppressed = click == TerminalClick.Half
             ? _dropInput?.SuppressesViewInput
             : _dropInput?.SuppressesPrimaryClick;
-        if (suppressed == true || !_host.IsCurrentSession())
+        if (suppressed == true)
         {
+            Diagnostics?.Record("extract_click_suppressed", $"click={click} phase={_dragController?.Phase}");
             return;
         }
+        if (!_host.IsCurrentSession()) return;
 
         var page = _screen.GetPage();
         if (index < 0 || index >= page.Slots.Count) return;

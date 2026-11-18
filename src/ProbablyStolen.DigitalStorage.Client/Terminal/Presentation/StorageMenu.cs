@@ -218,6 +218,8 @@ public sealed class StorageMenu
             if (GetStackBySerial(member.Serial) != member.Key) break;
             last = extract(member, step.Pieces);
             moved = checked(moved + Math.Max(0, last.ExtractedAmount));
+            if (last.Status == TerminalExtractionStatus.Failed)
+                return TerminalExtractionResult.Create(last.Status, requested, moved, last.MessageKey);
             if (last.ExtractedAmount < step.Pieces) break;
         }
 

@@ -15,14 +15,16 @@ internal sealed class TerminalDragTargetResolver
     private readonly Func<bool> _isCurrentSession;
     private readonly Transform? _ghost;
     private readonly Transform? _band;
+    private readonly TerminalDiagnostics? _diagnostics;
 
     internal TerminalDragTargetResolver(CustomUIWindow window, Func<bool> isCurrentSession,
-        Transform? ghost = null, Transform? band = null)
+        Transform? ghost = null, Transform? band = null, TerminalDiagnostics? diagnostics = null)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _isCurrentSession = isCurrentSession ?? throw new ArgumentNullException(nameof(isCurrentSession));
         _ghost = ghost;
         _band = band;
+        _diagnostics = diagnostics;
     }
 
     internal bool TryResolveCandidate(PointerPoint pointer, out InventoryDropTarget? target,
@@ -61,18 +63,23 @@ internal sealed class TerminalDragTargetResolver
                     (element is GameGridInventory && !candidate.handler.gameObject.activeInHierarchy) ||
                     candidate.IsInsertLocked() || !GeneralHelper.MayPlayerInsertInto(candidate)) return false;
                 GridDropAnchor? anchor = null;
+                Vector2? worldPointer = null;
                 if (element is GameGridInventory)
                 {
-                    var canvas = candidate.rectTransform.GetComponentInParent<Canvas>();
+                    var rect = candidate.rectTransform;
+                    var canvas = rect.GetComponentInParent<Canvas>();
                     var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-                    if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(candidate.rectTransform,
-                            new Vector2(pointer.X, pointer.Y), camera, out var local) ||
-                        !GridDropAnchor.TryFromLocal(new PointerPoint(local.x, -local.y), UISettings.current.gridSize,
+                    if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(rect,
+                            new Vector2(pointer.X, pointer.Y), camera, out var world) ||
+                        !new PointerPoint(world.x, world.y).IsValid) return false;
+                    var local = rect.InverseTransformPoint(world);
+                    if (!GridDropAnchor.TryFromLocal(new PointerPoint(local.x, -local.y), UISettings.current.gridSize,
                             candidate.inventoryShape.width, candidate.inventoryShape.height, out var cell) ||
                         candidate.inventoryShape.Intersects(cell.X, cell.Y)) return false;
                     anchor = cell;
+                    worldPointer = world;
                 }
-                target = new InventoryDropTarget(candidate, anchor);
+                target = new InventoryDropTarget(candidate, anchor, worldPointer, _diagnostics);
                 state = TerminalDragTargetState.Pending;
                 return true;
             }

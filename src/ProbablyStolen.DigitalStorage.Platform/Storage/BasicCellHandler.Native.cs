@@ -21,7 +21,8 @@ internal sealed partial class BasicCellHandler
     /// cells that must not be mounted: locked, unavailable, still decoding, or unreadable. An unreadable cell becomes
     /// unavailable; it is never treated as empty.
     /// </summary>
-    internal static BasicCellInventory? GetCellInventory(GameItem cell, Action<string> log, StorageDiagnostics? diagnostics = null)
+    internal static BasicCellInventory? GetCellInventory(GameItem cell, Action<string> log, StorageDiagnostics? diagnostics = null,
+        Action? storedIdentityChanged = null)
     {
         if (!IsCell(cell) || SaveManager.IsDecoding || CellPages.Tabs(cell) == null) return null;
         var health = CellHealth.Get(cell);
@@ -34,7 +35,7 @@ internal sealed partial class BasicCellHandler
             var view = CellPages.ReadCached(cell, state);
             diagnostics?.VerboseOnce(cell, "cell_mounted", "Digital Storage: cell mounted.", () =>
                 NativeStorageDiagnosticContext.Cell(cell) + $" types={view.TypeCount} area={view.Usage.AreaUnits}");
-            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify, view));
+            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify, view, storedIdentityChanged));
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {

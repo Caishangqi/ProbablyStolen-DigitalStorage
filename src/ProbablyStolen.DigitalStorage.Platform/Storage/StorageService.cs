@@ -226,10 +226,11 @@ internal sealed class StorageService
         var inventories = new List<(GameItem, BasicCellInventory)>();
         if (!network.Online) return new MountedNetwork(network, storage, inventories);
 
+        Action storedIdentityChanged = () => _viewsStale = true;
         foreach (var cell in network.Cells)
         {
             if (migratePending) _migrate(cell);
-            var inventory = BasicCellHandler.GetCellInventory(cell, _log, _diagnostics);
+            var inventory = BasicCellHandler.GetCellInventory(cell, _log, _diagnostics, storedIdentityChanged);
             if (inventory == null) continue;
             var readOnly = CellHealth.Get(cell).Status == CellHealthStatus.ReadOnly;
             storage.Mount(inventory.View.Priority,
@@ -373,18 +374,19 @@ internal sealed class StorageService
         // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
         var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true), pieces);
         _contentsUncertain = false;
+        var failed = false;
         try
         {
             var result = mounted.Storage.Extract(key, long.MaxValue, destination, Actionable.Modulate, Player);
             if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
             {
-                _contentsUncertain = true;
+                failed = _contentsUncertain = true;
                 _log($"Digital Storage: extract left an item without an owner (key={key.Identifier}).");
             }
         }
         catch (Exception error)
         {
-            _contentsUncertain = true;
+            failed = _contentsUncertain = true;
             _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
         }
         finally
@@ -394,6 +396,8 @@ internal sealed class StorageService
         }
 
         var moved = destination.Accepted;
+        if (failed)
+            return TerminalExtractionResult.Create(TerminalExtractionStatus.Failed, pieces, moved, UnavailableKey);
         if (moved == 0)
         {
             return TerminalExtractionResult.Create(TerminalExtractionStatus.TargetRejected, pieces, 0,
@@ -420,7 +424,8 @@ internal sealed class StorageService
         if (!mounted.Network.Online)
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, requested, 0, UnavailableKey);
 
-        var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true, firstAnchor: target.Anchor);
+        var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true,
+            pointPlacement: target.ForSinglePlacement(requested), useNativeDragSearch: true);
         long moved = 0;
         var status = TerminalExtractionStatus.Success;
         _contentsUncertain = false;

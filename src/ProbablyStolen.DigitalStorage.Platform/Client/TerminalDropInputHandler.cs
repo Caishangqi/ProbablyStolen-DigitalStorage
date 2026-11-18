@@ -220,6 +220,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
     {
         if (_ownsGesture && keysReleased.Contains(_gestureKey))
         {
+            _releaseFrame = Time.frameCount;
             var allowedClick = _allowsPrimaryClick?.Invoke() == true;
             _ownsGesture = false;
             var consumed = _gesture?.Invoke(Gesture(PointerGesturePhase.Release, GestureButton.Primary,

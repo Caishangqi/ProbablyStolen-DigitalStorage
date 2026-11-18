@@ -8,6 +8,7 @@ using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;
 
@@ -45,6 +46,8 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
             fixture.Candidates, 3), Is.True);
         controller.Move(Point(20, 20));
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.DraggingSelection));
+        Assert.That(controller.PreviewUsesAnchor, Is.False, "A multi-item selection previews the whole grid.");
         Assert.That(controller.Release(Point(20, 20)), Is.True);
 
         Assert.Multiple((Action)(() =>
@@ -83,7 +86,11 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
             fixture.Candidates, 3), Is.True);
         controller.Move(Point(9, 9));
-        controller.Wheel(-5, Point(9, 9));
+        Assert.That(controller.PreviewUsesAnchor, Is.False, "Dragging one icon can still request multiple pieces.");
+        controller.Wheel(-10, Point(9, 9));
+        Assert.That(controller.PreviewUsesAnchor, Is.True);
+        controller.Wheel(5, Point(9, 9));
+        Assert.That(controller.PreviewUsesAnchor, Is.False);
         Assert.That(controller.Release(Point(9, 9)), Is.True);
 
         Assert.Multiple((Action)(() =>
@@ -523,8 +530,8 @@ internal sealed class TerminalDragControllerTests
     {
         var fixture = CreateFixture();
         var inventory = OpaqueTarget().Inventory;
-        var hover = new InventoryDropTarget(inventory, new GridDropAnchor(1, 1));
-        var released = new InventoryDropTarget(inventory, new GridDropAnchor(4, 2));
+        var hover = new InventoryDropTarget(inventory, new GridDropAnchor(1, 1), new Vector2 { x = 15f, y = 15f });
+        var released = new InventoryDropTarget(inventory, new GridDropAnchor(4, 2), new Vector2 { x = 45f, y = 25f });
         InventoryDropTarget? submitted = null;
         var resolutions = 0;
         var submissions = 0;
@@ -553,6 +560,11 @@ internal sealed class TerminalDragControllerTests
             Assert.That(resolutions, Is.EqualTo(2));
             Assert.That(submitted, Is.SameAs(released));
             Assert.That(submitted!.Anchor, Is.EqualTo(new GridDropAnchor(4, 2)));
+            var singlePlacement = submitted.ForSinglePlacement(1);
+            Assert.That(singlePlacement?.WorldPointer?.x, Is.EqualTo(45f));
+            Assert.That(singlePlacement?.WorldPointer?.y, Is.EqualTo(25f));
+            Assert.That(submitted.ForSinglePlacement(11), Is.Null);
+            Assert.That(OpaqueTarget().ForSinglePlacement(1), Is.Null);
             Assert.That(submissions, Is.EqualTo(1));
             Assert.That(refreshes, Is.EqualTo(1));
         }));
@@ -622,20 +634,28 @@ internal sealed class TerminalDragControllerTests
         var screen = new StorageScreen(2, 1);
         screen.SetEntriesInOrder(fixture.Menu.GetEntries());
         long moved = 0;
-        var controller = CreateController(fixture, OpaqueTarget(),
+        var anchorPreviews = new List<bool>();
+        TerminalDragController? controller = null;
+        controller = CreateController(fixture, OpaqueTarget(),
             (shown, current, ids, revision, amount) => fixture.Menu.CreateDragBatch(shown, current, ids, revision, amount),
             (batch, _) =>
             {
                 moved = batch.RequestedPieces;
                 return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, moved, moved, "done");
-            }, currentPage: () => screen.GetPage(0));
-        StartSingleDrag(controller, fixture);
-        UpdateFruitQuantity(fixture, screen, 1);
+            }, currentPage: () => screen.GetPage(0), feedback: (state, _) =>
+            {
+                if (state == TerminalDragTargetState.Pending) anchorPreviews.Add(controller!.PreviewUsesAnchor);
+            });
+        Assert.That(controller.Press(Point(17, 5), TerminalDragRegion.Slot, "group-stone", screen.GetPage(0),
+            fixture.Candidates, 3), Is.True);
+        controller.Move(Point(20, 20));
+        UpdateQuantity(fixture, screen, serial: 3, amount: 1);
         controller.SynchronizePage();
+        Assert.That(anchorPreviews, Is.EqualTo(new[] { false, true }));
         Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.DraggingSingle));
         Assert.That(controller.OwnsGesture, Is.True);
         Assert.That(controller.Release(Point(20, 20)), Is.True);
-        Assert.That(moved, Is.EqualTo(6));
+        Assert.That(moved, Is.EqualTo(1));
     }
 
     [Test]
@@ -654,10 +674,13 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.SelectedIds, Is.Empty);
     }
 
-    private static void UpdateFruitQuantity(Fixture fixture, StorageScreen screen, long firstAmount)
+    private static void UpdateFruitQuantity(Fixture fixture, StorageScreen screen, long firstAmount) =>
+        UpdateQuantity(fixture, screen, serial: 1, amount: firstAmount);
+
+    private static void UpdateQuantity(Fixture fixture, StorageScreen screen, long serial, long amount)
     {
         var entries = fixture.Menu.GetEntries().SelectMany(group => group.Members).Select(entry =>
-            new TerminalEntry(entry.Key, entry.Serial == 1 ? firstAmount : entry.Amount, entry.DisplayName,
+            new TerminalEntry(entry.Key, entry.Serial == serial ? amount : entry.Amount, entry.DisplayName,
                 entry.SpriteKey, entry.SpriteWidth, entry.SpriteHeight, entry.Serial, entry.Document, entry.TotalUnits));
         fixture.Menu.BroadcastChanges(new TerminalInventorySnapshot(true, entries.ToArray()));
         screen.UpdateEntriesInOrder(fixture.Menu.GetEntries());
@@ -686,7 +709,8 @@ internal sealed class TerminalDragControllerTests
         Func<StorageScreenPage>? currentPage = null,
         Func<long>? presentationRevision = null,
         TerminalDragResolveTarget? resolve = null,
-        Func<PointerPoint, bool>? gestureArea = null)
+        Func<PointerPoint, bool>? gestureArea = null,
+        Action<TerminalDragTargetState, InventoryDropTarget?>? feedback = null)
     {
         return new TerminalDragController(
             session ?? (() => true),
@@ -705,7 +729,7 @@ internal sealed class TerminalDragControllerTests
             _ => { },
             (_, _) => { },
             () => { },
-            (_, _) => { },
+            feedback ?? ((_, _) => { }),
             gestureArea);
     }
 

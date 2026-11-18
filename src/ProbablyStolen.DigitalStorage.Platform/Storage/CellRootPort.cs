@@ -4,7 +4,6 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
-using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
@@ -30,17 +29,21 @@ internal sealed class CellRootPort : ICellPagesPort
     private readonly GameItem _cell;
     private readonly Func<GameItem, ItemKey?> _identify;
     private readonly CellView? _view;
+    private readonly Action? _storedIdentityChanged;
 
     /// <param name="cell">The cell whose pages this port moves roots on.</param>
     /// <param name="identify">Reads a root's type.</param>
     /// <param name="view">
     /// The view whose slot types locate roots of one type; without one, every root's type is read.
     /// </param>
-    internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify, CellView? view = null)
+    /// <param name="storedIdentityChanged">Marks the mounted views stale if native move callbacks change the key of a stored root.</param>
+    internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify, CellView? view = null,
+        Action? storedIdentityChanged = null)
     {
         _cell = cell ?? throw new ArgumentNullException(nameof(cell));
         _identify = identify ?? throw new ArgumentNullException(nameof(identify));
         _view = view;
+        _storedIdentityChanged = storedIdentityChanged;
     }
 
     /// <inheritdoc />
@@ -68,9 +71,16 @@ internal sealed class CellRootPort : ICellPagesPort
         NativeItemMove.Report(result, item, "store");
         if (result.Outcome == ItemMoveOutcome.Moved)
         {
-            return item.parentInventory == target && item.modifiedShape.minX == x && item.modifiedShape.minY == y
-                ? TransferStep.Moved
-                : TransferStep.Unowned;
+            if (item.parentInventory != target || item.modifiedShape.minX != x || item.modifiedShape.minY != y)
+                return TransferStep.Unowned;
+
+            // Native detach and attach callbacks can change a root's features without changing its slot or units.
+            if (_storedIdentityChanged != null && !root.Key.Equals(_identify(item)))
+            {
+                CellInventoryCache.Forget(_cell);
+                _storedIdentityChanged();
+            }
+            return TransferStep.Moved;
         }
 
         return item.parentInventory == source && source != null && NativeItemMove.IsSafe(item)
@@ -236,8 +246,8 @@ internal sealed class InventoryRootSink : IRootSink
 {
     private readonly GameGridInventory _destination;
     private readonly bool _wholeRootOnly;
-    private readonly GridDropAnchor? _firstAnchor;
-    private bool _placedFirst;
+    private readonly InventoryDropTarget? _pointPlacement;
+    private readonly bool _useNativeDragSearch;
 
     /// <summary>Creates a sink into a native grid inventory.</summary>
     /// <param name="destination">The inventory that receives roots.</param>
@@ -245,12 +255,15 @@ internal sealed class InventoryRootSink : IRootSink
     /// Whether a root the destination can only take in part stays stored. The native partial accept splits a new item
     /// off without copying the root's full state, so the terminal never asks for it.
     /// </param>
-    /// <param name="firstAnchor">An optional first-root cell; it is consumed only after a confirmed whole-root move.</param>
-    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false, GridDropAnchor? firstAnchor = null)
+    /// <param name="pointPlacement">The release cell anchoring a single drop onto the visible grid.</param>
+    /// <param name="useNativeDragSearch">Whether to use native orientation search within the resolved drop target.</param>
+    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false,
+        InventoryDropTarget? pointPlacement = null, bool useNativeDragSearch = false)
     {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
         _wholeRootOnly = wholeRootOnly;
-        _firstAnchor = firstAnchor;
+        _pointPlacement = pointPlacement;
+        _useNativeDragSearch = useNativeDragSearch;
     }
 
     /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
@@ -266,15 +279,23 @@ internal sealed class InventoryRootSink : IRootSink
     public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
     {
         if (mode == Actionable.Simulate)
-            return IsTargetUsable() ? TransferStep.Moved : TransferStep.Rejected(StoreRejection.PhysicalLimit);
+        {
+            if (IsTargetUsable()) return TransferStep.Moved;
+            _pointPlacement?.RecordPlacement("target_unavailable_preflight");
+            return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+        }
 
         var item = (root.Origin as INativeRootSource)?.Resolve(root)
             ?? throw new InvalidOperationException($"The root {root} cannot be resolved.");
         var page = item.parentInventory;
         if (page == null || !Owns(page, item)) return TransferStep.Unowned;
-        if (!IsTargetUsable()) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
-
         var original = item.modifiedShape;
+        if (!IsTargetUsable())
+        {
+            _pointPlacement?.RecordPlacement("target_unavailable", original, requestedUnits: item.unitCount);
+            return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+        }
+
         var requested = item.unitCount;
         var moved = 0;
         SlotMarker? slot = null;
@@ -283,18 +304,28 @@ internal sealed class InventoryRootSink : IRootSink
         {
             if (requested <= 0) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
             if (!page.Expel(item))
+            {
+                _pointPlacement?.RecordPlacement("source_expel_rejected", original, requestedUnits: requested);
                 return Owns(page, item) ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Unowned;
+            }
 
             // The target can change between the initial qualification and the actual native move.
             if (IsTargetUsable())
             {
-                slot = !_placedFirst && _firstAnchor.HasValue
-                    ? _destination.TryInventorySlot(item, requested,
-                        new GridShapeBuilder(item.modifiedShape).SetPosition(_firstAnchor.Value.X, _firstAnchor.Value.Y).Build(),
-                        item.modifiedState)
-                    : _destination.TryFindOneValidInventorySlot(item, keepOrientation: true);
-                if (slot != null && (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
+                var shape = item.modifiedShape;
+                var pointCenter = _pointPlacement?.CenterFor(shape);
+                slot = pointCenter is { } center
+                    ? _destination.TryInventorySlot(item, requested, center, shape, item.modifiedState)
+                    : _destination.TryFindOneValidInventorySlot(item, keepOrientation: !_useNativeDragSearch);
+                // Native search may return a slot inside an item in the grid. Drag targets name one inventory.
+                if (slot != null && (!_useNativeDragSearch || slot.inventory == _destination) &&
+                    (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
                     moved = slot.TryAcceptOnce(requested);
+                _pointPlacement?.RecordPlacement("native_slot", shape, pointCenter, slot, requested, moved);
+            }
+            else
+            {
+                _pointPlacement?.RecordPlacement("target_unavailable_after_expel", original, requestedUnits: requested);
             }
         }
         catch (Exception exception)
@@ -310,7 +341,6 @@ internal sealed class InventoryRootSink : IRootSink
         var targetOwnsAcceptedItem = moved > 0 && OwnsTarget(slot, item);
         if (moved == requested && targetOwnsAcceptedItem)
         {
-            _placedFirst = true;
             MovedUnits += moved;
             return TransferStep.Moved;
         }

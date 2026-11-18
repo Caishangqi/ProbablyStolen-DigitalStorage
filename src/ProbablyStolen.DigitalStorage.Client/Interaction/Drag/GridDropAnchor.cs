@@ -2,7 +2,7 @@ using System;
 
 namespace ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 
-/// <summary>The top-left cell for the first root of a drop, independent of its actual shape.</summary>
+/// <summary>A cell in a grid, measured from its top-left corner.</summary>
 public readonly struct GridDropAnchor : IEquatable<GridDropAnchor>
 {
     /// <summary>Creates a nonnegative grid-cell anchor.</summary>
@@ -18,6 +18,10 @@ public readonly struct GridDropAnchor : IEquatable<GridDropAnchor>
     public int X { get; }
     /// <summary>Gets the row from the grid's top edge.</summary>
     public int Y { get; }
+
+    /// <summary>Gets the center of a footprint whose top-left cell is this anchor, in grid-local coordinates.</summary>
+    public PointerPoint FootprintCenter(float cellSize, int width, int height) =>
+        new((X + width * 0.5f) * cellSize, (Y + height * 0.5f) * cellSize);
 
     /// <summary>Maps top-left-relative local coordinates, with Y increasing downwards, to a cell.</summary>
     public static bool TryFromLocal(PointerPoint point, float cellSize, int columns, int rows,

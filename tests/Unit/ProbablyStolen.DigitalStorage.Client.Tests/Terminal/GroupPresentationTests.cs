@@ -134,6 +134,31 @@ public sealed class GroupPresentationTests
         Assert.That(result.Status, Is.EqualTo(TerminalExtractionStatus.Success));
     }
 
+    [TestCase(0)]
+    [TestCase(1)]
+    public void GroupInteraction_MemberFailureStopsAndPreservesActualMovedCount(int movedOnFailure)
+    {
+        var menu = MenuWith(("bottle#a", "Bottle", 2), ("bottle#b", "Bottle", 1), ("bottle#c", "Bottle", 1));
+        menu.SetProjection(ByIdentifier);
+        menu.SetSort(TerminalSortOrder.Amount, TerminalSortDirection.Descending);
+        var calls = 0;
+
+        var result = menu.HandleGroupInteraction(menu.GetEntries().Single(), 4, (_, pieces) =>
+        {
+            calls++;
+            return calls == 1
+                ? TerminalExtractionResult.Create(TerminalExtractionStatus.Success, pieces, pieces, "done")
+                : TerminalExtractionResult.Create(TerminalExtractionStatus.Failed, pieces, movedOnFailure,
+                    "terminal_storage_unavailable");
+        });
+
+        Assert.That(calls, Is.EqualTo(2));
+        Assert.That(result.Status, Is.EqualTo(TerminalExtractionStatus.Failed));
+        Assert.That(result.MessageKey, Is.EqualTo("terminal_storage_unavailable"));
+        Assert.That(result.RequestedAmount, Is.EqualTo(4));
+        Assert.That(result.ExtractedAmount, Is.EqualTo(2 + movedOnFailure));
+    }
+
     [Test]
     public void GroupInteraction_StopsAtTheFirstShortMemberAndKeepsWhatMoved()
     {

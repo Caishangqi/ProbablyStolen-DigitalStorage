@@ -35,6 +35,7 @@ internal sealed class TerminalDragController
     private IReadOnlyList<DragSelectionCandidate<string>> _candidates = Array.Empty<DragSelectionCandidate<string>>();
     private IReadOnlyList<string> _selected = Array.Empty<string>();
     private PointerPoint _origin;
+    private PointerPoint? _lastDragPoint;
     private string? _pressedId;
     private float _threshold;
     private double _wheelRemainder;
@@ -72,6 +73,12 @@ internal sealed class TerminalDragController
     internal IReadOnlyList<string> SelectedIds => _selected;
     internal IReadOnlyList<DragSelectionCandidate<string>> Candidates => _candidates;
     internal PointerPoint Origin => _origin;
+    internal bool PreviewUsesAnchor => Phase switch
+    {
+        TerminalDragPhase.DraggingSingle => _amount.RequestedPieces == 1,
+        TerminalDragPhase.DraggingSelection => _selected.Count == 1 && TryAvailable(out var available) && available == 1,
+        _ => false
+    };
 
     internal bool Press(PointerPoint point, TerminalDragRegion region, string? slotId, StorageScreenPage page,
         IReadOnlyList<DragSelectionCandidate<string>> candidates, float? nativeThreshold)
@@ -140,8 +147,16 @@ internal sealed class TerminalDragController
         }
         if (Phase != TerminalDragPhase.DraggingSingle && Phase != TerminalDragPhase.DraggingSelection) return;
         if (Phase == TerminalDragPhase.DraggingSingle && !ClampAmount()) { Cancel(); return; }
-        _ghost(point, Phase == TerminalDragPhase.DraggingSingle
-            ? _amount.RequestedPieces.ToString(CultureInfo.InvariantCulture) : null);
+        _lastDragPoint = point;
+        UpdateGhost(point);
+        UpdateTargetFeedback(point);
+    }
+
+    private void UpdateGhost(PointerPoint point) => _ghost(point, Phase == TerminalDragPhase.DraggingSingle
+        ? _amount.RequestedPieces.ToString(CultureInfo.InvariantCulture) : null);
+
+    private void UpdateTargetFeedback(PointerPoint point)
+    {
         _resolve(point, out var target, out var state);
         _feedback(state, target);
     }
@@ -229,12 +244,18 @@ internal sealed class TerminalDragController
             Cancel();
             return;
         }
+        var previousAmount = _amount.RequestedPieces;
         if ((Phase == TerminalDragPhase.Waiting || Phase == TerminalDragPhase.DraggingSingle) && !ClampAmount())
         {
             Cancel();
             return;
         }
         _highlight(_selected);
+        if (_owned && _lastDragPoint is { } point)
+        {
+            if (_amount.RequestedPieces != previousAmount) UpdateGhost(point);
+            UpdateTargetFeedback(point);
+        }
     }
 
     internal void Cancel()
@@ -250,6 +271,7 @@ internal sealed class TerminalDragController
         _selection.Cancel();
         _amount.End();
         _wheelRemainder = 0;
+        _lastDragPoint = null;
         _band(null);
         _hideGhost();
         _highlight(_selected);
