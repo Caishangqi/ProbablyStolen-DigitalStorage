@@ -22,7 +22,8 @@ internal sealed class StorageTerminalServices
         Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
-        Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, Action<string> writeDiagnostic,
+        Func<ItemKey, GameItem?> findPreviewSample, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
+        Action<string> writeDiagnostic,
         Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search)
     {
         Text = text ?? throw new ArgumentNullException(nameof(text));
@@ -35,6 +36,7 @@ internal sealed class StorageTerminalServices
         StoreSingle = storeSingle ?? throw new ArgumentNullException(nameof(storeSingle));
         StoreRefusals = storeRefusals ?? throw new ArgumentNullException(nameof(storeRefusals));
         FindSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
+        FindPreviewSample = findPreviewSample ?? throw new ArgumentNullException(nameof(findPreviewSample));
         DiagnosticsEnabled = diagnosticsEnabled ?? throw new ArgumentNullException(nameof(diagnosticsEnabled));
         IdentityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
         WriteDiagnostic = writeDiagnostic ?? throw new ArgumentNullException(nameof(writeDiagnostic));
@@ -59,6 +61,7 @@ internal sealed class StorageTerminalServices
     /// </summary>
     internal Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> StoreRefusals { get; }
     internal Func<ItemKey, GameItem?> FindSample { get; }
+    internal Func<ItemKey, GameItem?> FindPreviewSample { get; }
     internal Func<bool> DiagnosticsEnabled { get; }
 
     /// <summary>Gets whether clicked slots write their full item identity to the log.</summary>

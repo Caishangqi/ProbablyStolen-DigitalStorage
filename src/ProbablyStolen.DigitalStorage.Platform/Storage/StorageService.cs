@@ -42,7 +42,7 @@ internal sealed class StorageService
     private bool _viewsStale;
     // Set when a move ended without being accounted for: a failed native move or an exception during an operation.
     private bool _contentsUncertain;
-    private readonly Dictionary<ItemKey, GameItem> _samples = new();
+    private readonly ConditionalWeakTable<GameItem, Dictionary<ItemKey, GameItem>> _terminalSamples = new();
     // Name, picture and search text per type. They follow from the stored state, which the key encodes, and from the
     // language; only the amounts change between reads.
     private Dictionary<ItemKey, TerminalEntry> _entryTexts = new();
@@ -104,6 +104,8 @@ internal sealed class StorageService
     /// </summary>
     internal TerminalInventorySnapshot GetCachedInventory(GameItem terminal)
     {
+        var samples = _terminalSamples.GetOrCreateValue(terminal);
+        samples.Clear();
         var mounted = GetInventory(terminal, migratePending: false);
         if (!mounted.Network.Online)
         {
@@ -124,12 +126,11 @@ internal sealed class StorageService
             }
         }
 
-        _samples.Clear();
         foreach (var (cell, inventory) in mounted.Inventories)
         {
             foreach (var (key, root) in RootsByType(cell, inventory.View))
             {
-                if (!_samples.ContainsKey(key)) _samples[key] = root;
+                if (!samples.ContainsKey(key)) samples[key] = root;
             }
         }
 
@@ -137,7 +138,7 @@ internal sealed class StorageService
         var entries = new List<TerminalEntry>(totals.Count);
         foreach (var pair in totals)
         {
-            if (!_samples.TryGetValue(pair.Key, out var sample)) continue;
+            if (!samples.TryGetValue(pair.Key, out var sample)) continue;
             // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
             if (FallbackReasons.TryGetValue(pair.Key, out var reason) && _reportedFallbacks.Add((sample.identifier, reason)))
                 _log($"Digital Storage: identity fallback item={sample.identifier} reason={reason}");
@@ -156,15 +157,13 @@ internal sealed class StorageService
     internal void ForgetEntryTexts() => _entryTexts = new Dictionary<ItemKey, TerminalEntry>();
 
     /// <summary>
-    /// Finds a stored item of a type, used for native tooltips and item pictures. The last read's sample is reused
-    /// while it still sits on a storage page; otherwise the cells are searched by their recorded slot types.
+    /// Finds an actual root of a type in the terminal's storage, used for native tooltips and item pictures. The root
+    /// remains in its locked page; this method never creates a display clone. The last read's root is reused while it
+    /// still sits on a storage page; otherwise the cells are searched by their recorded slot types.
     /// </summary>
     internal GameItem? FindSample(GameItem terminal, ItemKey key)
     {
-        if (_samples.TryGetValue(key, out var cached) && IsStored(cached))
-        {
-            return cached;
-        }
+        if (FindPreviewSample(terminal, key) is { } cached) return cached;
 
         var mounted = GetInventory(terminal, migratePending: false);
         foreach (var (cell, inventory) in mounted.Inventories)
@@ -178,6 +177,11 @@ internal sealed class StorageService
 
         return null;
     }
+
+    // Hover uses the terminal's last snapshot and treats a missing sample as unknown without mounting the network.
+    internal GameItem? FindPreviewSample(GameItem terminal, ItemKey key) =>
+        _terminalSamples.TryGetValue(terminal, out var samples) && samples.TryGetValue(key, out var root) &&
+        IsStored(root) ? root : null;
 
     // Each stored root with its type: a strip root's type is its slot record; anchor and legacy roots are read.
     private static IEnumerable<(ItemKey Key, GameItem Root)> RootsByType(GameItem cell, CellView view)
@@ -425,7 +429,8 @@ internal sealed class StorageService
             return TerminalExtractionResult.Create(TerminalExtractionStatus.Offline, requested, 0, UnavailableKey);
 
         var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true,
-            pointPlacement: target.ForSinglePlacement(requested), useNativeDragSearch: true);
+            pointPlacement: target.ForSinglePlacement(requested), useNativeDragSearch: true,
+            containerTarget: target.HoveredItem);
         long moved = 0;
         var status = TerminalExtractionStatus.Success;
         _contentsUncertain = false;

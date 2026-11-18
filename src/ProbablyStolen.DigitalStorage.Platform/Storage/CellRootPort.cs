@@ -238,32 +238,35 @@ internal sealed class ItemListSource : INativeRootSource
 }
 
 /// <summary>
-/// Destination for extraction into a native grid inventory, such as the player's inventory. The page is
-/// remove-locked, so the native slot search only works once the root has left it; whatever the destination does
-/// not take goes straight back to its page position.
+/// Destination for extraction into a native player-accessible inventory. Locked source pages are released only during
+/// acceptance, and any root the destination does not take goes back to its page position.
 /// </summary>
 internal sealed class InventoryRootSink : IRootSink
 {
-    private readonly GameGridInventory _destination;
+    private readonly GameInventory _destination;
     private readonly bool _wholeRootOnly;
     private readonly InventoryDropTarget? _pointPlacement;
     private readonly bool _useNativeDragSearch;
+    private readonly GameItemElement? _containerTarget;
 
-    /// <summary>Creates a sink into a native grid inventory.</summary>
-    /// <param name="destination">The inventory that receives roots.</param>
+    /// <summary>Creates a sink into a native inventory.</summary>
+    /// <param name="destination">The native inventory that receives roots.</param>
     /// <param name="wholeRootOnly">
     /// Whether a root the destination can only take in part stays stored. The native partial accept splits a new item
     /// off without copying the root's full state, so the terminal never asks for it.
     /// </param>
     /// <param name="pointPlacement">The release cell anchoring a single drop onto the visible grid.</param>
     /// <param name="useNativeDragSearch">Whether to use native orientation search within the resolved drop target.</param>
-    internal InventoryRootSink(GameGridInventory destination, bool wholeRootOnly = false,
-        InventoryDropTarget? pointPlacement = null, bool useNativeDragSearch = false)
+    /// <param name="containerTarget">The visible container icon authorizing insertion while its window is closed.</param>
+    internal InventoryRootSink(GameInventory destination, bool wholeRootOnly = false,
+        InventoryDropTarget? pointPlacement = null, bool useNativeDragSearch = false,
+        GameItemElement? containerTarget = null)
     {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
         _wholeRootOnly = wholeRootOnly;
         _pointPlacement = pointPlacement;
         _useNativeDragSearch = useNativeDragSearch;
+        _containerTarget = containerTarget;
     }
 
     /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
@@ -316,7 +319,9 @@ internal sealed class InventoryRootSink : IRootSink
                 var pointCenter = _pointPlacement?.CenterFor(shape);
                 slot = pointCenter is { } center
                     ? _destination.TryInventorySlot(item, requested, center, shape, item.modifiedState)
-                    : _destination.TryFindOneValidInventorySlot(item, keepOrientation: !_useNativeDragSearch);
+                    : _destination is GameGridInventory grid
+                        ? grid.TryFindOneValidInventorySlot(item, keepOrientation: !_useNativeDragSearch)
+                        : _destination.TryInventorySlot(item, requested, shape, item.modifiedState);
                 // Native search may return a slot inside an item in the grid. Drag targets name one inventory.
                 if (slot != null && (!_useNativeDragSearch || slot.inventory == _destination) &&
                     (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
@@ -356,9 +361,7 @@ internal sealed class InventoryRootSink : IRootSink
         return moved == 0 ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Returned;
     }
 
-    private bool IsTargetUsable() =>
-        _destination.handler != null && _destination.handler.gameObject.activeInHierarchy &&
-        !_destination.IsInsertLocked() && GeneralHelper.MayPlayerInsertInto(_destination);
+    private bool IsTargetUsable() => InventoryDropTarget.IsUsable(_destination, _containerTarget);
 
     private static bool Owns(GameInventory inventory, GameItem item) =>
         item.parentInventory == inventory && inventory.childItems.Contains(item);

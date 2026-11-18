@@ -77,6 +77,7 @@ internal sealed class TerminalItem
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
                 (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
+                key => _networkPower.Storage.FindPreviewSample(item, key),
                 _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),

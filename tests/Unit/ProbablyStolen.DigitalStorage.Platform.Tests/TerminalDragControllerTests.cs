@@ -526,6 +526,22 @@ internal sealed class TerminalDragControllerTests
     }
 
     [Test]
+    public void InventoryDropTarget_CanRepresentNativeSlotAndHoveredContainer()
+    {
+        var inventory = (GameSlotInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory));
+        var hoveredItem = (GameItemElement)RuntimeHelpers.GetUninitializedObject(typeof(GameItemElement));
+        var target = new InventoryDropTarget(inventory, hoveredItem: hoveredItem);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(target.Inventory, Is.SameAs(inventory));
+            Assert.That(target.HoveredItem, Is.SameAs(hoveredItem));
+            Assert.That(target.Anchor, Is.Null);
+            Assert.That(target.ForSinglePlacement(1), Is.Null);
+        }));
+    }
+
+    [Test]
     public void Release_UsesNewlyResolvedAnchorRatherThanHoverCell()
     {
         var fixture = CreateFixture();
@@ -547,17 +563,19 @@ internal sealed class TerminalDragControllerTests
             }, (_, _) => refreshes++,
             resolve: (PointerPoint _, out InventoryDropTarget? target, out TerminalDragTargetState state) =>
             {
-                target = ++resolutions == 1 ? hover : released;
+                resolutions++;
+                target = resolutions == 3 ? released : hover;
                 state = TerminalDragTargetState.Pending;
                 return true;
             });
         StartSingleDrag(controller, fixture);
+        controller.Wheel(-100, Point(20, 20));
         Assert.That(submissions, Is.Zero, "A hover marker is not an extraction.");
         controller.Release(Point(90, 90));
         controller.Release(Point(90, 90));
         Assert.Multiple((Action)(() =>
         {
-            Assert.That(resolutions, Is.EqualTo(2));
+            Assert.That(resolutions, Is.EqualTo(3));
             Assert.That(submitted, Is.SameAs(released));
             Assert.That(submitted!.Anchor, Is.EqualTo(new GridDropAnchor(4, 2)));
             var singlePlacement = submitted.ForSinglePlacement(1);
@@ -568,6 +586,49 @@ internal sealed class TerminalDragControllerTests
             Assert.That(submissions, Is.EqualTo(1));
             Assert.That(refreshes, Is.EqualTo(1));
         }));
+    }
+
+    [Test]
+    public void Preview_ReusesBatchUntilAmountChangesAndReleaseRebuilds()
+    {
+        var fixture = CreateFixture();
+        var target = new InventoryDropTarget(OpaqueTarget().Inventory, new GridDropAnchor(2, 3), isAnchorValid: false);
+        var builds = 0;
+        var submissions = 0;
+        var feedback = TerminalDragTargetState.None;
+        GridDropAnchor? submittedAnchor = target.Anchor;
+        var controller = CreateController(fixture, target,
+            (shown, current, ids, revision, amount) =>
+            {
+                builds++;
+                return fixture.Menu.CreateDragBatch(shown, current, ids, revision, amount);
+            },
+            (batch, destination) =>
+            {
+                submissions++;
+                submittedAnchor = destination.Anchor;
+                return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, batch.RequestedPieces,
+                    batch.RequestedPieces, "done");
+            }, feedback: (state, _) => feedback = state);
+        StartSingleDrag(controller, fixture);
+        Assert.That(feedback, Is.EqualTo(TerminalDragTargetState.Pending));
+        var first = controller.CreatePreviewBatch();
+        controller.Move(Point(21, 21));
+        Assert.That(controller.CreatePreviewBatch(), Is.SameAs(first));
+        Assert.That(builds, Is.EqualTo(1));
+        controller.Halve(Point(21, 21));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(6));
+        Assert.That(builds, Is.EqualTo(2));
+        Assert.That(controller.Release(Point(21, 21)), Is.True);
+        Assert.That(builds, Is.EqualTo(3));
+        Assert.That(submissions, Is.EqualTo(1));
+        Assert.That(submittedAnchor, Is.Null);
+
+        StartSingleDrag(controller, fixture);
+        controller.Wheel(-100, Point(21, 21));
+        Assert.That(feedback, Is.EqualTo(TerminalDragTargetState.Rejected));
+        Assert.That(controller.Release(Point(21, 21)), Is.True);
+        Assert.That(submissions, Is.EqualTo(1));
     }
 
     [Test]

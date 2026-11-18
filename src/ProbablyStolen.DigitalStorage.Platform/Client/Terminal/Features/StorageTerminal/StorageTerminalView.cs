@@ -30,6 +30,7 @@ internal sealed class StorageTerminalView : ITerminalView
 {
     private const int Columns = TerminalWindowMetrics.Columns;
     private const int CellPixels = TerminalWindowMetrics.CellPixels;
+    private const float PreviewRefreshInterval = 0.2f;
     private const float Gap = 4f;
     private static readonly char[] LineBreaks = { (char)13, (char)10 };
 
@@ -41,6 +42,7 @@ internal sealed class StorageTerminalView : ITerminalView
     private readonly ItemSlotGrid _grid;
     private readonly SlotDecorationLayer _decorations;
     private readonly StorageMenu _menu = new();
+    private readonly TerminalPotentialTargetHighlightView _potentialTargetHighlight;
     private const int MaxDumpedMembers = 4;
     private readonly EntryAttributeReader _attributes;
     private long _pipelineRevision = -1;
@@ -64,9 +66,18 @@ internal sealed class StorageTerminalView : ITerminalView
     private TerminalDropInputHandler? _dropInput;
     private TerminalDragController? _dragController;
     private TerminalDragTargetResolver? _dragTargetResolver;
-    private TerminalDropAnchorView? _dropAnchor;
+    private readonly TerminalTargetHoverView _targetHover = new();
     private DragGhostView? _dragGhost;
+    private TerminalDragBatch? _previewBatch;
+    private InventoryDropTarget? _previewTarget;
+    private GridDropAnchor? _previewAnchor;
+    private bool? _previewAdmission;
+    private float _previewCheckedAt;
+    private OverlayHandler? _targetTooltipOverlay;
+    private RichText? _targetTooltip;
+    private Vector2 _targetTooltipOffset;
     private bool _multiGhostPrepared;
+    private bool _potentialTargetsPrepared;
     private TerminalSelectionBandView? _selectionBand;
     private TerminalInventoryRefreshHandler? _refreshHandler;
     private IDisposable? _networkSubscription;
@@ -95,6 +106,7 @@ internal sealed class StorageTerminalView : ITerminalView
             (entry, error) => _pictureCapture.Failed(entry.Key, entry.SpriteKey, error));
         _grid = new ItemSlotGrid(_pictureCapture, showBadge: true, CellPixels);
         _decorations = new SlotDecorationLayer(_grid, key => _host.Icons.Overlay(key), services.WriteDiagnostic);
+        _potentialTargetHighlight = new TerminalPotentialTargetHighlightView(services.WriteDiagnostic);
         _attributes = new EntryAttributeReader(services.AttributeCaptures, services.FindSample, services.WriteDiagnostic);
         _menu.SetProjection(Project);
         _screen.SetDecorator(group => _host.Pipeline.Decorate(group, _host.Context));
@@ -180,7 +192,6 @@ internal sealed class StorageTerminalView : ITerminalView
             "The terminal window root must be a RectTransform."));
         _dragTargetResolver = new TerminalDragTargetResolver(Window, () => !_suspended && _host.IsCurrentSession(),
             _dragGhostTransform(), _selectionBandTransform(), Diagnostics);
-        _dropAnchor = new TerminalDropAnchorView();
         _dragController = new TerminalDragController(() => IsDragSessionCurrent(),
             CurrentDragPage, () => _host.Pipeline.Revision,
             (shown, current, ids, revision, amount) => _menu.CreateDragBatch(shown, current, ids, revision, amount),
@@ -281,8 +292,8 @@ internal sealed class StorageTerminalView : ITerminalView
         if (_refreshHandler != null) UnityEngine.Object.Destroy(_refreshHandler);
         _dragGhost?.Dispose();
         _selectionBand?.Dispose();
-        _dropAnchor?.Dispose();
-        _dropAnchor = null;
+        _targetHover.Dispose();
+        _potentialTargetHighlight.Dispose();
         _dragController = null;
         _dragTargetResolver = null;
         _dragGhost = null;
@@ -470,32 +481,161 @@ internal sealed class StorageTerminalView : ITerminalView
             return;
         }
         var selectedId = controller.SelectedIds.FirstOrDefault();
-        var single = _screen.GetPage().Slots.Select(slot => slot.Group)
+        if (!_potentialTargetsPrepared)
+        {
+            var batch = controller.CreatePreviewBatch();
+            var source = batch?.Steps.FirstOrDefault().Key;
+            if (source != null && _services.FindPreviewSample(source) is { } root) _potentialTargetHighlight.Show(root);
+            _potentialTargetsPrepared = true;
+        }
+        var singleGroup = _screen.GetPage().Slots.Select(slot => slot.Group)
             .FirstOrDefault(candidate => candidate != null && candidate.Id == selectedId);
-        _dragGhost.Show(single == null ? null : _pictures.Get(single.Representative.Key), point, EventCamera(), amount, 0.8f);
+        _dragGhost.Show(singleGroup == null ? null : _pictures.Get(singleGroup.Representative.Key), point,
+            EventCamera(), amount, 0.8f);
     }
 
     private void HideDragGhost()
     {
         _multiGhostPrepared = false;
+        _potentialTargetsPrepared = false;
+        _potentialTargetHighlight.Hide();
         _dragGhost?.Hide();
     }
 
     private void SetDragTargetFeedback(TerminalDragTargetState state, InventoryDropTarget? target)
     {
-        if (state == TerminalDragTargetState.Pending && target?.Anchor != null)
+        if (state == TerminalDragTargetState.None || target == null)
         {
-            _dropAnchor?.Show(target, _dragController?.PreviewUsesAnchor == true);
-            SetDropHighlight(TerminalDropHighlight.Hidden);
+            ClearTargetPreview();
+            _potentialTargetHighlight.SetCovered(null, null, _targetHover);
+            _targetHover.Hide();
+            HideTargetTooltip();
             return;
         }
-        _dropAnchor?.Hide();
-        SetDropHighlight(state switch
+
+        var batch = _dragController?.CreatePreviewBatch();
+        var useAnchor = _dragController?.PreviewUsesAnchor == true && target.Anchor.HasValue;
+        if (state == TerminalDragTargetState.Rejected) ClearTargetPreview();
+        else if (batch != null) UpdateTargetPreview(batch, target, useAnchor);
+        else ClearTargetPreview();
+
+        var admission = state == TerminalDragTargetState.Rejected ? false : _previewAdmission;
+        var color = admission.HasValue
+            ? admission.Value ? RenderHandler.BackgroundColor.Green : RenderHandler.BackgroundColor.Red
+            : RenderHandler.BackgroundColor.Blue;
+        _potentialTargetHighlight.SetCovered(target.HoveredItem,
+            target.HoveredItem == null && !useAnchor ? target.Inventory : null, _targetHover);
+        _targetHover.Show(target, useAnchor, color);
+        ShowTargetTooltip();
+    }
+
+    private void UpdateTargetPreview(TerminalDragBatch batch, InventoryDropTarget target, bool useAnchor)
+    {
+        var anchor = useAnchor ? target.Anchor : null;
+        if (ReferenceEquals(_previewBatch, batch) && SameTarget(_previewTarget, target) &&
+            Nullable.Equals(_previewAnchor, anchor) && Time.unscaledTime - _previewCheckedAt < PreviewRefreshInterval)
+            return;
+
+        _previewTarget = target;
+        _previewAnchor = anchor;
+        _previewBatch = batch;
+        _previewCheckedAt = Time.unscaledTime;
+        _previewAdmission = null;
+        _targetTooltip = null;
+
+        if (_dragController?.Phase == TerminalDragPhase.DraggingSelection)
         {
-            TerminalDragTargetState.Pending => TerminalDropHighlight.Hover,
-            TerminalDragTargetState.Rejected => TerminalDropHighlight.Rejected,
-            _ => TerminalDropHighlight.Hidden
-        });
+            var checkedKeys = new HashSet<ItemKey>();
+            foreach (var step in batch.Steps)
+            {
+                if (!checkedKeys.Add(step.Key)) continue;
+                var eligible = ProbeTarget(target, step.Key, false, out _);
+                if (eligible == true)
+                {
+                    _previewAdmission = true;
+                    return;
+                }
+                if (eligible == false) _previewAdmission = false;
+            }
+            return;
+        }
+
+        _previewAdmission = ProbeTarget(target, batch.Steps[0].Key, useAnchor, out var source, single: true);
+        if (source == null || target.HoveredItem is not { } item || UISettings.current == null) return;
+        try
+        {
+            var builder = new RichTextBuilder(60);
+            if (_previewAdmission is { } admission)
+            {
+                _targetTooltip = RichTextGenerator.InsertItemInOtherItem(source, item, admission, builder);
+            }
+            else
+            {
+                // Auto-placement is decided on release. Show the native action text in a neutral color.
+                var sourceName = source.GetDisplayName(preferCustomName: true);
+                var targetName = item.GetDisplayName(preferCustomName: true);
+                _targetTooltip = builder.Add(LocHelper.GetLocalizedMechanic("mech_drag_insert_into", sourceName,
+                    $"<u>{targetName}</u>"), RenderHandler.ColorPalette.LightGray).Build();
+            }
+            _targetTooltipOffset = new Vector2(32f + source.modifiedShape.globalWidth * UISettings.current.gridSize / 2f, 0f);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException && error is not StackOverflowException &&
+                                      error is not AccessViolationException)
+        {
+            Diagnostics?.Record("terminal_drop_tooltip_failed", $"error={error.GetType().Name}");
+        }
+    }
+
+    private bool? ProbeTarget(InventoryDropTarget target, ItemKey key, bool useAnchor, out GameItem? root,
+        bool single = false)
+    {
+        root = null;
+        try
+        {
+            root = _services.FindPreviewSample(key);
+            if (root == null) return null;
+            return single ? target.PreviewWholeAcceptance(root, useAnchor) : target.MayAccept(root);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException && error is not StackOverflowException &&
+                                      error is not AccessViolationException)
+        {
+            root = null;
+            Diagnostics?.Record("terminal_drop_preview_failed", $"error={error.GetType().Name}");
+            return null;
+        }
+    }
+
+    private void ShowTargetTooltip()
+    {
+        var overlay = OverlayHandler.current;
+        if (_targetTooltip == null || overlay == null)
+        {
+            HideTargetTooltip();
+            return;
+        }
+        if (_showingTooltip) HideHoverTooltip();
+        overlay.ShowTooltip(Input.mousePosition, _targetTooltipOffset, _targetTooltip);
+        _targetTooltipOverlay = overlay;
+    }
+
+    private static bool SameTarget(InventoryDropTarget? left, InventoryDropTarget right) =>
+        left != null && ReferenceEquals(left.Inventory, right.Inventory) &&
+        ReferenceEquals(left.HoveredItem, right.HoveredItem);
+
+    private void ClearTargetPreview()
+    {
+        _previewTarget = null;
+        _previewAnchor = null;
+        _previewBatch = null;
+        _previewAdmission = null;
+        _targetTooltip = null;
+    }
+
+    private void HideTargetTooltip()
+    {
+        var overlay = _targetTooltipOverlay;
+        _targetTooltipOverlay = null;
+        if (overlay != null && ReferenceEquals(overlay, OverlayHandler.current)) overlay.HideTooltip();
     }
 
     private bool IsDragSessionCurrent() => !_suspended && Application.isFocused && _host.IsCurrentSession() &&
@@ -605,6 +745,7 @@ internal sealed class StorageTerminalView : ITerminalView
         if (_container == null) return;
         if (_dragController?.Phase != TerminalDragPhase.Idle && !IsDragSessionCurrent()) CancelDrag();
         if (!_host.IsCurrentSession() || _suspended) return;
+        _targetHover.RetryIncompleteHighlight();
         var search = _services.Search;
         if (_searchRevision != search.ConfigurationRevision)
         {

@@ -50,38 +50,56 @@ internal sealed class TerminalDragTargetResolver
                 var render = hit.gameObject.GetComponent<TreeNodeRender>();
                 if (render == null) return false;
                 var element = render.FindParentElement();
-                GameGridInventory? candidate;
+                GameInventory? candidate;
+                GameItemElement? hoveredItem = null;
                 if (element is GameGridInventory grid)
                     candidate = grid;
-                else if (element is GameItemElement item && !item.IsDestroyed() && GeneralHelper.MayPlayerInsertInto(item))
-                    candidate = UniqueGrid(item.child);
+                else if (element is GameItemElement item && !item.IsDestroyed())
+                {
+                    candidate = ResolveContainerInventory(item.child);
+                    hoveredItem = item;
+                }
                 else if (element is PixelWindow window)
-                    candidate = UniqueGrid(window);
+                    candidate = ResolveContainerInventory(window);
+                else if (element is GameSlotInventory slot)
+                    candidate = slot;
                 else
                     return false;
-                if (candidate == null || candidate.handler == null ||
-                    (element is GameGridInventory && !candidate.handler.gameObject.activeInHierarchy) ||
-                    candidate.IsInsertLocked() || !GeneralHelper.MayPlayerInsertInto(candidate)) return false;
+                if (candidate == null) return false;
+                var eligible = InventoryDropTarget.IsUsable(candidate, hoveredItem);
+                var validGeometry = true;
                 GridDropAnchor? anchor = null;
                 Vector2? worldPointer = null;
-                if (element is GameGridInventory)
+                if (candidate is GameGridInventory gridInventory && element is GameGridInventory)
                 {
-                    var rect = candidate.rectTransform;
+                    var rect = gridInventory.rectTransform;
                     var canvas = rect.GetComponentInParent<Canvas>();
                     var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-                    if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(rect,
-                            new Vector2(pointer.X, pointer.Y), camera, out var world) ||
-                        !new PointerPoint(world.x, world.y).IsValid) return false;
-                    var local = rect.InverseTransformPoint(world);
-                    if (!GridDropAnchor.TryFromLocal(new PointerPoint(local.x, -local.y), UISettings.current.gridSize,
-                            candidate.inventoryShape.width, candidate.inventoryShape.height, out var cell) ||
-                        candidate.inventoryShape.Intersects(cell.X, cell.Y)) return false;
-                    anchor = cell;
-                    worldPointer = world;
+                    if (RectTransformUtility.ScreenPointToWorldPointInRectangle(rect,
+                            new Vector2(pointer.X, pointer.Y), camera, out var world) &&
+                        new PointerPoint(world.x, world.y).IsValid)
+                    {
+                        var local = rect.InverseTransformPoint(world);
+                        if (GridDropAnchor.TryFromLocal(new PointerPoint(local.x, -local.y), UISettings.current.gridSize,
+                                gridInventory.inventoryShape.width, gridInventory.inventoryShape.height, out var cell))
+                        {
+                            anchor = cell;
+                            worldPointer = world;
+                            validGeometry = !gridInventory.inventoryShape.Intersects(cell.X, cell.Y);
+                        }
+                        else
+                        {
+                            validGeometry = false;
+                        }
+                    }
+                    else
+                    {
+                        validGeometry = false;
+                    }
                 }
-                target = new InventoryDropTarget(candidate, anchor, worldPointer, _diagnostics);
-                state = TerminalDragTargetState.Pending;
-                return true;
+                target = new InventoryDropTarget(candidate, anchor, worldPointer, _diagnostics, hoveredItem, validGeometry);
+                state = eligible ? TerminalDragTargetState.Pending : TerminalDragTargetState.Rejected;
+                return state == TerminalDragTargetState.Pending;
             }
             state = TerminalDragTargetState.None;
             return false;
@@ -97,26 +115,34 @@ internal sealed class TerminalDragTargetResolver
     private static bool Within(Transform child, Transform? root) =>
         root != null && (child == root || child.IsChildOf(root));
 
-    private static GameGridInventory? UniqueGrid(GraphNodeStorage? root)
+    internal static GameInventory? ResolveContainerInventory(GraphNodeStorage? root)
     {
         if (root == null) return null;
         var seen = new HashSet<GraphNodeStorage>();
         var pending = new Stack<GraphNodeStorage>();
         pending.Push(root);
-        GameGridInventory? found = null;
+        GameGridInventory? grid = null;
+        GameSlotInventory? slot = null;
+        var multipleSlots = false;
         while (pending.Count > 0)
         {
             var node = pending.Pop();
             if (!seen.Add(node)) continue;
-            if (node is GameGridInventory grid)
+            if (node is GameGridInventory foundGrid)
             {
-                if (found != null && !ReferenceEquals(found, grid)) return null;
-                found = grid;
+                if (grid != null) return null;
+                grid = foundGrid;
                 continue;
             }
-            if (node is GameInventory || node is GameItem) continue;
+            if (node is GameSlotInventory foundSlot)
+            {
+                multipleSlots |= slot != null;
+                slot = foundSlot;
+            }
+            if (node is GameInventory or GameItem) continue;
             foreach (var child in node.children) pending.Push(child);
         }
-        return found;
+        // A machine's auxiliary slots must not displace its original grid drop route.
+        return (GameInventory?)grid ?? (multipleSlots ? null : slot);
     }
 }

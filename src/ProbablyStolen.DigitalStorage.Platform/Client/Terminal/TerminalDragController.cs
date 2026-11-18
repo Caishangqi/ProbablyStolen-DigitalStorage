@@ -42,6 +42,9 @@ internal sealed class TerminalDragController
     private bool _owned;
     private bool _retainedSelection;
     private bool _dragSelection;
+    private StorageScreenPage? _previewPage;
+    private long? _previewAmount;
+    private TerminalDragBatch? _previewBatch;
 
     internal TerminalDragController(Func<bool> session, Func<StorageScreenPage> currentPage,
         Func<long> presentationRevision,
@@ -73,12 +76,8 @@ internal sealed class TerminalDragController
     internal IReadOnlyList<string> SelectedIds => _selected;
     internal IReadOnlyList<DragSelectionCandidate<string>> Candidates => _candidates;
     internal PointerPoint Origin => _origin;
-    internal bool PreviewUsesAnchor => Phase switch
-    {
-        TerminalDragPhase.DraggingSingle => _amount.RequestedPieces == 1,
-        TerminalDragPhase.DraggingSelection => _selected.Count == 1 && TryAvailable(out var available) && available == 1,
-        _ => false
-    };
+    internal bool PreviewUsesAnchor => Phase == TerminalDragPhase.DraggingSingle &&
+        _amount.RequestedPieces == 1;
 
     internal bool Press(PointerPoint point, TerminalDragRegion region, string? slotId, StorageScreenPage page,
         IReadOnlyList<DragSelectionCandidate<string>> candidates, float? nativeThreshold)
@@ -155,9 +154,25 @@ internal sealed class TerminalDragController
     private void UpdateGhost(PointerPoint point) => _ghost(point, Phase == TerminalDragPhase.DraggingSingle
         ? _amount.RequestedPieces.ToString(CultureInfo.InvariantCulture) : null);
 
+    internal TerminalDragBatch? CreatePreviewBatch()
+    {
+        if (Phase != TerminalDragPhase.DraggingSingle && Phase != TerminalDragPhase.DraggingSelection) return null;
+        var page = _currentPage();
+        if (!_session() || !Matches(page)) return null;
+        long? amount = Phase == TerminalDragPhase.DraggingSingle ? _amount.RequestedPieces : null;
+        if (ReferenceEquals(_previewPage, page) && _previewAmount == amount) return _previewBatch;
+
+        _previewBatch = _createBatch(_source!, page, _selected, _presentationRevision(), amount);
+        _previewPage = page;
+        _previewAmount = amount;
+        return _previewBatch;
+    }
+
     private void UpdateTargetFeedback(PointerPoint point)
     {
         _resolve(point, out var target, out var state);
+        if (state == TerminalDragTargetState.Pending && PreviewUsesAnchor && target?.IsAnchorValid == false)
+            state = TerminalDragTargetState.Rejected;
         _feedback(state, target);
     }
 
@@ -223,6 +238,8 @@ internal sealed class TerminalDragController
             var batch = _createBatch(_source!, page, _selected, _presentationRevision(),
                 single ? _amount.RequestedPieces : null);
             if (batch == null || !IsCurrent(point)) return true;
+            if (PreviewUsesAnchor && !target.IsAnchorValid) return true;
+            if (!PreviewUsesAnchor) target = target.WithoutAnchor();
             TerminalExtractionResult? result = null;
             Exception? error = null;
             try { result = _extract(batch, target); }
@@ -272,6 +289,9 @@ internal sealed class TerminalDragController
         _amount.End();
         _wheelRemainder = 0;
         _lastDragPoint = null;
+        _previewPage = null;
+        _previewBatch = null;
+        _previewAmount = null;
         _band(null);
         _hideGhost();
         _highlight(_selected);
