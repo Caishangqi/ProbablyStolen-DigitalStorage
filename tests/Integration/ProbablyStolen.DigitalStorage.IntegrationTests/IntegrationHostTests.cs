@@ -100,6 +100,50 @@ public sealed class IntegrationHostTests
         Assert.That(_log, Has.Some.Contains("unverified"));
     }
 
+    [TestCase(true, true, null, true, true)]
+    [TestCase(true, true, false, true, false)]
+    [TestCase(true, false, null, false, false)]
+    [TestCase(false, true, null, false, false)]
+    public void UnverifiedVersion_DefaultDependsOnRunningProtocolAndRespectsSavedSwitch(
+        bool running, bool protocol, bool? savedSwitch, bool expectedDefault, bool expectActive)
+    {
+        _environment.Versions["other_mod"] = "9.9.9";
+        if (!running) _environment.Running.Clear();
+        if (savedSwitch.HasValue) _settings.Values[Uid] = savedSwitch.Value;
+        var probeCalls = 0;
+        var plugin = new FakePlugin
+        {
+            DefaultProbe = () =>
+            {
+                probeCalls++;
+                return protocol;
+            }
+        };
+
+        using var host = Started(plugin);
+        host.OnGameLoaded();
+
+        Assert.That(probeCalls, Is.EqualTo(running ? 1 : 0));
+        Assert.That(_settings.Defaults[Uid], Is.EqualTo(expectedDefault));
+        Assert.That(_settings.Verified[Uid], Is.False);
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(expectedDefault ? null : IntegrationHost.StatusUnverified));
+        Assert.That(host.StateOf(Uid), Is.EqualTo(expectActive ? IntegrationState.Active : IntegrationState.Disabled));
+        Assert.That(plugin.Calls.Contains("available"), Is.EqualTo(expectActive));
+    }
+
+    [Test]
+    public void ProtocolDefault_StillRunsRegistrationVerification()
+    {
+        _environment.Versions["other_mod"] = "9.9.9";
+        var plugin = new FakePlugin { DefaultProbe = () => true, Patch = r => r.Verify(() => "protocol unavailable") };
+
+        using var host = Started(plugin);
+        host.OnGameLoaded();
+
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "register" }));
+    }
+
     [Test]
     public void ModNotRunning_IsReportedAndNotRegistered()
     {
@@ -316,6 +360,8 @@ public sealed class IntegrationHostTests
 
         internal Action<IIntegrationConfig>? Settings { get; set; }
 
+        internal Func<bool>? DefaultProbe { get; set; }
+
         internal List<string> Calls { get; } = new();
 
         public override string PluginUid => Uid;
@@ -329,6 +375,8 @@ public sealed class IntegrationHostTests
         public override string SettingLabelKey => "integration_other_label";
 
         public override string SettingTooltipKey => "integration_other_tooltip";
+
+        public override bool CanEnableByDefault() => DefaultProbe?.Invoke() == true;
 
         public override void RegisterSettings(IIntegrationConfig config)
         {
@@ -392,6 +440,8 @@ public sealed class IntegrationHostTests
     {
         internal Dictionary<string, bool> Defaults { get; } = new();
 
+        internal Dictionary<string, bool> Verified { get; } = new();
+
         internal Dictionary<string, bool> Values { get; } = new();
 
         internal Dictionary<string, Func<string?>> Status { get; } = new();
@@ -401,13 +451,13 @@ public sealed class IntegrationHostTests
         internal List<string> Options { get; } = new();
 
         public (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion,
-            bool verified, Func<string?> status)
+            bool verified, bool defaultEnabled, Func<string?> status)
         {
-            var defaultValue = verified;
             var uid = plugin.PluginUid;
             Defined.Add(uid);
-            Defaults[uid] = defaultValue;
-            Values[uid] = defaultValue;
+            Defaults[uid] = defaultEnabled;
+            Verified[uid] = verified;
+            Values.TryAdd(uid, defaultEnabled);
             Status[uid] = status;
             return (() => Values[uid], new FakeConfig(this, uid));
         }

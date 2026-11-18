@@ -26,7 +26,7 @@ public interface IIntegrationPlugin
     /// <summary>Gets the id of the mod this plugin works with.</summary>
     string RequiredModId { get; }
 
-    /// <summary>Gets the versions of that mod the plugin was tested with; others start disabled.</summary>
+    /// <summary>Gets the versions of that mod the plugin was tested with.</summary>
     IReadOnlyCollection<string> VerifiedVersions { get; }
 
     /// <summary>
@@ -77,6 +77,13 @@ public abstract class IntegrationPlugin : IIntegrationPlugin
 
     /// <inheritdoc />
     public abstract string SettingTooltipKey { get; }
+
+    /// <summary>
+    /// Returns whether a supported public protocol warrants enabling the plugin by default on an unverified version.
+    /// The host calls this after all mods load and only if the required mod is running. This check must not change
+    /// runtime state. The host keeps saved settings and still runs the register phase checks.
+    /// </summary>
+    public virtual bool CanEnableByDefault() => false;
 
     /// <inheritdoc />
     public virtual void RegisterSettings(IIntegrationConfig config)

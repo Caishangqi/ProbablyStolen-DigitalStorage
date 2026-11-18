@@ -192,11 +192,11 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     /// Defines an integration switch in the integrations section, after every other section. The integration host
     /// calls this one frame after Init, once the other mod's version is known; <c>ModConfig</c> applies the saved value
     /// whenever an entry is defined. Verified versions of
-    /// the other mod share one key, so a player's choice survives its updates; an unverified version gets a key of its
-    /// own that starts off, so an update of the other mod never runs untested code because of an earlier choice.
+    /// the other mod share one key, so a player's choice survives its updates. An unverified version gets its own
+    /// key so it never inherits an earlier choice for a different version.
     /// </summary>
     public (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion, bool verified,
-        Func<string?> status)
+        bool defaultEnabled, Func<string?> status)
     {
         if (plugin == null) throw new ArgumentNullException(nameof(plugin));
         if (status == null) throw new ArgumentNullException(nameof(status));
@@ -208,7 +208,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             throw new InvalidOperationException($"The settings header {section} is not unique.");
         var labelKey = plugin.SettingLabelKey;
         var tooltipKey = plugin.SettingTooltipKey;
-        var entry = _config.Define(IntegrationKey(plugin.PluginUid, verified ? null : modVersion), verified, section,
+        var entry = _config.Define(IntegrationKey(plugin.PluginUid, verified ? null : modVersion), defaultEnabled, section,
             () => _text.Get(labelKey), tooltip: () => IntegrationTooltip(tooltipKey, status));
         AddIntegrationEntry(entry, section!);
         return (() => entry.Value, new PluginConfig(this, plugin.PluginUid, section!));

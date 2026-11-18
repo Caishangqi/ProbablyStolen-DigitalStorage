@@ -25,6 +25,9 @@ public sealed class ItemDetailsPlugin : IntegrationPlugin
     public override string SettingTooltipKey => "integration_itemdetails_tooltip";
 
     /// <inheritdoc />
+    public override bool CanEnableByDefault() => ItemDetailsTargets.IsProtocolAvailable();
+
+    /// <inheritdoc />
     public override void Register(IIntegrationRegistration registration)
     {
         registration.Verify(() => ItemDetailsTargets.IsProtocolAvailable()

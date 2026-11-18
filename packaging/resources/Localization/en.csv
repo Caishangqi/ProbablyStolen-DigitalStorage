@@ -385,5 +385,5 @@ stacking_field_feature,Feature: {0}
 stacking_field_feature_desc,The visible item feature {0}.
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,Keep Item Details clear of Digital Storage tooltips
-integration_itemdetails_tooltip,Reserve the visible Item Details badge and contents panel space. This option starts off until the installed version is verified.
+integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. Defaults to on when Item Details provides its tooltip interface.
 tooltip_scroll_hint,Hold Alt and use the mouse wheel to scroll

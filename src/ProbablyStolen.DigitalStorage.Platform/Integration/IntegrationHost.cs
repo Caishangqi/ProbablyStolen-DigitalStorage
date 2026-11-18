@@ -172,7 +172,10 @@ internal sealed class IntegrationHost : IDisposable
             {
                 entry.Version = _environment.ModVersion(entry.ModId) ?? string.Empty;
                 entry.Verified = entry.Plugin.VerifiedVersions?.Contains(entry.Version) == true;
-                var (enabled, config) = _settings.Define(entry.Plugin, entry.Version, entry.Verified, () => StatusOf(entry));
+                entry.DefaultEnabled = entry.Verified || (entry.Plugin is IntegrationPlugin plugin &&
+                    _environment.IsModRunning(entry.ModId) && plugin.CanEnableByDefault());
+                var (enabled, config) = _settings.Define(entry.Plugin, entry.Version, entry.Verified,
+                    entry.DefaultEnabled, () => StatusOf(entry));
                 entry.Switch = enabled;
                 entry.Plugin.RegisterSettings(config);
             }
@@ -184,7 +187,7 @@ internal sealed class IntegrationHost : IDisposable
 
             if (!ReadSwitch(entry))
             {
-                Report(entry, entry.Verified ? "disabled in the settings" : "disabled: version not verified");
+                Report(entry, entry.DefaultEnabled ? "disabled in the settings" : "disabled: version not verified");
                 continue;
             }
 
@@ -335,7 +338,7 @@ internal sealed class IntegrationHost : IDisposable
     {
         IntegrationState.Incompatible or IntegrationState.Faulted => StatusIncompatible,
         IntegrationState.NotRunning => StatusNotRunning,
-        _ => entry.Verified ? null : StatusUnverified
+        _ => entry.DefaultEnabled ? null : StatusUnverified
     };
 
     private void Report(Entry entry, string message)
@@ -360,6 +363,8 @@ internal sealed class IntegrationHost : IDisposable
         internal string Version { get; set; } = string.Empty;
 
         internal bool Verified { get; set; }
+
+        internal bool DefaultEnabled { get; set; }
 
         internal Func<bool>? Switch { get; set; }
 
