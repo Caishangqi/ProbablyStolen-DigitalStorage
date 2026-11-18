@@ -1,12 +1,9 @@
-0.5.11
+0.5.12
 
-Terminal item handling is clearer, and extra tooltip panels stay around the item you are looking at.
+You can now drag bottled water out of the terminal and onto the top row of the counter. This update also adds a Keep Open toggle and makes long tooltips easier to read.
 
-- Items in digital cells keep their stored state. They no longer take part in overnight processing, and time spent in storage is not applied when you take them out.
-- You can store items you own. Goods on a customer's counter must be bought first. Digital Storage items, and containers holding them, cannot be stored inside a cell.
-- Dropping items onto the terminal itself still tries the game's insert, stack and item-use actions first. For example, a blue labeler can still rename the terminal. Items left in place after those actions can then be stored, including in group drags.
-- A failed store preview names the item and gives a short reason, such as an ownership restriction, no available cell or a full cell. If a cell cannot be read, the terminal reports storage as unavailable instead of showing an empty inventory.
-- Extra tooltip panels use the visible size of the game's item tooltip and prefer placing details above or below it when space allows, keeping the hovered icon in view.
-- Hold Alt and use the mouse wheel over the source to scroll long details. The wheel without Alt still scrolls the terminal.
-- Partition-rule hints follow the pointer while a rule is hovered and stay hidden after you leave it or start dragging.
-- Reduced repeated inventory checks during refreshes, transfers and drag previews. Unchanged tooltip text, measurements and styles are reused while hovering.
+- When you drag out one item, the green square marks its top-left cell. Where you grabbed the icon doesn't change the landing spot.
+- When you drag out several items, the whole target inventory lights up and the game finds space for them. Reduce the quantity to one to see the single-cell preview again.
+- Stored liquids stop cooling or reacting to temperature until you take them out. A bottle of water will no longer fail to come out because its temperature changed in storage.
+- Turn on Keep Open in the terminal toolbar to leave the terminal open when you press Esc. The close button still works, and the setting is saved.
+- Mod button tooltips fit their text. Hover over an option in the stacking attribute picker to read the full description.
