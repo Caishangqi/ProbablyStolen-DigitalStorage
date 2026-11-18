@@ -6,6 +6,10 @@ using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+#if !DIGITAL_STORAGE_INTEGRATION_TESTS
+using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
+using UnityEngine;
+#endif
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
@@ -16,6 +20,9 @@ internal sealed class TooltipComposition : IDisposable
     private readonly Action<string> _reportError;
     private readonly HashSet<Identifier> _reportedFailures = new();
     private NativeTooltipDispatcher? _dispatcher;
+#if !DIGITAL_STORAGE_INTEGRATION_TESTS
+    private NativeTooltipService? _service;
+#endif
     private GridNetworkTooltipPresenter? _networkPresenter;
     private IDisposable? _projection;
     private bool _subscribed;
@@ -43,7 +50,13 @@ internal sealed class TooltipComposition : IDisposable
             power, text, Array.Empty<INetworkTooltipDetail>(), ReportFailure));
     }
 
+#if !DIGITAL_STORAGE_INTEGRATION_TESTS
+    internal ITooltipService Service => _service ?? throw new InvalidOperationException("Tooltip composition is not enabled.");
+
+    internal void Enable(Func<Sprite?> rgbFrame)
+#else
     internal void Enable()
+#endif
     {
         if (_disposed) throw new ObjectDisposedException(nameof(TooltipComposition));
         if (_dispatcher != null) return;
@@ -58,6 +71,10 @@ internal sealed class TooltipComposition : IDisposable
             _dispatcher = new NativeTooltipDispatcher(_scanner,
                 _registries.Get<INativeTooltipContributor>(ContributorsId)
                     .RegistrationEntries.Select(entry => entry.Value).ToArray(), ReportFailure);
+#if !DIGITAL_STORAGE_INTEGRATION_TESTS
+            _service = new NativeTooltipService(rgbFrame, _reportError);
+            TerminalTooltipPresenter.SetService(_service);
+#endif
             _projection = ControllerTooltipBridge.Register(_scanner, _reportError);
             _subscribed = true;
             ModHook.OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate;
@@ -82,6 +99,11 @@ internal sealed class TooltipComposition : IDisposable
             _subscribed = false;
         }
         _dispatcher = null;
+#if !DIGITAL_STORAGE_INTEGRATION_TESTS
+        _service?.Dispose();
+        _service = null;
+        TerminalTooltipPresenter.SetService(null);
+#endif
         _projection?.Dispose();
         _projection = null;
         _registries.Dispose();

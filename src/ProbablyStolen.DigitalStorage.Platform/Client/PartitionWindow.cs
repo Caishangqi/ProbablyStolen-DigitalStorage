@@ -55,6 +55,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private readonly PartitionHoverHintCoordinator _hoverHint;
     private readonly PartitionRuleTooltip _ruleTooltip = new();
     private readonly Dictionary<int, RichText> _ruleHints = new();
+    private readonly Dictionary<int, RichTextBuilder> _ruleHintBuilders = new();
     private CustomUIWindow? _window;
     private RectTransform? _body;
     private CustomUIElement? _status;
@@ -314,6 +315,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
                 if (_draft.CanAdd)
                     tip.AddLine(" " + _text.Get("partition_hint_middle"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
                 tip.AddLine(" " + _text.Get("partition_hint_right"), ignoreEmpty: true, RenderHandler.ColorPalette.LightBlue);
+                _ruleHintBuilders[index] = tip;
                 _ruleHints[index] = tip.Build();
             }
         }
@@ -524,10 +526,12 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     private RichText? RuleHint(int index) => _ruleHints.TryGetValue(index, out var hint) ? hint : null;
 
+    private RichTextBuilder? RuleHintBuilder(int index) => _ruleHintBuilders.TryGetValue(index, out var hint) ? hint : null;
+
     private void ShowRuleHint(int index)
     {
-        var hint = RuleHint(index);
-        if (hint != null) _ruleTooltip.SetContent(hint);
+        var builder = RuleHintBuilder(index);
+        if (builder != null) _ruleTooltip.SetContent(builder);
     }
 
     private void HideRuleHint()

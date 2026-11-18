@@ -260,6 +260,10 @@ internal sealed class ItemSlotGrid
     /// <summary>Drops references to destroyed controls after the window closes.</summary>
     internal void Reset()
     {
+        foreach (var button in _buttons)
+            if (button != null) TerminalTooltipPresenter.SetText(button, string.Empty);
+        foreach (var badge in _badges)
+            if (badge != null) TerminalTooltipPresenter.SetText(badge, string.Empty);
         _buttons = Array.Empty<CustomUIElement?>();
         _badges = Array.Empty<CustomUIElement?>();
         _icons = Array.Empty<Image?>();

@@ -1,71 +1,57 @@
 using System;
+using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
+using ProbablyStolen.DigitalStorage.Client.Tooltips;
 using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
-/// <summary>Displays rule lore using the same window, text element and padding as the native item tooltip.</summary>
+/// <summary>Displays partition rule lore through the lifecycle scoped tooltip service.</summary>
 internal sealed class PartitionRuleTooltip : IDisposable
 {
-    private const int Padding = 8;
-    private PixelWindow? _window;
-    private RichTextElement? _element;
-    private RichText? _content;
-    private RichText? _rendered;
+    private readonly object _owner = new();
+    private readonly TooltipVisibilityState _visibility = new();
+    private ITooltip? _tooltip;
+    private ITooltipPanel? _panel;
+    private RichTextBuilder? _content;
 
-    internal void SetContent(RichText content) => _content = content;
+    internal void SetContent(RichTextBuilder content)
+    {
+        _content = content ?? throw new ArgumentNullException(nameof(content));
+        _visibility.Show();
+        if (_panel != null) _panel.SetRichText(content);
+        else EnsureTooltip();
+    }
 
-    /// <summary>Follows the pointer without rebuilding unchanged lore or sharing the game's item-tooltip owner.</summary>
     internal void FollowPointer()
     {
-        if (_content == null || !EnsureWindow()) return;
-        if (!ReferenceEquals(_rendered, _content))
-        {
-            _element!.SetRichText(_content, ItemTooltipHandler.BASE_TOOLTIP_CHAR_WIDTH);
-            _window!.Validate();
-            _rendered = _content;
-        }
-
-        _window!.Show(Input.mousePosition, new Vector2(32f, 0f), fixTooltipBounds: true);
-        _window.ToFront(force: true);
+        if (!_visibility.CanFollow || _content == null) return;
+        EnsureTooltip();
+        _tooltip?.Show(Input.mousePosition);
     }
 
     internal void Hide()
     {
-        _content = null;
-        if (_window?.handler != null && _window.IsVisible()) _window.Hide();
+        _visibility.Hide();
+        _tooltip?.Hide();
     }
 
-    private bool EnsureWindow()
+    private void EnsureTooltip()
     {
-        if (_window?.handler != null) return true;
-        ReleaseWindow();
-        var root = RenderHandler.current?.overlayRoot;
-        if (root == null) return false;
-        _window = new PixelWindow();
-        _window.handler.name = "Digital Storage Partition Lore";
-        _window.handler.SetParent(root);
-        _element = new RichTextElement(canResize: false, -1, -1, hasRaycast: false);
-        _element.SetPadding(Padding, Padding, Padding, Padding);
-        _window.Attach(_element);
-        _rendered = null;
-        return true;
-    }
-
-    private void ReleaseWindow()
-    {
-        if (_window == null) return;
-        _window.Destroy();
-        // Destroy skips cleanup after Unity has destroyed the handler; these lists still hold the wrapper.
-        GraphHandler.windowGraphNodeRoots?.Remove(_window);
-        WindowsHandler.current?.visibleWindows?.Remove(_window);
-        _window = null;
-        _element = null;
-        _rendered = null;
+        if (_tooltip != null) return;
+        var service = TerminalTooltipPresenter.Service;
+        if (service == null) return;
+        _tooltip = service.CreateTooltip(_owner);
+        _panel = _tooltip.AddPanel("partition_rule", 0);
+        _panel.SetStyle(TooltipStyle.Native);
+        if (_content != null) _panel.SetRichText(_content);
     }
 
     public void Dispose()
     {
-        ReleaseWindow();
+        Hide();
+        _tooltip?.Dispose();
+        _tooltip = null;
+        _panel = null;
         _content = null;
     }
 }

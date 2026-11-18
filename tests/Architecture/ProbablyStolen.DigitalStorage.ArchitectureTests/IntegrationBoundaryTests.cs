@@ -20,7 +20,8 @@ public sealed class IntegrationBoundaryTests
     /// <summary>Integrated mods: their id and code namespace, and the only folder allowed to name them.</summary>
     private static readonly (string ModId, string Namespace, string Folder)[] IntegratedMods =
     {
-        ("customerstocking", "CustomerStocking.", "CustomerStocking")
+        ("customerstocking", "CustomerStocking.", "CustomerStocking"),
+        ("item_details", "ItemDetails.", "ItemDetails")
     };
 
     private static string RepositoryRoot => typeof(IntegrationBoundaryTests).Assembly

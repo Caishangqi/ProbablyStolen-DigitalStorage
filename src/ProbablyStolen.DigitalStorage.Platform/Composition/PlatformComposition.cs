@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api;
+using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
 using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
@@ -49,6 +50,7 @@ public sealed class PlatformComposition : IDisposable
     private IntegrationHost? _integrations;
     private IDisposable? _moduleBayHooks;
     private bool _runtimeExposed;
+
     private IDisposable? _localeRegistration;
     private readonly PinyinLifecycleCoordinator _pinyinLifecycle;
     private bool _assetsReady;
@@ -229,7 +231,7 @@ public sealed class PlatformComposition : IDisposable
         try
         {
             _moduleBayHooks = ModuleBayExpansionHooks.Attach(_contentApi);
-            _tooltip.Enable();
+            _tooltip.Enable(() => _buttonIcons.Frame("window_frame", 4));
             _content.Enable();
             _vendors.Enable();
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
@@ -244,6 +246,7 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _migration.Run;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ExposeRuntime(_runtime);
+            ExposeTooltipService(_tooltip.Service);
             ExposeContent(_contentApi);
             // Subscribed before the integrations, so a plugin ending a stopped run finds no cells of the previous game.
             ModHook.OnGameLoadedInit += _runtime.OnGameLoading;
@@ -302,6 +305,7 @@ public sealed class PlatformComposition : IDisposable
         }
 
         if (_runtimeExposed) ExposeRuntime(null);
+        ExposeTooltipService(null);
         ExposeContent(null);
         _moduleBayHooks?.Dispose();
         _moduleBayHooks = null;
@@ -409,6 +413,18 @@ public sealed class PlatformComposition : IDisposable
         }
     }
 
+    private void ExposeTooltipService(ITooltipService? service)
+    {
+        try
+        {
+            ModHelper.Expose(_modId, TooltipServiceKeys.ServiceKey, service);
+
+        }
+        catch (Exception error)
+        {
+            _log.Warning($"Digital Storage: the tooltip API could not be {(service == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
+        }
+    }
     private void ExposeContent(IDigitalStorageContentApi? content)
     {
         try
@@ -420,7 +436,6 @@ public sealed class PlatformComposition : IDisposable
             _log.Warning($"Digital Storage: content.v1 could not be {(content == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
         }
     }
-
     private void ValidateResources()
     {
         try

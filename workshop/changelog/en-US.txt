@@ -1,12 +1,18 @@
-0.5.10
+0.5.11
 
-Added selection boxes and drag-out controls to the terminal. Select several displayed slots and drag their items into your inventory or a container.
+Terminal item handling is clearer, and extra tooltip panels stay around the item you are looking at.
 
-- Hold the left mouse button over an empty slot or a gap in the terminal to select items on the current page. Drag from a selected slot to take all items in the selection. Merged slots use their full group, even when a search matches only one item type within it.
-- Each selected slot has one item picture that follows the pointer, keeping the slots' relative positions. A slot containing many items still shows one picture, and the preview continues to follow outside the terminal window.
-- Dragging a single slot shows the requested item count. Each mouse wheel notch changes it by one; right-click halves it, rounding up, so 11 becomes 6. The next drag starts with the full amount currently available.
-- Over a visible inventory grid, the game's green cell marks the first item's attempted position. Remaining items find space automatically in the same inventory. The highlight does not guarantee enough room; capacity is checked item by item when you release.
-- Items move whole, without splitting stacks. If an item does not fit, the transfer stops and that item returns to its source. Earlier successful transfers stay in the destination, the rest stay in storage, and the result shows the number actually moved.
-- Use the title bar and outer window borders to move the terminal. The content area handles selection and item dragging. Search fields, buttons, scrollbars and native inventories keep their own controls, and dragging items does not also move the window.
-- Fixed normal left-click extraction being blocked by drag input. Quantity updates keep valid selections and limit the requested count. Changes to search, sorting, pages or grouping rules cancel stale gestures so they cannot take items from a different page.
-- Fixed dragging becoming unavailable after rule or module changes. The terminal and partition editor now share the item picture preview.
+- Items in digital cells keep the state they had when stored. Spoilage and stolen-item heat do not advance overnight. Items inside stored containers are not processed, and time in storage is not applied when you take them out.
+- You can store items you own. Goods on a customer's counter must be bought first. Digital Storage items, and containers holding them, cannot be stored inside a cell.
+- Dropping items onto the terminal itself still tries the game's insert, stack and item-use actions first. For example, a blue labeler can still rename the terminal. Items left in place after those actions can then be stored, including in group drags.
+- A failed store preview names the item and gives a short reason, such as an ownership restriction, no available cell or a full cell. If a cell cannot be read, the terminal reports storage as unavailable instead of showing an empty inventory.
+- In the terminal, drag across an empty slot or the gap between slots to select items on the current page. Drag from a selected slot to take every item in the selection. A merged slot selects its full group, even if a search matches only one type in it.
+- Each selected slot shows one item picture as you drag, keeping the slots' relative positions. The preview follows the pointer outside the terminal too.
+- A single-slot drag shows how many items will move. Each wheel notch changes the amount by one; right-click halves it, rounding up. The next drag starts with the full amount available.
+- Over an inventory, the green cell marks where the first item would go. The game checks room for each item when you release. Items move whole, without splitting stacks. If one does not fit, that item returns to its source, earlier successful transfers stay in the destination and the rest remain in storage.
+- Use the terminal title bar or outer border to move its window. The content area handles selection and item dragging; search fields, buttons, scrollbars and inventories keep their usual controls.
+- Ordinary left-click extraction works while drag controls are enabled. Quantity changes keep a valid selection. Searching, sorting, changing pages or changing grouping rules cancels a gesture whose source is no longer current.
+- Changing partition rules or modules no longer prevents another drag from starting. The terminal and partition editor share the same item preview.
+- Extra tooltip panels use the visible size of the game's item tooltip and prefer placing details above or below it when space allows, keeping the hovered icon in view. Hold Alt and use the wheel over the source to scroll long details; the wheel without Alt still scrolls the terminal.
+- Partition-rule hints follow the pointer while a rule is hovered and stay hidden after you leave it or start dragging.
+- Reduced repeated inventory checks during refreshes, transfers and drag previews. Unchanged tooltip text, measurements and styles are reused while hovering.

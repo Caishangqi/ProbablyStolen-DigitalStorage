@@ -378,3 +378,7 @@ stacking_field_heat,热度
 stacking_field_heat_desc,赃物的热度.
 stacking_field_feature,特征: {0}
 stacking_field_feature_desc,可见的物品特征 {0}.
+integration_itemdetails_section,Item Details
+integration_itemdetails_label,为数字物流提示保留 Item Details 空间
+integration_itemdetails_tooltip,保留可见的 Item Details 徽标和内容面板空间。安装版本完成验证前, 此选项保持关闭。
+tooltip_scroll_hint,按住 Alt 并滚动鼠标滚轮查看提示

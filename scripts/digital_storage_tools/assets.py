@@ -459,6 +459,7 @@ def check_content(project: Path, output: Path) -> None:
         "upper_engineer_name", "upper_engineer_greet_1", "upper_engineer_greet_2", "upper_engineer_wrong_item",
         "upper_engineer_right_item", "upper_engineer_repeat", "upper_engineer_accept",
         "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
+        "integration_itemdetails_section", "integration_itemdetails_label", "integration_itemdetails_tooltip", "tooltip_scroll_hint",
         "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
         "terminal_button_stacking_tip",
         "terminal_tooltip_total_units",

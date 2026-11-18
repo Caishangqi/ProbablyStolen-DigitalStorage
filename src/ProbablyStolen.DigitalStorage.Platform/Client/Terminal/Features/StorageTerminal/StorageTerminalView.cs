@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
@@ -31,11 +32,6 @@ internal sealed class StorageTerminalView : ITerminalView
     private const int CellPixels = TerminalWindowMetrics.CellPixels;
     private const float Gap = 4f;
     private static readonly char[] LineBreaks = { (char)13, (char)10 };
-    // One box serves every terminal; only one terminal window shows at a time.
-    private static readonly TooltipSideBox HintBox = new();
-
-    // Overlay windows outlive views, so feature panels keep one box each for the whole game session.
-    private static readonly Dictionary<string, TooltipSideBox> PanelBoxes = new(StringComparer.Ordinal);
 
     private readonly StorageTerminalServices _services;
     private readonly ITerminalViewHost _host;
@@ -52,6 +48,9 @@ internal sealed class StorageTerminalView : ITerminalView
     private long _hoverHintRevision = -1;
     private IReadOnlyList<PanelText>? _hoverPanels;
     private IReadOnlyList<PanelText>? _hintPanels;
+    private ITooltip? _hoverTooltip;
+    private IReadOnlyList<PanelText>? _submittedPanels;
+    private ItemKey? _submittedPanelSource;
     // Pages are locked to players, so outside the terminal's own operations contents only change when cells,
     // machines, batteries or controller power change, or when the public API moves items (another mod or an
     // integration plugin); those raise NetworkChanged and the next frame rereads.
@@ -88,6 +87,7 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _hoverTooltip = TerminalTooltipPresenter.Service?.CreateTooltip(this);
         _screen = new StorageScreen(Columns, TerminalWindowMetrics.Rows, CellPixels, services.Search);
         _pictureCapture = new ItemPictureCapture(new PictureSourceChain<GameItem>(services.FindSample),
             message => services.WriteDiagnostic(message), "terminal");
@@ -219,6 +219,10 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         _suspended = true;
         CancelDrag();
+        _hoverTooltip?.Dispose();
+        _hoverTooltip = null;
+        _submittedPanels = null;
+        _submittedPanelSource = null;
         _networkSubscription?.Dispose();
         _networkSubscription = null;
         HideHoverTooltip();
@@ -263,6 +267,10 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         _suspended = true;
         CancelDrag();
+        _hoverTooltip?.Dispose();
+        _hoverTooltip = null;
+        _submittedPanels = null;
+        _submittedPanelSource = null;
         HideHoverTooltip();
         _networkSubscription?.Dispose();
         _networkSubscription = null;
@@ -638,7 +646,9 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         if (_dropInput?.SuppressesViewInput == true) return;
         var delta = Input.mouseScrollDelta.y;
-        if (delta == 0f || _scrollbar == null || !Window.IsVisible || _suspended || _host.Shield == null) return;
+        if (delta == 0f) return;
+        if (TerminalTooltipPresenter.ConsumeScroll(Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt), delta, Time.frameCount)) return;
+        if (_scrollbar == null || !Window.IsVisible || _suspended || _host.Shield == null) return;
         if (ItemMouseDragHandler.current?.IsDraggingItem == true ||
             ItemMultiSelectHandler.current?.IsGroupDragging == true)
         {
@@ -828,28 +838,25 @@ internal sealed class StorageTerminalView : ITerminalView
     /// </summary>
     private void ShowPanels(IReadOnlyList<PanelText> panels)
     {
-        TooltipSideBox? previous = null;
-        foreach (var panel in panels)
+        if (_hoverTooltip == null) _hoverTooltip = TerminalTooltipPresenter.Service?.CreateTooltip(this);
+        if (_hoverTooltip == null) return;
+        if (!ReferenceEquals(_submittedPanels, panels) || !Equals(_submittedPanelSource, _hoverKey))
         {
-            var box = panel.Id == TooltipPanelDefinition.HintId ? HintBox : BoxFor(panel.Id);
-            var frame = panel.BorderRgb.HasValue ? _host.Icons.Frame(FrameKey, FrameBorder) : null;
-            box.ShowFramed(panel.Text, frame, frame == null ? Color.white : Tint(panel.BorderRgb!.Value), after: previous);
-            previous = box;
+            if (_hoverTooltip is NativeTooltipService.TooltipGroup group)
+            {
+                group.SetSource(_hoverKey?.ToString() ?? string.Empty);
+                group.HidePanelsExcept(panels.Select(panel => panel.Id));
+            }
+            foreach (var panel in panels)
+            {
+                var target = _hoverTooltip.AddPanel(panel.Id, panel.Order);
+                target.SetRichText(panel.Builder);
+                target.SetStyle(panel.Style);
+            }
+            _submittedPanels = panels;
+            _submittedPanelSource = _hoverKey;
         }
-
-        foreach (var pair in PanelBoxes)
-            if (!panels.Any(panel => panel.Id == pair.Key)) pair.Value.Hide();
-    }
-
-    private const string FrameKey = "window_frame";
-    private const int FrameBorder = 4;
-
-    private static Color Tint(int rgb) => RenderHandler.GetColorFromPalette(Palette(rgb));
-
-    private static TooltipSideBox BoxFor(string panelId)
-    {
-        if (!PanelBoxes.TryGetValue(panelId, out var box)) PanelBoxes.Add(panelId, box = new TooltipSideBox());
-        return box;
+        if (_hoverSample != null) _hoverTooltip.Show(Input.mousePosition);
     }
 
     private IReadOnlyList<PanelText> PanelsFor(int slotIndex)
@@ -857,7 +864,7 @@ internal sealed class StorageTerminalView : ITerminalView
         var page = _screen.GetPage();
         var group = slotIndex >= 0 && slotIndex < page.Slots.Count ? page.Slots[slotIndex].Group : null;
         if (group == null)
-            return _hintPanels ??= new[] { new PanelText(TooltipPanelDefinition.HintId, BuildHint(null), _host.Pipeline.HintPanel.BorderRgb) };
+            return _hintPanels ??= new[] { new PanelText(TooltipPanelDefinition.HintId, 0, BuildHint(null), _host.Pipeline.HintPanel.BorderRgb) };
         if (_hoverPanels != null && ReferenceEquals(_hoverHintGroup, group) && _hoverHintRevision == _host.Pipeline.Revision)
             return _hoverPanels;
         _hoverHintGroup = group;
@@ -871,22 +878,22 @@ internal sealed class StorageTerminalView : ITerminalView
         var panels = _host.Pipeline.Tooltip(group, _host.Context);
         var result = new List<PanelText>
         {
-            new(TooltipPanelDefinition.HintId,
+            new(TooltipPanelDefinition.HintId, 0,
                 BuildHint(panels.FirstOrDefault(panel => panel.Definition.Id == TooltipPanelDefinition.HintId)),
                 _host.Pipeline.HintPanel.BorderRgb)
         };
         foreach (var panel in panels)
         {
             if (panel.Definition.Id == TooltipPanelDefinition.HintId) continue;
-            result.Add(new PanelText(panel.Definition.Id, AddLines(new RichTextBuilder(60), panel).Build(),
-                panel.Definition.BorderRgb));
+            result.Add(new PanelText(panel.Definition.Id, panel.Definition.Order,
+                AddLines(new RichTextBuilder(60), panel), panel.Definition.BorderRgb));
         }
 
         return result;
     }
 
     /// <summary>The view's own panel: lines extensions added to it, then the usage hints.</summary>
-    private RichText BuildHint(TooltipPanel? added)
+    private RichTextBuilder BuildHint(TooltipPanel? added)
     {
         var builder = new RichTextBuilder(60);
         if (added != null) AddLines(builder, added).AddLine(string.Empty);
@@ -896,8 +903,7 @@ internal sealed class StorageTerminalView : ITerminalView
             .AddLine(text.Get("terminal_hint_title"), ignoreEmpty: true, Palette(hint.TitleRgb))
             .AddLine(text.Get("terminal_hint_left"), ignoreEmpty: true, Palette(hint.LabelRgb))
             .AddLine(text.Get("terminal_hint_right"), ignoreEmpty: true, Palette(hint.LabelRgb))
-            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, Palette(hint.LabelRgb))
-            .Build();
+            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, Palette(hint.LabelRgb));
     }
 
     private RichTextBuilder AddLines(RichTextBuilder builder, TooltipPanel panel)
@@ -915,28 +921,26 @@ internal sealed class StorageTerminalView : ITerminalView
 
     private sealed class PanelText
     {
-        internal PanelText(string id, RichText text, int? borderRgb)
+        internal PanelText(string id, int order, RichTextBuilder builder, int? borderRgb)
         {
             Id = id;
-            Text = text;
-            BorderRgb = borderRgb;
+            Order = order;
+            Builder = builder;
+            Style = borderRgb.HasValue
+                ? new TooltipStyle(TooltipStyleKind.Rgb, borderRgb, null, null)
+                : TooltipStyle.Native;
         }
 
         internal string Id { get; }
-
-        internal RichText Text { get; }
-
-        internal int? BorderRgb { get; }
+        internal int Order { get; }
+        internal RichTextBuilder Builder { get; }
+        internal TooltipStyle Style { get; }
     }
 
     private void HideHoverTooltip()
     {
-        if (_showingTooltip)
-        {
-            OverlayHandler.current?.HideTooltip();
-            HintBox.Hide();
-            foreach (var box in PanelBoxes.Values) box.Hide();
-        }
+        if (_showingTooltip) OverlayHandler.current?.HideTooltip();
+        _hoverTooltip?.Hide();
 
         _showingTooltip = false;
         _hoverKey = null;
