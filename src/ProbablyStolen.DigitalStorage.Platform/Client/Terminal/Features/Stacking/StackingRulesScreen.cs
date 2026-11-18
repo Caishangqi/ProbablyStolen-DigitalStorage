@@ -118,7 +118,7 @@ internal sealed class StackingRulesScreen : SubScreen
                 builder.Last.image.color = Tint(color);
             }
 
-            TerminalTooltipPresenter.SetText(builder.Last, color.Format());
+            TerminalTooltipPresenter.SetButtonText(builder.Last, color.Format());
         }
 
         builder.End();
@@ -174,7 +174,7 @@ internal sealed class StackingRulesScreen : SubScreen
         RuleCardWidgets.BeginCard(builder, Gap, width);
         CustomUIElement? field = null;
         field = PopupDropdown.AddField(builder, FieldName(rule.FieldId), FieldWidth, () => OpenFieldPicker(field!, row));
-        TerminalTooltipPresenter.SetText(field, FieldName(rule.FieldId));
+        TerminalTooltipPresenter.SetButtonText(field, FieldName(rule.FieldId));
         var modeLabels = Modes.Select(mode => new DropdownOption(text.Get(ModeKey(mode)))).ToList();
         var current = Array.IndexOf(Modes, rule.Mode);
         CustomUIElement? mode = null;
@@ -183,7 +183,7 @@ internal sealed class StackingRulesScreen : SubScreen
         builder.AddFlexibleSpace();
         var delete = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, "button_delete", false,
             () => Edit(() => _editor.Remove(row)), RuleCardWidgets.ControlHeight);
-        TerminalTooltipPresenter.SetText(delete, text.Get("stacking_remove_rule_tip"));
+        TerminalTooltipPresenter.SetButtonText(delete, text.Get("stacking_remove_rule_tip"));
         builder.End();
         foreach (var note in StackingRuleSummary.RowNotes(config, row))
         {
@@ -201,12 +201,12 @@ internal sealed class StackingRulesScreen : SubScreen
         CustomUIElement? add = null;
         add = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, ButtonIcons.Add, false,
             () => OpenFieldPicker(add!, -1), RuleCardWidgets.ControlHeight);
-        TerminalTooltipPresenter.SetText(add, text.Get("stacking_add_rule"));
+        TerminalTooltipPresenter.SetButtonText(add, text.Get("stacking_add_rule"));
         builder.AddFlexibleSpace();
         var clear = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, "button_clear", false,
             () => Edit(() => _editor.Clear()), RuleCardWidgets.ControlHeight);
         if (clear.button != null) clear.button.interactable = config.Rules.Count > 0;
-        TerminalTooltipPresenter.SetText(clear, text.Get("stacking_clear_rules"));
+        TerminalTooltipPresenter.SetButtonText(clear, text.Get("stacking_clear_rules"));
         builder.End();
     }
 

@@ -13,7 +13,7 @@ internal static class TerminalButtonView
     {
         var button = AddIcon(builder, icons, state.Appearance.IconKey, state.Selected, onClick, TerminalWindowMetrics.DockButton);
         var appearance = state.Appearance;
-        TerminalTooltipPresenter.SetText(button, appearance.TooltipArgKey == null
+        TerminalTooltipPresenter.SetButtonText(button, appearance.TooltipArgKey == null
             ? text.Get(appearance.TooltipKey)
             : text.Get(appearance.TooltipKey, text.Get(appearance.TooltipArgKey)));
         return button;

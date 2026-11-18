@@ -65,14 +65,14 @@ internal sealed partial class PartitionWindow
         CustomUIElement? add = null;
         add = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.Add, false,
             () => OpenFieldPicker(add!, -1), ControlHeight);
-        TerminalTooltipPresenter.SetText(add, _text.Get("partition_add_condition"));
+        TerminalTooltipPresenter.SetButtonText(add, _text.Get("partition_add_condition"));
         builder.AddFlexibleSpace();
         var sample = TerminalButtonView.AddIcon(builder, Icons, ButtonIcons.SampleAttributes, _showSample, () =>
         {
             _showSample = !_showSample;
             RefreshActiveDetail();
         }, ControlHeight);
-        TerminalTooltipPresenter.SetText(sample, _text.Get("partition_sample_attributes"));
+        TerminalTooltipPresenter.SetButtonText(sample, _text.Get("partition_sample_attributes"));
         builder.End();
 
         BuildSummary(builder, rule);
@@ -99,7 +99,7 @@ internal sealed partial class PartitionWindow
         SetSize(back, ControlHeight, ControlHeight);
         var arrow = PixelArrow.Add(back.root.transform, PixelArrow.Direction.Left, MachineryStyle.BUTTON_TEXT);
         arrow.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-        TerminalTooltipPresenter.SetText(back, _text.Get("partition_back"));
+        TerminalTooltipPresenter.SetButtonText(back, _text.Get("partition_back"));
 
         AddRulePicture(builder.CurrentContainer);
 
@@ -224,7 +224,7 @@ internal sealed partial class PartitionWindow
             SaveDetail();
             RefreshActiveDetail();
         }, ControlHeight);
-        TerminalTooltipPresenter.SetText(delete, _text.Get("partition_remove_condition_tip"));
+        TerminalTooltipPresenter.SetButtonText(delete, _text.Get("partition_remove_condition_tip"));
         builder.End();
     }
 

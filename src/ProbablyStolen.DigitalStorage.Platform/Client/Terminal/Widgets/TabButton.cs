@@ -17,7 +17,7 @@ internal static class TabButton
         TerminalControls.SetSize(button, Size, Size);
         var arrow = PixelArrow.Add(button.root.transform, PixelArrow.Direction.Left, MachineryStyle.BUTTON_TEXT);
         arrow.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-        TerminalTooltipPresenter.SetText(button, tooltip);
+        TerminalTooltipPresenter.SetButtonText(button, tooltip);
         return button;
     }
 }

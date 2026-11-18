@@ -18,6 +18,15 @@ internal static class TerminalTooltipPresenter
         _service = service;
     }
 
+    internal static void SetButtonText(CustomUIElement? element, string text)
+    {
+        if (element?.root == null) return;
+        if (_service is NativeTooltipService native)
+            native.SetButtonTooltip(element, text);
+        else
+            SetText(element, text);
+    }
+
     internal static void SetText(CustomUIElement? element, string text)
     {
         if (element?.root == null) return;

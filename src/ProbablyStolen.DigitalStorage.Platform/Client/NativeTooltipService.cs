@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Localization.Settings;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using ClientLayout = ProbablyStolen.DigitalStorage.Client.Tooltips;
 
@@ -23,6 +24,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
     private readonly List<TooltipGroup> _tickGroups = new();
     private readonly List<ObstacleRegistration> _obstacleSnapshot = new();
     private TooltipServiceDriver? _driver;
+    private NativeButtonTooltip? _buttonTooltip;
     private int _nextOwnerSweepFrame;
     private int _visibleGroupCount;
     private bool _ticking;
@@ -53,10 +55,42 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         if (owner == null) throw new ArgumentNullException(nameof(owner));
         ThrowIfDisposed();
         ThrowIfWrongThread();
+        return BindTooltip(element, text, owner, button: false);
+    }
+
+    internal void SetButtonTooltip(CustomUIElement element, string text)
+    {
+        ThrowIfDisposed();
+        ThrowIfWrongThread();
+        if (string.IsNullOrEmpty(text))
+        {
+            ClearTooltip(element);
+            return;
+        }
+        if (_bindings.TryGetValue(element, out var binding) && binding.Trigger is { IsButton: true } trigger && trigger != null)
+        {
+            trigger.tooltipText = text;
+            return;
+        }
+        BindTooltip(element, text, element, button: true);
+    }
+
+    internal bool TryShowButtonTooltip(DigitalStorageTooltipTrigger trigger)
+    {
+        if (_disposed) return false;
+        EnsureDriver();
+        return _driver != null && _driver.isActiveAndEnabled && (_buttonTooltip ??= new NativeButtonTooltip()).TryShow(trigger);
+    }
+
+    internal void HideButtonTooltip(DigitalStorageTooltipTrigger trigger) => _buttonTooltip?.Hide(trigger);
+
+    private IDisposable BindTooltip(CustomUIElement element, string text, object owner, bool button)
+    {
         if (_bindings.TryGetValue(element, out var previous)) previous.Dispose();
         if (element.root == null || string.IsNullOrEmpty(text)) return new ActionDisposable(() => { });
         var trigger = element.root.AddComponent<DigitalStorageTooltipTrigger>();
-        trigger.tooltipText = text ?? string.Empty;
+        trigger.tooltipText = text;
+        if (button) trigger.UseButtonTooltip(this);
         var binding = new Binding(this, element, trigger, owner);
         _bindings[element] = binding;
         EnsureDriver();
@@ -122,6 +156,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         try
         {
             CleanupStaleOwners(Time.frameCount);
+            _buttonTooltip?.Tick();
             if (_visibleGroupCount == 0) return;
             _tickGroups.Clear();
             foreach (var group in _groups)
@@ -151,9 +186,20 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         _driver = null;
     }
 
+    internal void DriverDisabled(TooltipServiceDriver driver)
+    {
+        if (ReferenceEquals(_driver, driver)) _buttonTooltip?.Hide();
+    }
+
+    internal void SceneUnloaded(TooltipServiceDriver driver)
+    {
+        if (ReferenceEquals(_driver, driver)) _buttonTooltip?.Release();
+    }
+
     internal void DriverDestroyed(TooltipServiceDriver driver)
     {
         if (!ReferenceEquals(_driver, driver)) return;
+        _buttonTooltip?.Release();
         _driver = null;
     }
 
@@ -193,6 +239,8 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         ThrowIfWrongThread();
         if (_disposed) return;
         _disposed = true;
+        _buttonTooltip?.Release();
+        _buttonTooltip = null;
         ReleaseDriver();
         while (_bindings.Count > 0)
         {
@@ -218,6 +266,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             _bindings.Remove(binding.Element);
         if (binding.Trigger != null)
         {
+            if (binding.Trigger.IsButton) binding.Trigger.enabled = false;
             binding.Trigger.tooltipText = string.Empty;
             UnityEngine.Object.Destroy(binding.Trigger);
         }
@@ -911,13 +960,29 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
 internal sealed class TooltipServiceDriver : MonoBehaviour
 {
     private NativeTooltipService? _service;
-    internal void Initialize(NativeTooltipService service) => _service = service;
-    internal void Detach() { _service = null; enabled = false; }
+    internal void Initialize(NativeTooltipService service)
+    {
+        _service = service;
+        SceneManager.sceneUnloaded += OnSceneUnloaded;
+    }
+
+    internal void Detach()
+    {
+        SceneManager.sceneUnloaded -= OnSceneUnloaded;
+        _service = null;
+        enabled = false;
+    }
+
     private void LateUpdate() => _service?.Tick(this);
+    private void OnDisable() => _service?.DriverDisabled(this);
+    private void OnSceneUnloaded(Scene scene) => _service?.SceneUnloaded(this);
+
     private void OnDestroy()
     {
+        if (_service == null) return;
+        SceneManager.sceneUnloaded -= OnSceneUnloaded;
         var service = _service;
         _service = null;
-        service?.DriverDestroyed(this);
+        service.DriverDestroyed(this);
     }
 }
