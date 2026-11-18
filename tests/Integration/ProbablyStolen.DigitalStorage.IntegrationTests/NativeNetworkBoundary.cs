@@ -93,6 +93,7 @@ public class GameItem
     internal bool ContainerTooltip = false;
     internal bool Owned = true;
     internal readonly List<GameItem> Children = new();
+    internal readonly List<GameGridInventory> StoragePages = new();
 
     internal bool IsTag(string tag) => tag == "CONTAINER_TAG" || tag == "CONTAINER_TOOLTIP_TAG"
         ? ContainerTooltip
@@ -114,6 +115,7 @@ public class GraphNodeStorage
 public class GameInventory : GraphNodeStorage
 {
     internal string identifier = string.Empty;
+    internal GameItem? Owner;
     internal readonly List<GameItem> childItems = new();
 
     internal void Place(GameItem item)
@@ -126,6 +128,7 @@ public class GameInventory : GraphNodeStorage
 
 public sealed class GameGridInventory : GameInventory
 {
+    internal bool overrideLockInsert;
     private readonly List<(GameItem First, GameItem Second)> _contacts = new();
 
     internal void Touch(GameItem first, GameItem second) => _contacts.Add((first, second));
@@ -162,6 +165,8 @@ internal static class GeneralHelper
 
 internal static class GraphUtils
 {
+    internal static T? FindParentType<T>(GameInventory inventory) where T : class => inventory.Owner as T;
+
     internal static List<T> FindAllChildrenType<T>(GameItem item) =>
         item.Slots.OfType<T>().Concat(item.Children.OfType<T>()).ToList();
 

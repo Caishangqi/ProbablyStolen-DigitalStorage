@@ -44,15 +44,28 @@ public static class StoredItemPresence
         }
     }
 
-    // Whether the inventory is a cell page or lies, through its owning items, inside one. Each inventory on the
-    // way is remembered, so items sharing containers cost one walk.
-    private static bool IsStored(GameInventory? inventory, Dictionary<GameInventory, bool> known)
+    /// <summary>Allows native liquid updates for containers outside storage cells.</summary>
+    public static bool ShouldUpdateLiquid(GameItem? container)
+    {
+        try
+        {
+            return !IsStored(container?.parentInventory, known: null);
+        }
+        catch (System.Exception error)
+        {
+            UnityEngine.Debug.LogWarning($"Digital Storage: liquid update could not check storage ownership ({error.GetType().Name}).");
+            return true;
+        }
+    }
+
+    // Each inventory is remembered for bulk scans, so items sharing containers cost one walk.
+    private static bool IsStored(GameInventory? inventory, Dictionary<GameInventory, bool>? known)
     {
         if (inventory == null) return false;
-        if (known.TryGetValue(inventory, out var stored)) return stored;
+        if (known != null && known.TryGetValue(inventory, out var found)) return found;
         var owner = GraphUtils.FindParentType<GameItem>(inventory);
-        stored = IsPage(inventory, owner) || owner != null && IsStored(owner.parentInventory, known);
-        known[inventory] = stored;
+        var stored = IsPage(inventory, owner) || owner != null && IsStored(owner.parentInventory, known);
+        if (known != null) known[inventory] = stored;
         return stored;
     }
 
