@@ -219,6 +219,12 @@ internal static class CellPages
     /// <summary>Builds a cell view over page contents, reading the cell's current settings.</summary>
     private static CellView ViewOf(GameItem cell, IReadOnlyList<PageView> pages, CellUsage usage, CellWriteState writeState)
     {
+        if (pages.Any(page => page.IsProtected))
+        {
+            if (CellHealth.Get(cell).Status == CellHealthStatus.Available)
+                CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Protected));
+            writeState = CellWriteState.ExtractOnly;
+        }
         var tier = StorageCellTier.FromCellId(cell.identifier) ?? throw new InvalidOperationException("Unknown storage cell tier.");
         var typeLimit = CellTypeLimitSource.EffectiveOrBase(cell);
         return new CellView(CellRules.For(tier), typeLimit, pages, usage, CellPartitionTags.Read(cell),
@@ -236,32 +242,51 @@ internal static class CellPages
 
         var usage = new CellUsage();
         var views = new List<PageView>(pages.Count);
+        var seenRoots = new HashSet<GameItem>();
         for (var index = 0; index < pages.Count; index++)
         {
             var geometry = layout.Pages[index];
+            var roots = pages[index].childItems.ToArray();
             var slots = new List<(int Slot, ItemKey? Key)>();
-            foreach (var root in pages[index].childItems)
+            var accepted = new List<(ItemKey Key, int Units, BoundingSize Size)>();
+            var protectedPage = false;
+            foreach (var root in roots)
             {
+                if (root == null || !seenRoots.Add(root) || !ReferenceEquals(root.parentInventory, pages[index]))
+                    throw new InvalidOperationException($"A root has uncertain page ownership. page={index}");
                 var size = SizeOf(root);
                 var slot = -1;
                 if (geometry.Kind == PageKind.Strip)
                 {
                     slot = StripLayout.SlotIndexAt(geometry, root.modifiedShape.minX, root.modifiedShape.minY);
-                    if (!size.Equals(geometry.SlotSize) || slot < 0)
-                        throw new InvalidOperationException("A root is off its slot grid. " + StorageDiagnostics.Context(() =>
-                            $"page={index} expected_slot={geometry.SlotSize.Width}x{geometry.SlotSize.Height} actual={size.Width}x{size.Height} " +
-                            $"x={root.modifiedShape.minX} y={root.modifiedShape.minY} slot={slot} " + NativeStorageDiagnosticContext.Item(root)));
+                    if (!size.Equals(geometry.SlotSize) || slot < 0 || slots.Any(existing => existing.Slot == slot))
+                    {
+                        protectedPage = true;
+                        continue;
+                    }
                 }
 
-                var key = identify(root) ?? throw new InvalidOperationException($"A root on page {index} has no type. " +
-                    StorageDiagnostics.Context(() => NativeStorageDiagnosticContext.Item(root)));
+                var key = identify(root);
+                if (key == null || root.unitCount <= 0)
+                {
+                    protectedPage = true;
+                    continue;
+                }
                 if (geometry.Kind == PageKind.Strip) slots.Add((slot, key));
-                usage.Add(key, root.unitCount, CellUsage.AreaOf(size, root.unitCount));
+                accepted.Add((key, root.unitCount, size));
             }
 
+            if (protectedPage)
+            {
+                views.Add(PageView.Protected(geometry, roots.Length));
+                continue;
+            }
+
+            foreach (var item in accepted)
+                usage.Add(item.Key, item.Units, CellUsage.AreaOf(item.Size, item.Units));
             views.Add(geometry.Kind == PageKind.Strip
                 ? PageView.Strip(geometry, slots)
-                : PageView.Unslotted(geometry, pages[index].childItems.Count));
+                : PageView.Unslotted(geometry, roots.Length));
         }
 
         return (views, usage);
@@ -271,14 +296,15 @@ internal static class CellPages
     /// Appends one strip page, then records it in the layout and verifies. On failure the page is removed again and
     /// the previous layout restored. Appending as the last tab keeps every other tab's index unchanged.
     /// </summary>
-    internal static bool TryAppendStripPage(GameItem cell, PageGeometry geometry)
+    internal static bool TryAppendStripPage(GameItem cell, PageGeometry geometry,
+        Action<GameGridInventory>? beforeAttach = null)
     {
         var tabs = Tabs(cell);
         if (tabs == null || !CellTags.TryReadLayout(cell, out var before) || before!.Pages.Count >= LayoutDescriptor.MaxPages ||
             !IsLinked(cell, tabs, before)) return false;
 
         var after = before.WithAppended(geometry);
-        AddPage(tabs, geometry);
+        AddPage(tabs, geometry, beforeAttach);
         CellTags.WriteLayout(cell, after);
         Refresh(cell);
         if (IsLinked(cell, tabs, after)) return true;
@@ -354,7 +380,41 @@ internal static class CellPages
         }
     }
 
-    internal static GameGridInventory AddPage(MachineryTabs tabs, PageGeometry geometry)
+    /// <summary>Removes only an empty tail strip page created by a guarded recovery attempt.</summary>
+    internal static bool TryRemoveEmptyTailStripPage(GameItem cell, int pageIndex, BoundingSize size,
+        GameGridInventory? expectedPage)
+    {
+        var tabs = Tabs(cell);
+        if (expectedPage == null || tabs == null || !CellTags.TryReadLayout(cell, out var before) ||
+            before!.Pages.Count != pageIndex + 1 || pageIndex <= 0 || tabs.count != before.Pages.Count ||
+            !IsLinked(cell, tabs, before)) return false;
+        if (before.Pages[pageIndex].Kind != PageKind.Strip || !before.Pages[pageIndex].SlotSize.Equals(size) ||
+            tabs.GetTabInventory(pageIndex) is not GameGridInventory page || !ReferenceEquals(page, expectedPage) ||
+            page.childItems.Count != 0 || page.parents.Count == 0) return false;
+
+        var element = tabs.GetPage(pageIndex);
+        if (element == null || !tabs.Detach(element)) return false;
+        var after = before.Without(new[] { pageIndex });
+        CellTags.WriteLayout(cell, after);
+        Refresh(cell);
+        if (IsLinked(cell, tabs, after))
+        {
+            UnityEngine.Object.Destroy(element.handler.gameObject);
+            return true;
+        }
+
+        CellTags.WriteLayout(cell, before);
+        Refresh(cell);
+        if (tabs.count != pageIndex) return false;
+        tabs.AddTab((tabs.count + 1).ToString(), element);
+        Refresh(cell);
+        var restored = IsLinked(cell, tabs, before) &&
+            ReferenceEquals(tabs.GetTabInventory(pageIndex), expectedPage);
+        return restored;
+    }
+
+    internal static GameGridInventory AddPage(MachineryTabs tabs, PageGeometry geometry,
+        Action<GameGridInventory>? beforeAttach = null)
     {
         var page = new GameGridInventory(geometry.Width, geometry.Height).SetMachineryStyle();
         // Players reach page items only through the terminal: no drag in or out, and no "use" from the cell window.
@@ -369,6 +429,7 @@ internal static class CellPages
         page.maxSlotRemoveItemFunc = (item, _, _) => ExternalAccessScope.AllowsRemoval(item) ? item.unitCount : 0;
         page.mayActivateSlotItemFunc = (_, _, _) => false;
         page.canActivateSlotItemFunc = (_, _, _) => false;
+        beforeAttach?.Invoke(page);
         tabs.AddTab((tabs.count + 1).ToString(), MachineHelper.WrapInIntake(page));
         return page;
     }

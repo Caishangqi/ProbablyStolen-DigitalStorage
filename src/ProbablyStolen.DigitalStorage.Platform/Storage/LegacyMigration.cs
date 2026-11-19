@@ -96,6 +96,11 @@ internal sealed class LegacyMigration
         }
 
         var view = CellPages.Read(cell, StorageService.Identify, CellWriteState.Writable);
+        if (view.Pages.Any(page => page.IsProtected))
+        {
+            _log.Warning($"Digital Storage: migration of {cell.identifier} stopped because a page is protected.");
+            return;
+        }
         var source = new CellRootSource(cell, StorageService.Identify, null, unslottedOnly: true);
         var before = Capture(cell);
         var forecast = RootDrainSimulator.Forecast(view, source.Snapshot());

@@ -29,7 +29,8 @@ internal sealed partial class BasicCellHandler
         if (!health.IsMountable) return null;
         try
         {
-            var state = health.Status == CellHealthStatus.ReadOnly ? CellWriteState.ExtractOnly : CellWriteState.Writable;
+            var state = health.Status is CellHealthStatus.ReadOnly or CellHealthStatus.Protected
+                ? CellWriteState.ExtractOnly : CellWriteState.Writable;
             if (!CellPages.IsComplete(cell, out var failure))
                 throw new InvalidOperationException("The pages do not match the layout. " + failure);
             var view = CellPages.ReadCached(cell, state);
@@ -74,8 +75,10 @@ internal sealed partial class BasicCellHandler
         {
             try
             {
-                var state = input.Health.Status == CellHealthStatus.ReadOnly ? CellWriteState.ExtractOnly : CellWriteState.Writable;
+                var state = input.Health.Status is CellHealthStatus.ReadOnly or CellHealthStatus.Protected
+                    ? CellWriteState.ExtractOnly : CellWriteState.Writable;
                 input.View = CellPages.ReadCached(cell, state);
+                input.Health = CellHealth.Get(cell);
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException)
             {

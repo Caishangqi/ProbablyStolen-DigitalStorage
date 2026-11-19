@@ -113,7 +113,8 @@ internal sealed class StorageService
         }
 
         // A cell that could not be mounted, such as while a save is decoding, is unavailable, never empty.
-        var unavailable = mounted.Network.StorageUnavailable || mounted.Inventories.Count < mounted.Network.Cells.Count;
+        var unavailable = mounted.Network.StorageUnavailable || mounted.Inventories.Count < mounted.Network.Cells.Count ||
+            mounted.Inventories.Any(entry => entry.Item2.View.Pages.Any(page => page.IsProtected));
 
         var totals = new Dictionary<ItemKey, (long Pieces, long Units)>();
         foreach (var (_, inventory) in mounted.Inventories)
@@ -179,9 +180,13 @@ internal sealed class StorageService
     }
 
     // Hover uses the terminal's last snapshot and treats a missing sample as unknown without mounting the network.
-    internal GameItem? FindPreviewSample(GameItem terminal, ItemKey key) =>
-        _terminalSamples.TryGetValue(terminal, out var samples) && samples.TryGetValue(key, out var root) &&
-        IsStored(root) ? root : null;
+    internal GameItem? FindPreviewSample(GameItem terminal, ItemKey key)
+    {
+        if (!_terminalSamples.TryGetValue(terminal, out var samples) || !samples.TryGetValue(key, out var root) ||
+            !IsStored(root) || root.parentInventory is not GameGridInventory page) return null;
+        var cell = page.GetParentItem();
+        return cell != null && CellHealth.Get(cell).Status != CellHealthStatus.Protected ? root : null;
+    }
 
     // Each stored root with its type: a strip root's type is its slot record; anchor and legacy roots are read.
     private static IEnumerable<(ItemKey Key, GameItem Root)> RootsByType(GameItem cell, CellView view)
@@ -190,6 +195,7 @@ internal sealed class StorageService
         for (var index = 0; index < pages.Count && index < view.Pages.Count; index++)
         {
             var page = view.Pages[index];
+            if (page.IsProtected) continue;
             foreach (var root in pages[index].childItems)
             {
                 var key = (page.Kind == PageKind.Strip
@@ -236,7 +242,7 @@ internal sealed class StorageService
             if (migratePending) _migrate(cell);
             var inventory = BasicCellHandler.GetCellInventory(cell, _log, _diagnostics, storedIdentityChanged);
             if (inventory == null) continue;
-            var readOnly = CellHealth.Get(cell).Status == CellHealthStatus.ReadOnly;
+            var readOnly = inventory.View.WriteState == CellWriteState.ExtractOnly;
             storage.Mount(inventory.View.Priority,
                 new InventoryHandler(inventory, inventory.View.Partition, allowInsertion: !readOnly));
             inventories.Add((cell, inventory));

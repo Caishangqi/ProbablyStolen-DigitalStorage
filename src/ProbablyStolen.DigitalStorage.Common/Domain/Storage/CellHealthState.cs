@@ -16,7 +16,10 @@ public enum CellHealthStatus
     Locked = 3,
 
     /// <summary>The cell cannot be used; see the reason.</summary>
-    Unavailable = 4
+    Unavailable = 4,
+
+    /// <summary>The cell contains protected pages; healthy pages may still be extracted.</summary>
+    Protected = 5
 }
 
 /// <summary>Why a cell is unavailable.</summary>
@@ -68,7 +71,8 @@ public readonly struct CellHealthState
     public bool RisksItemLoss => Status == CellHealthStatus.Unavailable && Reason != CellUnavailableReason.InvalidTypeLimit;
 
     /// <summary>Gets whether the cell may be mounted in a network.</summary>
-    public bool IsMountable => Status is CellHealthStatus.Available or CellHealthStatus.ReadOnly or CellHealthStatus.CompactionBlocked;
+    public bool IsMountable => Status is CellHealthStatus.Available or CellHealthStatus.ReadOnly or
+        CellHealthStatus.CompactionBlocked or CellHealthStatus.Protected;
 
     /// <summary>Assesses a cell right after a save loaded, before migration runs.</summary>
     /// <param name="gate">The schema classification.</param>

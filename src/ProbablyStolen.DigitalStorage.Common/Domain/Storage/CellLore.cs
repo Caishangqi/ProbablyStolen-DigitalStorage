@@ -83,6 +83,8 @@ public static class CellLore
         {
             case CellHealthStatus.ReadOnly:
                 return new LoreLine("cell_storage_migration_refused");
+            case CellHealthStatus.Protected:
+                return new LoreLine("cell_storage_page_protected");
             case CellHealthStatus.CompactionBlocked:
                 return new LoreLine("cell_storage_compaction_blocked");
             case CellHealthStatus.Locked:

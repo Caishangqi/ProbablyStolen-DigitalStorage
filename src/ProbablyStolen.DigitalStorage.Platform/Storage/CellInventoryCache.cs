@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -63,38 +64,83 @@ internal static class CellInventoryCache
     private sealed class Footprint
     {
         private readonly GameGridInventory[] _pages;
+        private readonly int[] _widths;
+        private readonly int[] _heights;
         private readonly Mark[][] _roots;
+        private readonly bool _hasSchema;
+        private readonly int _schema;
+        private readonly string? _layout;
+        private readonly bool _hasPageCount;
+        private readonly int _pageCount;
 
-        private Footprint(GameGridInventory[] pages, Mark[][] roots)
+        private Footprint(GameGridInventory[] pages, int[] widths, int[] heights, Mark[][] roots, bool hasSchema,
+            int schema, string? layout, bool hasPageCount, int pageCount)
         {
             _pages = pages;
+            _widths = widths;
+            _heights = heights;
             _roots = roots;
+            _hasSchema = hasSchema;
+            _schema = schema;
+            _layout = layout;
+            _hasPageCount = hasPageCount;
+            _pageCount = pageCount;
         }
 
         internal static Footprint Of(GameItem cell)
         {
             var pages = CellPages.Pages(cell).ToArray();
-            return new Footprint(pages, pages.Select(page => page.childItems.Select(Mark.Of).ToArray()).ToArray());
+            if (!CellTags.TryReadLayout(cell, out var layout))
+                throw new InvalidOperationException("The cell layout cannot be read for cache tracking.");
+            var hasSchema = cell.IsTag(CellTags.SchemaTag);
+            var hasPageCount = cell.IsTag(CellTags.PageCountTag);
+            return new Footprint(pages, layout!.Pages.Select(page => page.Width).ToArray(),
+                layout.Pages.Select(page => page.Height).ToArray(),
+                pages.Select(page => page.childItems.Select(Mark.Of).ToArray()).ToArray(), hasSchema,
+                hasSchema ? cell.GetTagReadonly(CellTags.SchemaTag).GetInt() : 0,
+                cell.IsTag(CellTags.LayoutTag) ? cell.GetTagReadonly(CellTags.LayoutTag).GetString() : null,
+                hasPageCount, hasPageCount ? cell.GetTagReadonly(CellTags.PageCountTag).GetInt() : 0);
         }
 
         internal bool Matches(GameItem cell)
         {
-            var pages = CellPages.Pages(cell);
-            if (pages.Count != _pages.Length) return false;
-            for (var index = 0; index < pages.Count; index++)
+            try
             {
-                if (!ReferenceEquals(pages[index], _pages[index])) return false;
-                var items = pages[index].childItems;
-                var marks = _roots[index];
-                if (items.Count != marks.Length) return false;
-                for (var root = 0; root < marks.Length; root++)
+                if (cell.IsTag(CellTags.SchemaTag) != _hasSchema ||
+                    (_hasSchema && cell.GetTagReadonly(CellTags.SchemaTag).GetInt() != _schema) ||
+                    (cell.IsTag(CellTags.LayoutTag) ? cell.GetTagReadonly(CellTags.LayoutTag).GetString() : null) != _layout ||
+                    cell.IsTag(CellTags.PageCountTag) != _hasPageCount ||
+                    (_hasPageCount && cell.GetTagReadonly(CellTags.PageCountTag).GetInt() != _pageCount) ||
+                    !CellPages.IsComplete(cell)) return false;
+                var tabs = CellPages.Tabs(cell);
+                if (tabs == null) return false;
+                var panel = (cell.contentWindow?.childElement as MachineryPanelRow)?.GetPanel(CellPages.PanelRole);
+                if (panel == null || !ReferenceEquals(tabs.owner, panel.owner) ||
+                    !((PixelElement)tabs).IsRenderingChildOf(panel)) return false;
+                var pages = CellPages.Pages(cell);
+                if (pages.Count != _pages.Length) return false;
+                for (var index = 0; index < pages.Count; index++)
                 {
-                    if (!marks[root].Matches(items[root])) return false;
+                    if (!ReferenceEquals(pages[index], _pages[index]) ||
+                        !ReferenceEquals(pages[index].GetParentItem(), cell) ||
+                        pages[index].inventoryShape.width != _widths[index] ||
+                        pages[index].inventoryShape.height != _heights[index] ||
+                        !pages[index].parents.Contains(panel.owner)) return false;
+                    var items = pages[index].childItems;
+                    var marks = _roots[index];
+                    if (items.Count != marks.Length) return false;
+                    for (var root = 0; root < marks.Length; root++)
+                        if (!marks[root].Matches(items[root], pages[index])) return false;
                 }
-            }
 
-            return true;
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
+
     }
 
     private readonly struct Mark
@@ -117,9 +163,9 @@ internal static class CellInventoryCache
         internal static Mark Of(GameItem item) =>
             new(item, item.unitCount, item.modifiedShape.minX, item.modifiedShape.minY, CellPages.SizeOf(item));
 
-        internal bool Matches(GameItem item) =>
-            ReferenceEquals(item, _item) && item.unitCount == _units && item.modifiedShape.minX == _x &&
-            item.modifiedShape.minY == _y && CellPages.SizeOf(item).Equals(_size) &&
+        internal bool Matches(GameItem item, GameGridInventory owner) =>
+            ReferenceEquals(item, _item) && ReferenceEquals(item.parentInventory, owner) && item.unitCount == _units &&
+            item.modifiedShape.minX == _x && item.modifiedShape.minY == _y && CellPages.SizeOf(item).Equals(_size) &&
             !(item is GameItemElement element && element.IsDestroyed());
     }
 }

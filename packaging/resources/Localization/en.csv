@@ -184,6 +184,7 @@ cell_storage_partition_include,Whitelist · {0}/{1} rules
 cell_storage_partition_exclude,Blacklist · {0}/{1} rules
 cell_storage_schema,Storage format v{0}; latest v{1}
 cell_storage_migration_refused,Pending migration: take some items out first
+cell_storage_page_protected,Some pages are protected; items on other pages can still be extracted
 cell_storage_migration_failed,Migration failed: do not save; quit and load again
 cell_storage_compaction_blocked,Empty pages could not be removed; the cell still works
 cell_storage_locked,Locked: first load and save this game with mod version {0}, then upgrade

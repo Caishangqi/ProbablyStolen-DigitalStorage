@@ -47,12 +47,15 @@ internal sealed class CellRootPort : ICellPagesPort
     }
 
     /// <inheritdoc />
-    public bool TryAppendStripPage(PageGeometry page) => CellPages.TryAppendStripPage(_cell, page);
+    public bool TryAppendStripPage(PageGeometry page) =>
+        _view?.WriteState != CellWriteState.ExtractOnly && CellPages.TryAppendStripPage(_cell, page);
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">The root cannot be found, or the target page or layout is not readable.</exception>
     public TransferStep MoveInto(RootSnapshot root, int page, int slot)
     {
+        if (_view?.WriteState == CellWriteState.ExtractOnly)
+            return TransferStep.Rejected(StoreRejection.ReadOnly);
         var item = (root.Origin as INativeRootSource)?.Resolve(root)
             ?? throw new InvalidOperationException($"The root {root} cannot be resolved.");
         if (!CellTags.TryReadLayout(_cell, out var layout) || page >= layout!.Pages.Count)
@@ -170,11 +173,18 @@ internal sealed class CellRootSource : INativeRootSource
     private IEnumerable<(int Index, GameGridInventory Page)> AllowedPages()
     {
         var pages = CellPages.Pages(_cell);
-        if (!_unslottedOnly) return pages.Select((page, index) => (index, page));
+        if (_view != null && pages.Count != _view.Pages.Count)
+            throw new InvalidOperationException("The cell view no longer matches its pages.");
+        if (!_unslottedOnly)
+            return pages.Select((page, index) => (index, page)).Where(entry => IsAllowed(entry.index));
         if (!CellTags.TryReadLayout(_cell, out var layout) || layout!.Pages.Count != pages.Count)
             throw new InvalidOperationException("The cell layout does not match its pages.");
-        return pages.Select((page, index) => (index, page)).Where(entry => layout.Pages[entry.index].Kind != PageKind.Strip);
+        return pages.Select((page, index) => (index, page)).Where(entry => IsAllowed(entry.index) &&
+            layout.Pages[entry.index].Kind != PageKind.Strip);
     }
+
+    private bool IsAllowed(int page) => _view == null || !_view.Pages[page].IsProtected;
+
 
     private bool Matches(int page, GameItem item) => _key == null || _key.Equals(TypeOf(page, item));
 

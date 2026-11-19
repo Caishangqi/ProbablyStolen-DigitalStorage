@@ -134,7 +134,8 @@ internal sealed class NetworkStorageFacade : IStorage
         }
 
         var inventory = BasicCellHandler.GetCellInventory(cell, _log);
-        if (inventory == null) return StorageResult.None(StorageStatus.Unavailable);
+        if (inventory == null || page < 0 || page >= inventory.View.Pages.Count ||
+            inventory.View.Pages[page].IsProtected) return StorageResult.None(StorageStatus.NotStored);
 
         var sink = new InventoryRootSink(destination);
         long moved;

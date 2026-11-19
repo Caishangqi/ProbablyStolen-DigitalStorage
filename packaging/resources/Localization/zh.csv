@@ -184,6 +184,7 @@ cell_storage_partition_include,白名单 · {0}/{1} 条规则
 cell_storage_partition_exclude,黑名单 · {0}/{1} 条规则
 cell_storage_schema,存储格式 v{0}，最新为 v{1}
 cell_storage_migration_refused,待迁移: 需要先取出部分物品
+cell_storage_page_protected,部分页面已保护，仍可取出其他页面中的物品
 cell_storage_migration_failed,迁移失败: 请不要存档，退出后重新载入
 cell_storage_compaction_blocked,空页回收失败，元件仍可使用
 cell_storage_locked,已锁定: 请先安装模组 {0} 载入并保存此存档，再升级

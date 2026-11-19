@@ -26,12 +26,13 @@ public sealed class PageView
     private readonly bool[]? _occupied;
     private readonly ItemKey?[]? _keys;
 
-    private PageView(PageGeometry geometry, bool[]? occupied, ItemKey?[]? keys, int rootCount)
+    private PageView(PageGeometry geometry, bool[]? occupied, ItemKey?[]? keys, int rootCount, bool isProtected)
     {
         Geometry = geometry;
         _occupied = occupied;
         _keys = keys;
         RootCount = rootCount;
+        IsProtected = isProtected;
     }
 
     /// <summary>Creates a strip page projection.</summary>
@@ -60,7 +61,7 @@ public sealed class PageView
             count++;
         }
 
-        return new PageView(geometry, occupied, keys, count);
+        return new PageView(geometry, occupied, keys, count, isProtected: false);
     }
 
     /// <summary>Creates an anchor or legacy page projection holding <paramref name="rootCount"/> roots.</summary>
@@ -69,8 +70,18 @@ public sealed class PageView
     {
         if (geometry.Kind == PageKind.Strip) throw new ArgumentException("Strip pages track slots.", nameof(geometry));
         if (rootCount < 0) throw new ArgumentException("A root count cannot be negative.", nameof(rootCount));
-        return new PageView(geometry, null, null, rootCount);
+        return new PageView(geometry, null, null, rootCount, isProtected: false);
     }
+
+    /// <summary>Creates a page whose structure is known but whose roots are protected from inventory operations.</summary>
+    public static PageView Protected(PageGeometry geometry, int rootCount)
+    {
+        if (rootCount < 0) throw new ArgumentOutOfRangeException(nameof(rootCount));
+        return new PageView(geometry, null, null, rootCount, isProtected: true);
+    }
+
+    /// <summary>Gets whether this page is structurally known but excluded from inventory operations.</summary>
+    public bool IsProtected { get; }
 
     /// <summary>Gets the page geometry.</summary>
     public PageGeometry Geometry { get; }
@@ -99,7 +110,7 @@ public sealed class PageView
         return -1;
     }
 
-    internal PageView Clone() => new(Geometry, (bool[]?)_occupied?.Clone(), (ItemKey?[]?)_keys?.Clone(), RootCount);
+    internal PageView Clone() => new(Geometry, (bool[]?)_occupied?.Clone(), (ItemKey?[]?)_keys?.Clone(), RootCount, IsProtected);
 
     internal void Occupy(int slot, ItemKey? key)
     {

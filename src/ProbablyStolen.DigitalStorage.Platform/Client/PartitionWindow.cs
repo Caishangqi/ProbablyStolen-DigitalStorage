@@ -11,6 +11,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
@@ -42,6 +43,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private readonly ITerminalViewSettings _view;
     private readonly TerminalSearchService _search;
     private readonly GameItem _cell;
+    private readonly CellView? _sampleView;
     private readonly Action<string> _log;
     private readonly PartitionSession _session;
     private readonly PartitionDraft _draft;
@@ -88,6 +90,14 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _search = search;
         _cell = cell;
         _log = log;
+        try
+        {
+            _sampleView = CellPages.ReadCached(cell, CellWriteState.ExtractOnly);
+        }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException)
+        {
+            _sampleView = null;
+        }
         _session = new PartitionSession(cell);
         _opened = new CellPartitionTags(cell).Capture().Interpret();
         _draft = new PartitionDraft(_opened.Config, CellTypeLimitSource.EffectiveOrBase(cell), Columns,
@@ -815,9 +825,13 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     private GameItem? FindInCell(ItemKey key)
     {
-        foreach (var root in CellPages.Roots(_cell))
+        if (_sampleView == null) return null;
+        var pages = CellPages.Pages(_cell);
+        for (var index = 0; index < pages.Count && index < _sampleView.Pages.Count; index++)
         {
-            if (Equals(StorageService.Identify(root), key)) return root;
+            if (_sampleView.Pages[index].IsProtected) continue;
+            foreach (var root in pages[index].childItems)
+                if (Equals(StorageService.Identify(root), key)) return root;
         }
 
         return null;

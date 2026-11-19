@@ -39,6 +39,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly ItemContentService _itemContent;
     private readonly CellWorkbenchItem _workbench;
     private readonly CellHealth _health;
+    private readonly CellRecovery _recovery;
     private readonly LegacyMigration _migration;
     private readonly StorageEventBus _events;
     private readonly DigitalStorageSettings _settings;
@@ -63,7 +64,7 @@ public sealed class PlatformComposition : IDisposable
     private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
         TooltipComposition tooltip, BasicCellHandler cellHandler,
         ItemAppearance appearance,
-        StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
+        StorageContentRegistration content, ItemContentService itemContent, CellHealth health, CellRecovery recovery, LegacyMigration migration, StorageEventBus events,
         DigitalStorageSettings settings, StorageVendors vendors, DigitalStorageNetwork network, NetworkSprites networkSprites,
         NativeCustomerCatalog customers,
         TerminalSearchComposition search, CellWorkbenchItem workbench,
@@ -90,6 +91,7 @@ public sealed class PlatformComposition : IDisposable
         _itemContent = itemContent;
         _workbench = workbench;
         _health = health;
+        _recovery = recovery;
         _migration = migration;
         _pinyinLifecycle = new PinyinLifecycleCoordinator(
             locale => _settings.GetSearchConfiguration(locale, message => _log.Error(message)),
@@ -163,6 +165,7 @@ public sealed class PlatformComposition : IDisposable
             drive => NativeCellResolver.Get(drive));
         var cellHealth = new CellHealth(text, log);
         var migration = new LegacyMigration(cellHealth, log);
+        var recovery = new CellRecovery(cellHealth, diagnostics, log);
         var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message), cell =>
         {
             // Migration failures during play need the same warning as failures during loading.
@@ -214,7 +217,7 @@ public sealed class PlatformComposition : IDisposable
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
             modules, new TerminalModuleFactory(appearance), itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
-            tooltip, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
+            tooltip, cellHandler, appearance, content, itemContent, cellHealth, recovery, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, log, goods, customers),
             new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
@@ -258,6 +261,7 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _health.Run;
             ModHook.OnGameLoadedLate += _typeBackfill.Run;
             ModHook.OnGameLoadedLate += _migration.Run;
+            ModHook.OnGameLoadedLate += _recovery.Run;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ExposeRuntime(_runtime);
             ExposeTooltipService(_tooltip.Service);
@@ -307,6 +311,7 @@ public sealed class PlatformComposition : IDisposable
         _health.Detach();
         ModHook.OnGameLoadedLate -= _typeBackfill.Run;
         ModHook.OnGameLoadedLate -= _migration.Run;
+        ModHook.OnGameLoadedLate -= _recovery.Run;
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
