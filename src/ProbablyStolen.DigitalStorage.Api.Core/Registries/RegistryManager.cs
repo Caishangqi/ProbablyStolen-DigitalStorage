@@ -4,20 +4,18 @@ using System.Linq;
 
 namespace ProbablyStolen.DigitalStorage.Api.Registries;
 
-/// <summary>Owns registries and their one-time creation, data registration, and freeze lifecycle.</summary>
+/// <summary>Owns registries and their one-time creation, registration, and freeze lifecycle.</summary>
 public sealed class RegistryManager : IDisposable
 {
     private readonly Dictionary<Identifier, Type> _types = new();
     private readonly Dictionary<Identifier, object> _registries = new();
-    private readonly Dictionary<Identifier, (Type ValueType, Func<string, object> Decoder)> _decoders = new();
     private readonly List<RegisterEvent.PendingEntry> _pendingEntries = new();
     private readonly List<Action> _holderDisposals = new();
     private readonly List<Action<NewRegistryEvent>> _newRegistryCallbacks = new();
     private readonly List<Action<RegisterEvent>> _registerCallbacks = new();
-    private readonly List<Action<DataPackRegistryEvent>> _dataCallbacks = new();
     private bool _created;
     private bool _registered;
-    private bool _dataRegistered;
+    private bool _frozen;
     private bool _callbacksClosed;
     private bool _failed;
     private bool _disposed;
@@ -36,15 +34,8 @@ public sealed class RegistryManager : IDisposable
         remove { _registerCallbacks.Remove(value!); }
     }
 
-    /// <summary>Registers a callback for data registry and decoder declarations.</summary>
-    public event Action<DataPackRegistryEvent> DataPackRegistry
-    {
-        add { EnsureCanSubscribe(); _dataCallbacks.Add(value ?? throw new ArgumentNullException(nameof(value))); }
-        remove { _dataCallbacks.Remove(value!); }
-    }
-
     /// <summary>Gets whether all declarations completed and registries are frozen.</summary>
-    public bool IsFrozen { get { EnsureAlive(); return _registered && _dataRegistered; } }
+    public bool IsFrozen { get { EnsureAlive(); return _frozen; } }
 
     /// <summary>Gets declared registry identifiers in deterministic order.</summary>
     public IReadOnlyList<Identifier> RegistryIds
@@ -135,50 +126,6 @@ public sealed class RegistryManager : IDisposable
         }
     }
 
-    /// <summary>Runs data registry declarations and exposes registered decoders.</summary>
-    public void RegisterDataRegistries()
-    {
-        EnsurePhaseAvailable();
-        if (!_registered || _dataRegistered) throw new InvalidOperationException("Code registration must complete before data registry registration.");
-        try
-        {
-            var declarations = new List<(Identifier Id, Type Type, Func<string, object> Decoder)>();
-            var callback = new DataPackRegistryEvent((id, type, decoder) =>
-            {
-                if (!id.IsValid || !_types.TryGetValue(id, out var registeredType) || registeredType != type || _decoders.ContainsKey(id)
-                    || declarations.Any(item => item.Id == id))
-                    throw new InvalidOperationException("Data registry is missing, duplicated, or has a different type: " + id);
-                declarations.Add((id, type, decoder));
-            });
-            try
-            {
-                foreach (var subscriber in _dataCallbacks.ToArray()) subscriber(callback);
-            }
-            finally { callback.Close(); }
-            foreach (var declaration in declarations) _decoders.Add(declaration.Id, (declaration.Type, declaration.Decoder));
-            foreach (var registry in _registries.Values) ((IRegistryLifecycle)registry).Freeze();
-            _dataRegistered = true;
-        }
-        catch
-        {
-            Fail();
-            throw;
-        }
-    }
-
-    /// <summary>Decodes a data value using the decoder registered for its registry.</summary>
-    /// <typeparam name="T">The data value type.</typeparam>
-    /// <param name="registryId">The registry identifier.</param>
-    /// <param name="data">The serialized data.</param>
-    /// <returns>The decoded value.</returns>
-    public T Decode<T>(Identifier registryId, string data)
-    {
-        EnsureAlive();
-        if (!_dataRegistered || !_decoders.TryGetValue(registryId, out var decoder) || decoder.ValueType != typeof(T))
-            throw new InvalidOperationException("No data decoder is available for registry: " + registryId);
-        return (T)decoder.Decoder(data);
-    }
-
     /// <summary>Gets a typed registry.</summary>
     /// <typeparam name="T">The registry value type.</typeparam>
     /// <param name="id">The registry identifier.</param>
@@ -191,12 +138,13 @@ public sealed class RegistryManager : IDisposable
         return typed;
     }
 
-    /// <summary>Freezes all registries after all declared callback phases complete.</summary>
+    /// <summary>Freezes all registries once creation and registration have completed.</summary>
     public void Freeze()
     {
-        EnsureAlive();
-        if (!_registered || !_dataRegistered) throw new InvalidOperationException("All registry phases must complete before freezing.");
+        EnsurePhaseAvailable();
+        if (!_registered) throw new InvalidOperationException("Registration must complete before freezing.");
         foreach (var registry in _registries.Values) ((IRegistryLifecycle)registry).Freeze();
+        _frozen = true;
     }
 
     /// <summary>Invalidates registries and holders that resolve through them.</summary>
@@ -210,10 +158,8 @@ public sealed class RegistryManager : IDisposable
         foreach (var registry in _registries.Values) ((IRegistryLifecycle)registry).Invalidate();
         _registries.Clear();
         _types.Clear();
-        _decoders.Clear();
         _newRegistryCallbacks.Clear();
         _registerCallbacks.Clear();
-        _dataCallbacks.Clear();
         _disposed = true;
     }
 
@@ -267,30 +213,11 @@ public sealed class RegistryManager : IDisposable
         return phase.Entries;
     }
 
-    internal IReadOnlyList<DataDeclaration> StageDataDeclarations()
-    {
-        EnsurePhaseAvailable();
-        if (!_registered || _dataRegistered) throw new InvalidOperationException("Code registration must complete before data registry registration.");
-        _dataRegistered = true;
-        var declarations = new List<DataDeclaration>();
-        var phase = new DataPackRegistryEvent((id, type, decoder) =>
-        {
-            if (!id.IsValid || declarations.Any(value => value.Id == id))
-                throw new InvalidOperationException("Duplicate or invalid data registry: " + id);
-            declarations.Add(new DataDeclaration(id, type, decoder));
-        });
-        try { foreach (var callback in _dataCallbacks.ToArray()) callback(phase); }
-        catch { Fail(); throw; }
-        finally { phase.Close(); }
-        return declarations;
-    }
-
     internal void TrackHolder(Action dispose) { EnsurePhaseAvailable(); _holderDisposals.Add(dispose); }
 
     internal void ReleaseStagedEntries() { _pendingEntries.Clear(); _holderDisposals.Clear(); }
 
-    internal void PublishStaged(IEnumerable<Declaration> declarations, IEnumerable<RegisterEvent.PendingEntry> entries,
-        IEnumerable<DataDeclaration> decoders)
+    internal void PublishStaged(IEnumerable<Declaration> declarations, IEnumerable<RegisterEvent.PendingEntry> entries)
     {
         EnsurePhaseAvailable();
         if (_created) throw new InvalidOperationException("Registry publication has already started.");
@@ -303,12 +230,6 @@ public sealed class RegistryManager : IDisposable
                 _types.Add(declaration.Id, declaration.ValueType);
                 _registries.Add(declaration.Id, declaration.Create(declaration.Id));
             }
-            foreach (var decoder in decoders)
-            {
-                if (!_types.TryGetValue(decoder.Id, out var type) || type != decoder.ValueType)
-                    throw new InvalidOperationException("Data registry has a different value type: " + decoder.Id);
-                _decoders.Add(decoder.Id, (decoder.ValueType, decoder.Decode));
-            }
             foreach (var entry in pending)
             {
                 if (!_types.TryGetValue(entry.RegistryId, out var type) || type != entry.ValueType)
@@ -316,7 +237,7 @@ public sealed class RegistryManager : IDisposable
                 ((IRegistryLifecycle)_registries[entry.RegistryId]).Add(entry.EntryId, entry.Value);
             }
             foreach (var registry in _registries.Values) ((IRegistryLifecycle)registry).Freeze();
-            _registered = _dataRegistered = true;
+            _registered = _frozen = true;
             foreach (var entry in pending) entry.Bind(_registries[entry.RegistryId]);
         }
         catch
@@ -334,15 +255,6 @@ public sealed class RegistryManager : IDisposable
         internal Identifier Id { get; }
         internal Type ValueType { get; }
         internal Func<Identifier, object> Create { get; }
-    }
-
-    internal sealed class DataDeclaration
-    {
-        internal DataDeclaration(Identifier id, Type valueType, Func<string, object> decode)
-        { Id = id; ValueType = valueType; Decode = decode; }
-        internal Identifier Id { get; }
-        internal Type ValueType { get; }
-        internal Func<string, object> Decode { get; }
     }
 
     private void EnsureCanSubscribe() { EnsurePhaseAvailable(); if (_created || _callbacksClosed) throw new InvalidOperationException("Registry callbacks are closed."); }

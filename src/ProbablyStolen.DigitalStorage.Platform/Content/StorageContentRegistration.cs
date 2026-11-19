@@ -55,7 +55,7 @@ internal sealed class StorageContentRegistration : IDisposable
         }
         _manager.CreateRegistries();
         _manager.RegisterEntries();
-        _manager.RegisterDataRegistries();
+        _manager.Freeze();
         _factories = _manager.Get<FactoryBinding>(registryId);
     }
 

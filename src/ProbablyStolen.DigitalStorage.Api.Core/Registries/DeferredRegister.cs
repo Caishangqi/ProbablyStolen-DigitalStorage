@@ -51,6 +51,18 @@ public sealed class DeferredRegister<T>
         return new(registration.Manager, registryId, namespaceName, registration);
     }
 
+    /// <summary>Creates a deferred register for the registry named by <paramref name="registryKey"/>.</summary>
+    /// <param name="registration">The scoped registration facade of the contributing batch.</param>
+    /// <param name="registryKey">The target registry key, such as a <c>DigitalStorageRegistries</c> key.</param>
+    /// <param name="namespaceName">The namespace of the registered entries, normally the contributing mod id.</param>
+    /// <returns>A deferred register.</returns>
+    public static DeferredRegister<T> Create(RegistryRegistration registration, ResourceKey<Registry<T>> registryKey, string namespaceName)
+    {
+        if (registryKey.RegistryId != ResourceKey.RootRegistryId)
+            throw new ArgumentException("The key does not name a registry.", nameof(registryKey));
+        return Create(registration, registryKey.EntryId, namespaceName);
+    }
+
     /// <summary>Creates a deferred register using the facade registry namespace for entries.</summary>
     public static DeferredRegister<T> Create(RegistryRegistration registration, Identifier registryId)
     {
@@ -66,6 +78,17 @@ public sealed class DeferredRegister<T>
     /// <returns>A holder resolved after successful publication.</returns>
     public DeferredHolder<T, TDerived> Register<TDerived>(string path, Func<TDerived> factory) where TDerived : T
     {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        return Register<TDerived>(path, _ => factory());
+    }
+
+    /// <summary>Registers a concrete factory that receives the full entry identifier.</summary>
+    /// <typeparam name="TDerived">The concrete value type.</typeparam>
+    /// <param name="path">The entry path.</param>
+    /// <param name="factory">The factory evaluated once during registration with the full entry identifier.</param>
+    /// <returns>A holder resolved after successful publication.</returns>
+    public DeferredHolder<T, TDerived> Register<TDerived>(string path, Func<Identifier, TDerived> factory) where TDerived : T
+    {
         if (_scope != null) _scope.EnsureOpen();
         if (_submitted) throw new InvalidOperationException("Deferred registration was already submitted.");
         if (factory == null) throw new ArgumentNullException(nameof(factory));
@@ -73,7 +96,7 @@ public sealed class DeferredRegister<T>
         if (!_ids.Add(entryId)) throw new InvalidOperationException("Duplicate deferred identifier: " + entryId);
         var holder = new DeferredHolder<T, TDerived>(new ResourceKey<T>(_registryId, entryId));
         _manager.TrackHolder(holder.Dispose);
-        _registrations.Add(new Registration(holder.Key, () => factory()!, registry => holder.Bind(registry), holder.Invalidate));
+        _registrations.Add(new Registration(holder.Key, () => factory(entryId)!, registry => holder.Bind(registry), holder.Invalidate));
         return holder;
     }
 

@@ -31,10 +31,6 @@
     "Textures/Items/module_type_expansion_epic.png",
     "Textures/Items/module_equal_distribution.png",
     "Search/pinyin-dictionary.txt",
-    "Data/registries.json",
-    "Data/module_bays/vanilla_standard.json",
-    "Data/module_bays/terminal.json",
-    "Data/module_bays/bindings.json",
     "Licenses/PininSharp-LICENSE.txt",
     "Licenses/pinyin-data-LICENSE.txt",
     "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
@@ -59,7 +55,9 @@
     "Textures/window_frame.png",
     "Textures/button_sample_attributes.png",
     "Textures/button_keep_open_off.png",
-    "Textures/button_keep_open_on.png"
+    "Textures/button_keep_open_on.png",
+    "Textures/Items/digital_scientist.png",
+    "Textures/Items/network_digital.png"
   ],
   "legacy": [
     "manifest.xml",

@@ -5,7 +5,7 @@ using ProbablyStolen.DigitalStorage.Api.Registries;
 
 namespace ProbablyStolen.DigitalStorage.Api;
 
-/// <summary>Public API exposed as <c>content.v1</c>; registry values are read-only after bootstrap.</summary>
+/// <summary>Public API exposed as <c>content.v2</c>; registry values are read-only after bootstrap.</summary>
 public interface IDigitalStorageContentApi
 {
     /// <summary>Gets API major version.</summary>
@@ -18,6 +18,8 @@ public interface IDigitalStorageContentApi
     IReadOnlyRegistry<ModuleBayDefinition> ModuleBays { get; }
     /// <summary>Gets the frozen item binding registry.</summary>
     IReadOnlyRegistry<ModuleBayBinding> ModuleBayBindings { get; }
+    /// <summary>Gets the frozen builtin customer registry, <see cref="DigitalStorageRegistries.Customer"/>.</summary>
+    IReadOnlyRegistry<CustomerDefinition> Customers { get; }
     /// <summary>Looks up a frozen custom registry by identifier.</summary>
     IReadOnlyRegistry<T> GetRegistry<T>(Identifier id);
     /// <summary>Gets the module-bay operations API.</summary>
@@ -29,27 +31,19 @@ public interface IDigitalStorageContentBootstrap
 {
     /// <summary>Stages one atomic content contribution owned by <paramref name="sourceModId"/>.</summary>
     void RegisterBatch(string sourceModId, Action<IContentRegistrationBatch> register);
-    /// <summary>Submits an explicit mod-relative JSON file for decoding in this owner's batch.</summary>
-    void SubmitJson(string sourceModId, string modRelativePath);
-    /// <summary>Submits a JSON entry for a registry with a declared decoder.</summary>
-    void SubmitJson(string sourceModId, Identifier registryId, Identifier entryId, string modRelativePath);
-    /// <summary>Submits an index whose explicit files are decoded as one atomic owner batch.</summary>
-    void SubmitIndex(string sourceModId, string modRelativePath);
     /// <summary>Gets whether bootstrap is frozen.</summary>
     bool IsFrozen { get; }
 }
 
-/// <summary>A temporary batch used only during a contributor callback.</summary>
+/// <summary>
+/// A temporary batch used only during a contributor callback. Entries go to the builtin registries named by
+/// <see cref="DigitalStorageRegistries"/>, or to registries a batch declares, through
+/// <c>DeferredRegister&lt;T&gt;.Create(batch.Registries, key, modId)</c>.
+/// </summary>
 public interface IContentRegistrationBatch
 {
     /// <summary>Provides scoped declarations and contributions to shared registries.</summary>
     RegistryRegistration Registries { get; }
-    /// <summary>Registers a provider keyed by its stable identifier.</summary>
-    void RegisterProvider(IModuleBayProvider provider);
-    /// <summary>Registers a module-bay definition.</summary>
-    void RegisterDefinition(ModuleBayDefinition definition);
-    /// <summary>Registers a native item binding.</summary>
-    void RegisterBinding(ModuleBayBinding binding);
 }
 
 /// <summary>Provides access to the module inventory attached to a particular native item instance.</summary>
@@ -103,9 +97,9 @@ public interface IModuleBayApi
 public static class DigitalStorageContentKeys
 {
     /// <summary>Gets the mod-loader service key.</summary>
-    public const string ContentServiceKey = "content.v1";
+    public const string ContentServiceKey = "content.v2";
     /// <summary>Gets the content API minor version.</summary>
-    public const int ContentApiMinor = 2;
+    public const int ContentApiMinor = 0;
 }
 
 /// <summary>Allows a dependent mod to contribute C# content during its enable lifecycle.</summary>

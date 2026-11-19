@@ -64,7 +64,6 @@ internal sealed class TooltipComposition : IDisposable
         {
             _registries.CreateRegistries();
             _registries.RegisterEntries();
-            _registries.RegisterDataRegistries();
             _registries.Freeze();
             _networkPresenter!.SetDetails(_registries.Get<INetworkTooltipDetail>(DetailsId)
                 .RegistrationEntries.Select(entry => entry.Value).ToArray());

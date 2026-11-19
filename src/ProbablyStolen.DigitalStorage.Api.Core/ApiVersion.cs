@@ -6,8 +6,8 @@ namespace ProbablyStolen.DigitalStorage.Api;
 public static class ApiVersion
 {
     /// <summary>Gets the major version; it changes when a public member is removed or changes meaning.</summary>
-    public const int Major = 1;
+    public const int Major = 2;
 
     /// <summary>Gets the minor version; it changes when public members are added.</summary>
-    public const int Minor = 2;
+    public const int Minor = 0;
 }

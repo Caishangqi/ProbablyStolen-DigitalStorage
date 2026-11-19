@@ -2,6 +2,23 @@ using System;
 
 namespace ProbablyStolen.DigitalStorage.Api.Registries;
 
+/// <summary>Creates resource keys that name registries.</summary>
+public static class ResourceKey
+{
+    /// <summary>Gets the identifier of the root registry that every registry key belongs to.</summary>
+    public static readonly Identifier RootRegistryId = Identifier.Parse("digital_storage:root");
+
+    /// <summary>Creates the key of the registry named <paramref name="registryId"/>.</summary>
+    /// <typeparam name="T">The registry value type.</typeparam>
+    /// <param name="registryId">The registry identifier.</param>
+    /// <returns>A key whose <see cref="ResourceKey{T}.EntryId"/> is the registry identifier.</returns>
+    public static ResourceKey<Registry<T>> CreateRegistryKey<T>(Identifier registryId)
+    {
+        if (!registryId.IsValid) throw new ArgumentException("A registry key requires a valid identifier.", nameof(registryId));
+        return new ResourceKey<Registry<T>>(RootRegistryId, registryId);
+    }
+}
+
 /// <summary>Identifies a typed entry by both registry and entry identifier.</summary>
 public readonly struct ResourceKey<T> : IEquatable<ResourceKey<T>>
 {

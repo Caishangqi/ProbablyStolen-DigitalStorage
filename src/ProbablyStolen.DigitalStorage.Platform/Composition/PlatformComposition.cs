@@ -43,6 +43,9 @@ public sealed class PlatformComposition : IDisposable
     private readonly StorageEventBus _events;
     private readonly DigitalStorageSettings _settings;
     private readonly StorageVendors _vendors;
+    private readonly DigitalStorageNetwork _network;
+    private readonly NetworkSprites _networkSprites;
+    private readonly NativeCustomerCatalog _customers;
     private readonly TerminalSearchComposition _search;
     private readonly ItemTypeBackfill _typeBackfill;
     private readonly DigitalStorageContentService _contentApi;
@@ -61,7 +64,9 @@ public sealed class PlatformComposition : IDisposable
         TooltipComposition tooltip, BasicCellHandler cellHandler,
         ItemAppearance appearance,
         StorageContentRegistration content, ItemContentService itemContent, CellHealth health, LegacyMigration migration, StorageEventBus events,
-        DigitalStorageSettings settings, StorageVendors vendors, TerminalSearchComposition search, CellWorkbenchItem workbench,
+        DigitalStorageSettings settings, StorageVendors vendors, DigitalStorageNetwork network, NetworkSprites networkSprites,
+        NativeCustomerCatalog customers,
+        TerminalSearchComposition search, CellWorkbenchItem workbench,
         DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons)
     {
         _buttonIcons = buttonIcons;
@@ -70,6 +75,9 @@ public sealed class PlatformComposition : IDisposable
         _events = events;
         _settings = settings;
         _vendors = vendors;
+        _network = network ?? throw new ArgumentNullException(nameof(network));
+        _networkSprites = networkSprites ?? throw new ArgumentNullException(nameof(networkSprites));
+        _customers = customers ?? throw new ArgumentNullException(nameof(customers));
         _search = search ?? throw new ArgumentNullException(nameof(search));
         _typeBackfill = new ItemTypeBackfill(log);
         _log = log;
@@ -200,11 +208,15 @@ public sealed class PlatformComposition : IDisposable
             message => log.Log(message));
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
         itemContent.SetModulePresenter(modules.Present);
+        var goods = new StorageGoods(modules);
+        var networkSprites = new NetworkSprites(log);
+        var customers = new NativeCustomerCatalog(log);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
             modules, new TerminalModuleFactory(appearance), itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             tooltip, cellHandler, appearance, content, itemContent, cellHealth, migration, eventBus,
-            networkPowerSettings, new StorageVendors(text, networkPowerSettings.GetEngineerDailyChance, log, modules), search, workbench,
+            networkPowerSettings, new StorageVendors(text, log, goods, customers),
+            new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
                 () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons);
@@ -224,10 +236,10 @@ public sealed class PlatformComposition : IDisposable
 
         _contentApi.RegisterBatch("digital_storage", batch =>
         {
-            batch.RegisterProvider(new NativeStandardModuleBayProvider());
-            batch.RegisterProvider(new CellModuleBayProvider());
+            BuiltinModuleBays.Register(batch.Registries);
+            _vendors.RegisterCustomers(batch.Registries);
         });
-        _contentApi.SubmitIndex("digital_storage", "Data/registries.json");
+        _contentApi.AddBakeCallback(DigitalStorageRegistries.Customer, _customers.Bind);
         _isEnabled = true;
         try
         {
@@ -235,6 +247,7 @@ public sealed class PlatformComposition : IDisposable
             _tooltip.Enable(() => _buttonIcons.Frame("window_frame", 4));
             _content.Enable();
             _vendors.Enable();
+            _network.Enable();
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
@@ -312,6 +325,9 @@ public sealed class PlatformComposition : IDisposable
         _moduleBayHooks = null;
         _contentApi.Dispose();
         _vendors.Dispose();
+        _network.Dispose();
+        _networkSprites.Dispose();
+        _customers.Dispose();
         _content.Dispose();
         _itemContent.Dispose();
         _events.Dispose();
@@ -380,37 +396,24 @@ public sealed class PlatformComposition : IDisposable
         }
 
         _buttonIcons.Load(mod);
+        _networkSprites.Load(mod);
         _assetsReady = true;
-        LoadContentAssets();
+        FreezeContentRegistries();
         _search.MarkAssetsReady();
         _settings.RefreshSectionNames();
         ValidateResources();
     }
 
-    private void LoadContentAssets()
+    private void FreezeContentRegistries()
     {
         try
         {
-            foreach (var ownerGroup in _contentApi.Sources.GroupBy(source => source.Owner, StringComparer.Ordinal))
-            {
-                try
-                {
-                    foreach (var source in ownerGroup)
-                        _contentApi.LoadSource(source, ModHelper.ReadModFileText(source.Owner, source.Path));
-                }
-                catch (Exception error)
-                {
-                    _contentApi.DiscardOwner(ownerGroup.Key);
-                    if (ownerGroup.Key == _modId) throw;
-                    _log.Warning($"Digital Storage: content from {ownerGroup.Key} was excluded ({error.GetType().Name}: {error.Message}).");
-                }
-            }
             _contentApi.Bootstrap(builtin: true);
-            _log.Log("Digital Storage: content.v1 registries frozen.");
+            _log.Log("Digital Storage: content.v2 registries frozen.");
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: module bay content is unavailable ({error.GetType().Name}: {error.Message}).");
+            _log.Error($"Digital Storage: content registries are unavailable ({error.GetType().Name}: {error.Message}).");
         }
     }
 

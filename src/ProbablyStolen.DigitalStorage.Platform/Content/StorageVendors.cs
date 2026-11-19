@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Content;
+using ProbablyStolen.DigitalStorage.Api.Registries;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
+using ProbablyStolen.DigitalStorage.Common.Domain.Commerce;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -12,14 +15,14 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 /// <summary>
 /// Puts the mod's items on sale through the game's own vendor paths:
 /// Dr. Jackson's visiting stock (<c>ModHook.OnPlaceInventorInventoryItemLate</c>, filled with
-/// <c>PlayerStore.AddDirectSellingItemToTable</c> like his vanilla goods), and a mod customer, the upper-level engineer,
-/// queued from <c>ModHook.OnGenerateCustomerLate</c>, which runs once per day while the day's customers are generated.
-/// Vanilla has no upper-level engineer; mods cannot add sprites or factions, so it reuses the engineer sprites and the
-/// upper-level faction.
+/// <c>PlayerStore.AddDirectSellingItemToTable</c> like his vanilla goods), and the data scientist, a mod customer
+/// queued from <c>ModHook.OnGenerateCustomerLate</c> on the retired farmer's day once the first digital storage
+/// network upgrade is unlocked. The data scientist only sells; no vendor of this mod buys storage goods back.
 /// </summary>
 internal sealed class StorageVendors : IDisposable
 {
-    internal const string EngineerId = "digital_storage.upper_engineer";
+    internal static readonly Identifier ScientistId = Identifier.Parse("digital_storage:data_scientist");
+    internal const string ScientistPortrait = "digital_storage:digital_scientist";
     // Dr. Jackson always stocks a machine the player does not own yet and a quarter of the time one already owned;
     // the workbench, the equal distribution module and the stack display module follow the same rule.
     private static readonly string[] Machines =
@@ -28,17 +31,17 @@ internal sealed class StorageVendors : IDisposable
         CellUpgradeInventory.EqualDistributionId, StackingModule.ModuleId
     };
     private readonly ModText _text;
-    private readonly Func<int> _engineerDailyChance;
     private readonly ModLog _log;
-    private readonly CellModuleFactory _modules;
+    private readonly StorageGoods _goods;
+    private readonly NativeCustomerCatalog _customers;
     private bool _enabled;
 
-    internal StorageVendors(ModText text, Func<int> engineerDailyChance, ModLog log, CellModuleFactory modules)
+    internal StorageVendors(ModText text, ModLog log, StorageGoods goods, NativeCustomerCatalog customers)
     {
-        _modules = modules ?? throw new ArgumentNullException(nameof(modules));
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        _engineerDailyChance = engineerDailyChance ?? throw new ArgumentNullException(nameof(engineerDailyChance));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _goods = goods ?? throw new ArgumentNullException(nameof(goods));
+        _customers = customers ?? throw new ArgumentNullException(nameof(customers));
     }
 
     internal void Enable()
@@ -46,7 +49,7 @@ internal sealed class StorageVendors : IDisposable
         if (_enabled) return;
         _enabled = true;
         ModHook.OnPlaceInventorInventoryItemLate += AddInventorStock;
-        ModHook.OnGenerateCustomerLate += QueueEngineer;
+        ModHook.OnGenerateCustomerLate += QueueScientist;
     }
 
     public void Dispose()
@@ -54,12 +57,13 @@ internal sealed class StorageVendors : IDisposable
         if (!_enabled) return;
         _enabled = false;
         ModHook.OnPlaceInventorInventoryItemLate -= AddInventorStock;
-        ModHook.OnGenerateCustomerLate -= QueueEngineer;
+        ModHook.OnGenerateCustomerLate -= QueueScientist;
     }
 
     /// <summary>
     /// Dr. Jackson brings each machine while the player owns none, and otherwise 25% of the time, as he does with his
-    /// storage bay; a housing 40% and a storage component 10% of the time.
+    /// storage bay; a housing 40% and a storage component 10% of the time. After the advanced network upgrade he also
+    /// tries one module and one high-capacity component on every visit, as far as the counter has room.
     /// </summary>
     private void AddInventorStock(List<GameItem> ownedItems)
     {
@@ -73,8 +77,10 @@ internal sealed class StorageVendors : IDisposable
 
             if (RNG.Roll(40)) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
             if (RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId);
-            // Dr. Jackson only sells common type limit modules; rarer ones come from the upper-level engineer.
-            if (RNG.Roll(25)) OfferTypeLimitModule(ModuleQuality.Common);
+            // Dr. Jackson only sells common type limit modules; rarer ones come from the data scientist.
+            if (RNG.Roll(25)) _goods.OfferOnCounter(StorageOffer.TypeLimit(ModuleQuality.Common));
+            if (DigitalStorageNetwork.IsAdvancedUnlocked())
+                Offer("Dr. Jackson", DigitalStorageOffers.JacksonGuaranteedStock(StoreStation.GetDayCounter()));
         }
         catch (Exception error)
         {
@@ -82,87 +88,66 @@ internal sealed class StorageVendors : IDisposable
         }
     }
 
-    private void QueueEngineer(StoreClientManager manager)
+    private void QueueScientist(StoreClientManager manager)
     {
         try
         {
-            var chance = Math.Max(0, Math.Min(100, _engineerDailyChance()));
-            if (manager != null && RNG.Roll(chance)) manager.AddClient(CreateEngineer());
+            // StoreClientManager.GenerateClient runs once per day, so the visit is queued at most once a day.
+            if (manager == null || !DigitalStorageOffers.ScientistVisits(StoreStation.GetDayCounter()) ||
+                !DigitalStorageNetwork.IsStarterUnlocked()) return;
+            if (_customers.TryCreate(ScientistId, out var scientist)) manager.AddClient(scientist);
+            else _log.Error("Digital Storage: the data scientist is unavailable; the visit is skipped.");
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: upper-level engineer was not queued: {error.GetType().Name}");
+            _log.Error($"Digital Storage: the data scientist was not queued: {error.GetType().Name}");
         }
     }
 
-    /// <summary>
-    /// Sells one to three storage goods (30% component, 25% storage cell, 10% housing, 10% workbench, 7% equal
-    /// distribution module, 18% type limit module of a weighted quality) and buys the mod's housings, components,
-    /// modules and machines. Assembled cells are never bought: their value includes the items stored inside.
-    /// </summary>
-    private StoreClient CreateEngineer()
+    /// <summary>Registers the data scientist in the customer registry; the registry sets her portrait.</summary>
+    internal void RegisterCustomers(RegistryRegistration registries)
+    {
+        var customers = DeferredRegister<CustomerDefinition>.Create(registries, DigitalStorageRegistries.Customer, ScientistId.Namespace);
+        customers.Register(ScientistId.Path, () => new CustomerDefinition(CreateScientist, ScientistPortrait));
+    }
+
+    private StoreClient CreateScientist()
     {
         var client = new StoreClient
         {
-            identifier = EngineerId,
-            displayName = _text.Get("upper_engineer_name"),
-            spriteName = SpriteDict.GetRandomEngSpriteName(),
-            clientIntent = StoreClient.ClientIntent.SELLNBUY
+            identifier = CustomerIdentity.ToNativeId(ScientistId),
+            nonShootable = true,
+            displayName = _text.Get("data_scientist_name"),
+            clientIntent = StoreClient.ClientIntent.SELL
         };
         StoreClientFactionSetup.InitUpperLevelCitizen(client);
-        client.SetClientBudget(800 + StoreStation.GetDayCounter() * 5, 400);
-        foreach (var id in new[] { MaterialItem.ItemId, CellUpgradeInventory.TypeLimitId }
-                     .Concat(StorageCellTier.All.Select(tier => tier.ComponentId)).Concat(Machines))
-        {
-            client.clientBuyingIdList.Add(id);
-        }
-
         var name = client.displayName;
-        client.mainDialogue.SetText(name, _text.Get("upper_engineer_greet_1")).NextDialogue()
-            .SetText(name, _text.Get("upper_engineer_greet_2"))
-            .SetEndAction(PlaceEngineerStock);
-        client.placedWrongItemWhenSellingToDialogue = new Dialogue().SetText(name, _text.Get("upper_engineer_wrong_item"));
-        client.placeRightItemWhenSellingToDialogue = new Dialogue().SetText(name, _text.Get("upper_engineer_right_item"));
-        client.repeatDialogue = new Dialogue().SetText(name, _text.Get("upper_engineer_repeat"));
-        client.acceptDealDialogue = new Dialogue().SetText(name, _text.Get("upper_engineer_accept"));
+        client.mainDialogue.SetText(name, _text.Get("data_scientist_greet_1")).NextDialogue()
+            .SetText(name, _text.Get("data_scientist_greet_2"))
+            .SetEndAction(PlaceScientistStock);
         client.AddBasicDialog();
         client.CompleteClientCreation();
         return client;
     }
 
-    private void PlaceEngineerStock()
+    private void PlaceScientistStock()
     {
-        var count = RNG.GetRandomInt(1, 3);
-        for (var index = 0; index < count; index++)
+        try
         {
-            var roll = RNG.GetRandomInt(1, 100);
-            if (roll <= 30) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId);
-            else if (roll <= 55) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().CellId);
-            else if (roll <= 65) PlayerStore.Instance.AddDirectSellingItemToTable(MaterialItem.ItemId);
-            else if (roll <= 75) PlayerStore.Instance.AddDirectSellingItemToTable(CellWorkbenchItem.ItemId);
-            else if (roll <= 82) PlayerStore.Instance.AddDirectSellingItemToTable(CellUpgradeInventory.EqualDistributionId);
-            else if (roll <= 89) PlayerStore.Instance.AddDirectSellingItemToTable(StackingModule.ModuleId);
-            else OfferTypeLimitModule(TypeLimitRolls.RollQuality(NativeRandom.Instance));
+            Offer("the data scientist", DigitalStorageOffers.ScientistStock(StoreStation.GetDayCounter(),
+                DigitalStorageNetwork.IsAdvancedUnlocked()));
+        }
+        catch (Exception error)
+        {
+            _log.Error($"Digital Storage: the data scientist stock was not placed: {error.GetType().Name}");
         }
     }
 
-    /// <summary>Puts a freshly rolled type limit module on the counter, or creates nothing when the counter is full.</summary>
-    private void OfferTypeLimitModule(ModuleQuality quality)
+    private void Offer(string vendor, IEnumerable<StorageOffer> offers)
     {
-        var counter = EmporiumEntry.Instance?.frontInvinvElement;
-        if (counter != null && !counter.CanTakeAnything()) return;
-        var module = DirectoryMaster.Item(CellUpgradeInventory.TypeLimitId);
-        if (module == null) return;
-        try
-        {
-            _modules.Roll(module, TypeLimitRolls.Roll(quality, NativeRandom.Instance));
-            if (!PlayerStore.Instance.TryAddDirectSellingItemToTable(module)) module.Destroy();
-        }
-        catch
-        {
-            if (module.parentInventory == null) module.Destroy();
-            throw;
-        }
+        var skipped = offers.Where(offer => !_goods.OfferOnCounter(offer)).Select(offer => offer.ToString()).ToList();
+        if (skipped.Count > 0)
+            _log.Log($"Digital Storage: {vendor} could not place {string.Join(", ", skipped)}; the counter is full.");
     }
 
     private static StorageCellTier DrawTier() => StorageCellTier.FromMerchantRoll(RNG.GetRandomInt(1, 100));

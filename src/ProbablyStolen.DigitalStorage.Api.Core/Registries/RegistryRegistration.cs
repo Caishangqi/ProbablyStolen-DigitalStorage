@@ -28,13 +28,6 @@ public sealed class RegistryRegistration
         remove { EnsureOpen(); _manager.Register -= value; }
     }
 
-    /// <summary>Registers a data registry callback while this scope is open.</summary>
-    public event Action<DataPackRegistryEvent> DataPackRegistry
-    {
-        add { EnsureOpen(); _manager.DataPackRegistry += value; }
-        remove { EnsureOpen(); _manager.DataPackRegistry -= value; }
-    }
-
     internal RegistryManager Manager => _manager;
 
     internal void Close()

@@ -72,16 +72,13 @@ public sealed class ModuleBayRegistryTests
         var id = Identifier.Parse("sample:values");
         NewRegistryEvent? newRegistry = null;
         RegisterEvent? registration = null;
-        DataPackRegistryEvent? data = null;
         manager.NewRegistry += e => { newRegistry = e; e.Create<string>(id); };
         manager.Register += e => registration = e;
-        manager.DataPackRegistry += e => data = e;
         manager.CreateRegistries();
         manager.RegisterEntries();
-        manager.RegisterDataRegistries();
+        manager.Freeze();
         AssertThrows<InvalidOperationException>(() => newRegistry!.Create<int>(Identifier.Parse("sample:late")));
         AssertThrows<InvalidOperationException>(() => registration!.Register(id, Identifier.Parse("sample:late"), "late"));
-        AssertThrows<InvalidOperationException>(() => data!.NewRegistry(id, text => text));
     }
 
     [Test]
@@ -132,18 +129,45 @@ public sealed class ModuleBayRegistryTests
     }
 
     [Test]
-    public void RegistryManager_InvokesRegisteredDataDecoderAndFreezes()
+    public void RegistryManager_FreezeRequiresRegistrationAndMakesRegistriesReadOnly()
     {
         using var manager = new RegistryManager();
         var registryId = Identifier.Parse("sample:data");
         manager.NewRegistry += e => e.Create<int>(registryId);
-        manager.DataPackRegistry += e => e.NewRegistry(registryId, text => int.Parse(text));
         manager.CreateRegistries();
+        AssertThrows<InvalidOperationException>(() => manager.Freeze());
+        Assert.That(manager.IsFrozen, Is.False);
         manager.RegisterEntries();
-        manager.RegisterDataRegistries();
-        Assert.That(manager.Decode<int>(registryId, "42"), Is.EqualTo(42));
+        manager.Freeze();
         Assert.That(manager.IsFrozen, Is.True);
         AssertThrows<InvalidOperationException>(() => manager.Get<int>(registryId).Register(Identifier.Parse("sample:late"), 1));
+    }
+
+    [Test]
+    public void ResourceKey_CreateRegistryKeyNamesTheRegistryUnderTheRoot()
+    {
+        var key = ResourceKey.CreateRegistryKey<string>(Identifier.Parse("sample:values"));
+        Assert.That(key.RegistryId, Is.EqualTo(ResourceKey.RootRegistryId));
+        Assert.That(key.EntryId, Is.EqualTo(Identifier.Parse("sample:values")));
+        AssertThrows<ArgumentException>(() => ResourceKey.CreateRegistryKey<string>(default));
+    }
+
+    [Test]
+    public void DeferredRegister_CreatesFromRegistryKeyAndPassesEntryIdsToFactories()
+    {
+        using var manager = new RegistryManager();
+        var registryId = Identifier.Parse("sample:values");
+        var key = ResourceKey.CreateRegistryKey<string>(registryId);
+        manager.NewRegistry += e => e.Create<string>(registryId);
+        var registration = new RegistryRegistration(manager);
+        var deferred = DeferredRegister<string>.Create(registration, key, "other_mod");
+        var named = deferred.Register("named", id => id.ToString());
+        manager.CreateRegistries();
+        manager.RegisterEntries();
+        Assert.That(named.Value, Is.EqualTo("other_mod:named"));
+        Assert.That(manager.Get<string>(registryId).GetRequired(Identifier.Parse("other_mod:named")), Is.EqualTo("other_mod:named"));
+        AssertThrows<ArgumentException>(() => DeferredRegister<string>.Create(registration,
+            new ResourceKey<Registry<string>>(Identifier.Parse("sample:not_root"), registryId), "other_mod"));
     }
 
     [Test]

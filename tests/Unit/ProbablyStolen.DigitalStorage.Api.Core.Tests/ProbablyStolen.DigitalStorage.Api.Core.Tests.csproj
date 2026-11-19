@@ -16,8 +16,4 @@
     <ProjectReference Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api.Core\ProbablyStolen.DigitalStorage.Api.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\..\packaging\resources\Data\module_bays\terminal.json" Link="Fixtures\terminal.json" LogicalName="ProbablyStolen.DigitalStorage.Api.Core.Tests.Fixtures.terminal.json" />
-  </ItemGroup>
-
 </Project>

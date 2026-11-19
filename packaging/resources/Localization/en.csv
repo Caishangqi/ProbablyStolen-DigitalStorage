@@ -165,16 +165,15 @@ debug_show_cell_pages_name,Show storage pages when opening a cell
 debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
 debug_storage_diagnostics_name,Storage diagnostics
 debug_storage_diagnostics_desc,Record limited storage page and module bay structure details. Errors are still logged when off. Original exception messages are retained.
-config_section_vendors,Vendors
-upper_engineer_daily_chance_name,Upper-level engineer daily visit chance %
-upper_engineer_daily_chance_desc,Chance that the upper-level engineer joins the day's customers. Range 0-100. Default: 25. Set 0 to stop the visits.
-upper_engineer_name,Upper-Level Engineer
-upper_engineer_greet_1,The upper-level data center swapped out another batch of storage hardware. Shame to scrap the old parts.
-upper_engineer_greet_2,I brought some storage cells and components. If you have spare storage parts or network machines I'll buy those too.
-upper_engineer_wrong_item,That's not what I'm after. Storage parts and network machines only.
-upper_engineer_right_item,Yes. That one works.
-upper_engineer_repeat,Storage parts. Network machines. Nothing else.
-upper_engineer_accept,Deal. The data center swaps hardware again next month; I'll be back.
+network_tab_digital_storage,Digital Storage
+network_card_digital_storage,Storage Network
+network_digital_storage_starter_title,Digital Storage Basics
+network_digital_storage_starter_desc,"Get a starter digital storage set right away: a controller with a battery, a drive, a terminal and an empty 1k storage cell. A data scientist will visit your store regularly."
+network_digital_storage_advanced_title,Advanced Data Management
+network_digital_storage_advanced_desc,"Get a Cell Workbench, an Equal Distribution Module, a Stack Display Module and a Type Limit Module right away. From then on Dr. Jackson stocks storage modules and high-capacity storage components, and the data scientist also sells advanced modules and components."
+data_scientist_name,Data Scientist
+data_scientist_greet_1,"The lab upstairs ordered too much storage hardware again. I'd rather it go to someone who uses it."
+data_scientist_greet_2,"Housings, components, modules. Take what you need. I'm only selling, though; I have no room to take anything back."
 priority_configure,Priority
 priority_title,Drive Priority
 priority_desc,Items go into higher-priority drives first and come out of lower-priority drives first. Range {0} to {1}.

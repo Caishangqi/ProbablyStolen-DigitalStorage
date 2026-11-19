@@ -10,50 +10,35 @@ using ProbablyStolen.DigitalStorage.Platform.Content;
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;
 
 [TestFixture]
-public sealed class ModuleBayJsonDecoderTests
-{
-    [Test]
-    public void Decoder_RejectsUnknownPropertiesAndComments()
-    {
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent("{\"format_version\":1,\"id\":\"x:y\",\"stages\":[],\"extra\":1}", ModuleBayJsonKind.Definition)));
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent("{/*comment*/\"format_version\":1,\"id\":\"x:y\",\"stages\":[]}", ModuleBayJsonKind.Definition)));
-    }
-
-    [Test]
-    public void Decoder_RejectsResourceBoundsBeforeCreatingModels()
-    {
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(
-            "{\"format_version\":1,\"id\":\"x:large\",\"stages\":[{\"level\":0,\"key\":\"base\",\"layout\":{\"type\":\"rectangle\",\"width\":2147483647,\"height\":1}}]}", ModuleBayJsonKind.Definition)));
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(
-            "{\"format_version\":1,\"id\":\"x:large\",\"stages\":[{\"level\":0,\"key\":\"base\",\"layout\":{\"type\":\"rectangle\",\"width\":257,\"height\":1}}]}", ModuleBayJsonKind.Definition)));
-        var stages = string.Join(",", System.Linq.Enumerable.Range(0, 65).Select(level =>
-            "{\"level\":" + level + ",\"key\":\"stage_" + level + "\",\"layout\":{\"type\":\"rectangle\",\"width\":1,\"height\":1}}"));
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(
-            "{\"format_version\":1,\"id\":\"x:many\",\"stages\":[" + stages + "]}", ModuleBayJsonKind.Definition)));
-        stages = string.Join(",", Enumerable.Range(0, 5).Select(level =>
-            "{\"level\":" + level + ",\"key\":\"stage_" + level + "\",\"layout\":{\"type\":\"rectangle\",\"width\":256,\"height\":256}}"));
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(
-            "{\"format_version\":1,\"id\":\"x:area\",\"stages\":[" + stages + "]}", ModuleBayJsonKind.Definition)));
-    }
-
-    [Test]
-    public void Decoder_UsesRectangleAndPatternModels()
-    {
-        var rectangle = ModuleBayJsonDecoder.DecodeContent("{\"format_version\":1,\"id\":\"x:rectangle\",\"stages\":[{\"level\":0,\"key\":\"base\",\"layout\":{\"type\":\"rectangle\",\"width\":2,\"height\":3}}]}", ModuleBayJsonKind.Definition);
-        var pattern = ModuleBayJsonDecoder.DecodeContent("{\"format_version\":1,\"id\":\"x:pattern\",\"stages\":[{\"level\":0,\"key\":\"base\",\"layout\":{\"type\":\"pattern\",\"rows\":[\"10\",\"00\"]}}]}", ModuleBayJsonKind.Definition);
-        Assert.That(rectangle.Definitions[0].Stages[0].Layout.AvailableCells, Is.EqualTo(6));
-        Assert.That(pattern.Definitions[0].Stages[0].Layout.AvailableCells, Is.EqualTo(3));
-    }
-}
-
-[TestFixture]
 public sealed class ModuleBayContentBootstrapTests
 {
+    private static ModuleBayStage[] Stages(int count) => Enumerable.Range(0, count)
+        .Select(level => new ModuleBayStage(level, "stage_" + level, ModuleBayLayout.Rectangle(1, 1))).ToArray();
+
+    private static void Provider(IContentRegistrationBatch batch, string id)
+    {
+        var key = Identifier.Parse(id);
+        DeferredRegister<IModuleBayProvider>.Create(batch.Registries, DigitalStorageRegistries.ModuleBayProvider, key.Namespace)
+            .Register(key.Path, () => new MemoryProvider(id));
+    }
+
+    private static void Definition(IContentRegistrationBatch batch, string id, int stages = 1)
+    {
+        var key = Identifier.Parse(id);
+        DeferredRegister<ModuleBayDefinition>.Create(batch.Registries, DigitalStorageRegistries.ModuleBayDefinition, key.Namespace)
+            .Register(key.Path, () => new ModuleBayDefinition(id, Stages(stages)));
+    }
+
+    private static void Binding(IContentRegistrationBatch batch, string owner, string item, string definition, string provider,
+        int? maximum = null, string? path = null) =>
+        DeferredRegister<ModuleBayBinding>.Create(batch.Registries, DigitalStorageRegistries.ModuleBayBinding, owner)
+            .Register(path ?? item, () => new ModuleBayBinding(item, definition, provider, maximum));
+
     [Test]
     public void Bootstrap_MissingBuiltinContentFailsClosed()
     {
         using var service = new DigitalStorageContentService();
-        service.RegisterBatch("digital_storage", batch => batch.RegisterProvider(new MemoryProvider("digital_storage:cell")));
+        service.RegisterBatch("digital_storage", batch => Provider(batch, "digital_storage:cell"));
         Assert.Throws<InvalidOperationException>((Action)(() => service.Bootstrap(true)));
         Assert.That(service.IsFrozen, Is.False);
         Assert.That(service.IsUnavailable, Is.True);
@@ -114,21 +99,51 @@ public sealed class ModuleBayContentBootstrapTests
     }
 
     [Test]
-    public void Bootstrap_UsesInjectiveNativeBindingKeys()
+    public void Bootstrap_ExcludesAnOwnerBindingOneNativeItemTwice()
     {
         using var service = new DigitalStorageContentService();
-        IDigitalStorageContentApi api = service;
-        api.Bootstrap.RegisterBatch("keys_mod", batch =>
+        service.RegisterBatch("keys_mod", batch =>
         {
-            batch.RegisterProvider(new MemoryProvider("keys_mod:provider_a"));
-            batch.RegisterProvider(new MemoryProvider("keys_mod:provider_b"));
-            batch.RegisterDefinition(new ModuleBayDefinition("keys_mod:bay_a", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
-            batch.RegisterDefinition(new ModuleBayDefinition("keys_mod:bay_b", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
-            batch.RegisterBinding(new ModuleBayBinding("native.a_b", "keys_mod:bay_a", "keys_mod:provider_a"));
-            batch.RegisterBinding(new ModuleBayBinding("native.a.b", "keys_mod:bay_b", "keys_mod:provider_b"));
+            Provider(batch, "keys_mod:provider");
+            Definition(batch, "keys_mod:bay");
+            Binding(batch, "keys_mod", "native.machine", "keys_mod:bay", "keys_mod:provider", path: "first");
+            Binding(batch, "keys_mod", "native.machine", "keys_mod:bay", "keys_mod:provider", path: "second");
+        });
+        service.RegisterBatch("good_mod", batch =>
+        {
+            Provider(batch, "good_mod:provider");
+            Definition(batch, "good_mod:bay");
+            Binding(batch, "good_mod", "good.machine", "good_mod:bay", "good_mod:provider");
         });
         service.Bootstrap(false);
-        Assert.That(api.ModuleBayBindings.Entries, Has.Count.EqualTo(2));
+        Assert.That(service.ModuleBayBindings.Entries.Select(entry => entry.Value.NativeItemId), Is.EqualTo(new[] { "good.machine" }));
+    }
+
+    [Test]
+    public void Bootstrap_ExcludesTheLaterOwnerBindingAnAlreadyBoundNativeItem()
+    {
+        using var service = new DigitalStorageContentService();
+        foreach (var owner in new[] { "a_mod", "z_mod" })
+            service.RegisterBatch(owner, batch =>
+            {
+                Provider(batch, owner + ":provider");
+                Definition(batch, owner + ":bay");
+                Binding(batch, owner, "shared.machine", owner + ":bay", owner + ":provider");
+            });
+        service.Bootstrap(false);
+        Assert.That(service.ModuleBayBindings.Entries.Single().Value.DefinitionId, Is.EqualTo(Identifier.Parse("a_mod:bay")));
+    }
+
+    [Test]
+    public void Bootstrap_ExcludesADefinitionRegisteredUnderAnotherId()
+    {
+        using var service = new DigitalStorageContentService();
+        service.RegisterBatch("bad_mod", batch => DeferredRegister<ModuleBayDefinition>
+            .Create(batch.Registries, DigitalStorageRegistries.ModuleBayDefinition, "bad_mod")
+            .Register("entry", () => new ModuleBayDefinition("bad_mod:other", Stages(1))));
+        service.RegisterBatch("good_mod", batch => Definition(batch, "good_mod:bay"));
+        service.Bootstrap(false);
+        Assert.That(service.ModuleBays.Entries.Select(entry => entry.Key.ToString()), Is.EqualTo(new[] { "good_mod:bay" }));
     }
 
     private static readonly (string Item, string Definition, string Provider, int Maximum)[] BuiltinBindings =
@@ -144,20 +159,15 @@ public sealed class ModuleBayContentBootstrapTests
         ("digital_storage.item_cell_housing", "vanilla_standard", "cell", 2)
     };
 
-    private static string Profile(string name, int count) =>
-        "{\"format_version\":1,\"id\":\"digital_storage:" + name + "\",\"stages\":[" +
-        string.Join(",", Enumerable.Range(0, count).Select(level =>
-            "{\"level\":" + level + ",\"key\":\"stage_" + level + "\",\"layout\":{\"type\":\"rectangle\",\"width\":1,\"height\":1}}")) + "]}";
-
     private static void RegisterBuiltin(DigitalStorageContentService service, int index = -1, string mutation = "",
         int terminalCount = 11, int vanillaCount = 3, string missingProvider = "")
     {
         service.RegisterBatch("digital_storage", batch =>
         {
             foreach (var provider in new[] { "native_standard", "cell" })
-                if (provider != missingProvider) batch.RegisterProvider(new MemoryProvider("digital_storage:" + provider));
-            foreach (var profile in new[] { Profile("terminal", terminalCount), Profile("vanilla_standard", vanillaCount) })
-                batch.RegisterDefinition(ModuleBayJsonDecoder.DecodeContent(profile, ModuleBayJsonKind.Definition).Definitions.Single());
+                if (provider != missingProvider) Provider(batch, "digital_storage:" + provider);
+            Definition(batch, "digital_storage:terminal", terminalCount);
+            Definition(batch, "digital_storage:vanilla_standard", vanillaCount);
             for (var i = 0; i < BuiltinBindings.Length; i++)
             {
                 if (i == index && mutation == "missing") continue;
@@ -166,10 +176,31 @@ public sealed class ModuleBayContentBootstrapTests
                 var provider = i == index && mutation == "provider" ? (entry.Provider == "cell" ? "native_standard" : "cell") : entry.Provider;
                 var maximum = i == index && mutation == "maximum" ? 0 : entry.Maximum;
                 if (i == index && mutation == "maximum" && entry.Maximum == 0) maximum = 1;
-                batch.RegisterBinding(new ModuleBayBinding(entry.Item, "digital_storage:" + definition,
-                    "digital_storage:" + provider, maximum));
+                Binding(batch, "digital_storage", entry.Item, "digital_storage:" + definition, "digital_storage:" + provider, maximum);
             }
         });
+    }
+
+    [Test]
+    public void BuiltinModuleBays_PublishTheShippedDefinitionsAndBindings()
+    {
+        using var service = new DigitalStorageContentService();
+        service.RegisterBatch("digital_storage", batch => BuiltinModuleBays.Register(batch.Registries));
+        service.Bootstrap(true);
+        Assert.That(service.IsUnavailable, Is.False);
+        var terminal = service.ModuleBays.GetRequired(Identifier.Parse("digital_storage:terminal"));
+        Assert.That(terminal.Stages.Select(stage => stage.Layout.AvailableCells),
+            Is.EqualTo(new[] { 26, 31, 41, 59, 73, 95, 113, 139, 161, 191, 255 }));
+        for (var level = 1; level < terminal.Stages.Count; level++)
+            Assert.That(terminal.Stages[level].Layout.ContainsOpenCellsOf(terminal.Stages[level - 1].Layout), Is.True, "stage " + level);
+        Assert.That(service.ModuleBays.GetRequired(Identifier.Parse("digital_storage:vanilla_standard")).Stages, Has.Count.EqualTo(3));
+        foreach (var expected in BuiltinBindings)
+        {
+            Assert.That(service.TryBinding(expected.Item, out var binding, out _), Is.True, expected.Item);
+            Assert.That(binding.DefinitionId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Definition)));
+            Assert.That(binding.ProviderId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Provider)));
+            Assert.That(binding.MaximumStage, Is.EqualTo(expected.Maximum));
+        }
     }
 
     [Test]
@@ -181,14 +212,7 @@ public sealed class ModuleBayContentBootstrapTests
         Assert.That(service.IsUnavailable, Is.False);
         Assert.That(service.ModuleBays.Entries, Has.Count.EqualTo(2));
         Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(9));
-        Assert.That(service.GetRegistry<IModuleBayProvider>(Identifier.Parse(DigitalStorageContentService.ProviderRegistryId)).Entries, Has.Count.EqualTo(2));
-        foreach (var expected in BuiltinBindings)
-        {
-            var actual = service.ModuleBayBindings.Entries.Single(entry => entry.Value.NativeItemId == expected.Item).Value;
-            Assert.That(actual.DefinitionId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Definition)));
-            Assert.That(actual.ProviderId, Is.EqualTo(Identifier.Parse("digital_storage:" + expected.Provider)));
-            Assert.That(actual.MaximumStage, Is.EqualTo(expected.Maximum));
-        }
+        Assert.That(service.GetRegistry<IModuleBayProvider>(DigitalStorageRegistries.ModuleBayProvider.EntryId).Entries, Has.Count.EqualTo(2));
     }
 
     [TestCase("vanilla.machine")]
@@ -236,10 +260,125 @@ public sealed class ModuleBayContentBootstrapTests
     private static void RegisterExternalMachine(DigitalStorageContentService service) =>
         service.RegisterBatch("test_mod", batch =>
         {
-            batch.RegisterProvider(new MemoryProvider());
-            batch.RegisterDefinition(new ModuleBayDefinition("test_mod:bay", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
-            batch.RegisterBinding(new ModuleBayBinding("test_mod.machine", "test_mod:bay", "test_mod:provider"));
+            Provider(batch, "test_mod:provider");
+            Definition(batch, "test_mod:bay");
+            Binding(batch, "test_mod", "test_mod.machine", "test_mod:bay", "test_mod:provider");
         });
+
+    // Never invoked: these tests cover registration only, so no game customer is constructed.
+    private static StoreClient NoCustomer() => throw new InvalidOperationException("Not invoked.");
+
+    private static void Customer(IContentRegistrationBatch batch, string id, string? portrait = null)
+    {
+        var key = Identifier.Parse(id);
+        DeferredRegister<CustomerDefinition>.Create(batch.Registries, DigitalStorageRegistries.Customer, key.Namespace)
+            .Register(key.Path, () => new CustomerDefinition(NoCustomer, portrait));
+    }
+
+    [Test]
+    public void Customers_PublishBuiltinAndExternalDefinitionsInIdentifierOrder()
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        service.RegisterBatch("digital_storage", batch => Customer(batch, "digital_storage:data_scientist", "digital_storage:digital_scientist"));
+        service.RegisterBatch("test_mod", batch =>
+        {
+            Customer(batch, "test_mod:courier_2", "test_mod:courier");
+            Customer(batch, "test_mod:courier_1", "test_mod:courier");
+        });
+        service.Bootstrap(true);
+
+        Assert.That(service.Customers.Entries.Select(entry => CustomerIdentity.ToNativeId(entry.Key)), Is.EqualTo(new[]
+        {
+            "digital_storage.data_scientist", "test_mod.courier_1", "test_mod.courier_2"
+        }));
+        Assert.That(service.Customers.Entries.Select(entry => entry.Value.Portrait).Distinct().Count(), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void Customers_ExcludeAnOwnerRegisteringInAnotherNamespace()
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        service.RegisterBatch("test_mod", batch =>
+        {
+            Customer(batch, "test_mod:courier");
+            Customer(batch, "digital_storage:impostor");
+        });
+        service.Bootstrap(true);
+
+        Assert.That(service.Customers.Entries, Is.Empty);
+    }
+
+    [Test]
+    public void Customers_ExcludeAnOwnerRegisteringOneIdTwice()
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        service.RegisterBatch("test_mod", batch =>
+        {
+            Customer(batch, "test_mod:courier");
+            Customer(batch, "test_mod:courier");
+        });
+        service.Bootstrap(true);
+
+        Assert.That(service.Customers.Entries, Is.Empty);
+    }
+
+    [Test]
+    public void Customers_AreUnavailableBeforeTheFreeze()
+    {
+        using var service = new DigitalStorageContentService();
+        Assert.Throws<InvalidOperationException>((Action)(() => _ = service.Customers));
+    }
+
+    [Test]
+    public void BakeCallbacks_RunAfterTheFreezeWithTheFrozenRegistry()
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service);
+        service.RegisterBatch("test_mod", batch => Customer(batch, "test_mod:courier"));
+        IReadOnlyRegistry<CustomerDefinition>? baked = null;
+        var frozenWhenBaked = false;
+        service.AddBakeCallback(DigitalStorageRegistries.Customer, registry =>
+        {
+            baked = registry;
+            frozenWhenBaked = service.IsFrozen;
+        });
+        Assert.That(baked, Is.Null);
+        service.Bootstrap(true);
+
+        Assert.That(frozenWhenBaked, Is.True);
+        Assert.That(baked!.Entries.Select(entry => entry.Key.ToString()), Is.EqualTo(new[] { "test_mod:courier" }));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.AddBakeCallback(DigitalStorageRegistries.Customer, _ => { })));
+    }
+
+    [Test]
+    public void BakeCallbacks_ReportAFailureAndStillRunTheOthers()
+    {
+        var diagnostics = new List<string>();
+        using var service = new DigitalStorageContentService(diagnostics.Add);
+        RegisterBuiltin(service);
+        var ran = false;
+        service.AddBakeCallback(DigitalStorageRegistries.Customer, _ => throw new InvalidOperationException("boom"));
+        service.AddBakeCallback(DigitalStorageRegistries.Customer, _ => ran = true);
+        service.Bootstrap(true);
+
+        Assert.That(ran, Is.True);
+        Assert.That(service.IsFrozen, Is.True);
+        Assert.That(diagnostics, Has.Some.Contains("boom"));
+    }
+
+    [Test]
+    public void BakeCallbacks_DoNotRunWhenBuiltinContentIsUnavailable()
+    {
+        using var service = new DigitalStorageContentService();
+        RegisterBuiltin(service, terminalCount: 10);
+        var ran = false;
+        service.AddBakeCallback(DigitalStorageRegistries.Customer, _ => ran = true);
+        Assert.Throws<InvalidOperationException>((Action)(() => service.Bootstrap(true)));
+        Assert.That(ran, Is.False);
+    }
 
     [Test]
     public void IsManagedId_ManagesOnlyPublishedBindingsOnEveryThread()
@@ -258,8 +397,6 @@ public sealed class ModuleBayContentBootstrapTests
         service.Dispose();
         Assert.That(service.IsManagedId("digital_storage.storage_terminal"), Is.False);
     }
-
-
 
     [Test]
     public void TryBinding_ResolvesTheSameItemsAsIsManagedId()
@@ -286,26 +423,7 @@ public sealed class ModuleBayContentBootstrapTests
         Assert.That(failed.IsManagedId("digital_storage.storage_terminal"), Is.False);
         Assert.That(failed.IsManagedId("test_mod.machine"), Is.False);
         Assert.That(failed.TryBinding("digital_storage.storage_terminal", out _, out _), Is.False);
-
-        using var discarded = new DigitalStorageContentService();
-        RegisterBuiltin(discarded);
-        RegisterExternalMachine(discarded);
-        discarded.Bootstrap(true);
-        discarded.DiscardOwner("digital_storage");
-        Assert.That(discarded.IsManagedId("digital_storage.storage_terminal"), Is.False);
-        Assert.That(discarded.IsManagedId("test_mod.machine"), Is.False);
-        Assert.That(discarded.TryBinding("test_mod.machine", out _, out _), Is.False);
     }
-
-    [Test]
-    public void Decoder_RejectsUnknownBindingProperty()
-    {
-        const string binding = "{\"native_item_id\":\"item\",\"definition_id\":\"digital_storage:vanilla_standard\",\"provider_id\":\"digital_storage:native_standard\",\"extra\":true}";
-        const string json = "{\"format_version\":1,\"bindings\":[" + binding + "]}";
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.DecodeContent(json, ModuleBayJsonKind.Bindings)));
-        Assert.Throws<FormatException>((Action)(() => ModuleBayJsonDecoder.BindingEntries(json)));
-    }
-
 
     [TestCase(false)]
     [TestCase(true)]
@@ -341,26 +459,19 @@ public sealed class ModuleBayContentBootstrapTests
     }
 
     [Test]
-    public void Bootstrap_RejectedOwnerNeverBindsHolderDuringDataPhase()
+    public void Bootstrap_RejectedOwnerInvalidatesItsHoldersAndClosesBootstrap()
     {
         using var service = new DigitalStorageContentService();
         var id = Identifier.Parse("failed_mod:values");
         DeferredHolder<CustomValue, CustomValue>? holder = null;
-        var unbound = false;
         var calls = 0;
         service.RegisterBatch("failed_mod", batch =>
         {
             batch.Registries.NewRegistry += e => e.Create<CustomValue>(id);
             holder = DeferredRegister<CustomValue>.Create(batch.Registries, id).Register("value", () => { calls++; return new CustomValue("value"); });
-            batch.Registries.DataPackRegistry += phase =>
-            {
-                try { _ = holder.Value; }
-                catch (InvalidOperationException) { unbound = true; }
-            };
-            batch.RegisterBinding(new ModuleBayBinding("failed.item", "missing:definition", "missing:provider"));
+            Binding(batch, "failed_mod", "failed.item", "missing:definition", "missing:provider");
         });
         service.Bootstrap(false);
-        Assert.That(unbound, Is.True);
         Assert.That(calls, Is.EqualTo(1));
         Assert.Throws<ObjectDisposedException>((Action)(() => _ = holder!.Value));
         Assert.Throws<InvalidOperationException>((Action)(() => service.GetRegistry<CustomValue>(id)));
@@ -375,12 +486,12 @@ public sealed class ModuleBayContentBootstrapTests
         using var service = new DigitalStorageContentService();
         var definitionOwner = reverseNames ? "a_mod" : "z_mod";
         var bindingOwner = reverseNames ? "z_mod" : "a_mod";
-        service.RegisterBatch(bindingOwner, batch => batch.RegisterBinding(
-            new ModuleBayBinding("foreign.machine", definitionOwner + ":bay", definitionOwner + ":provider")));
+        service.RegisterBatch(bindingOwner, batch =>
+            Binding(batch, bindingOwner, "foreign.machine", definitionOwner + ":bay", definitionOwner + ":provider"));
         service.RegisterBatch(definitionOwner, batch =>
         {
-            batch.RegisterDefinition(new ModuleBayDefinition(definitionOwner + ":bay", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
-            batch.RegisterProvider(new MemoryProvider(definitionOwner + ":provider"));
+            Definition(batch, definitionOwner + ":bay");
+            Provider(batch, definitionOwner + ":provider");
         });
         service.Bootstrap(false);
         Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(1));
@@ -391,69 +502,19 @@ public sealed class ModuleBayContentBootstrapTests
     public void Bootstrap_PropagatesRejectedOwnerReferencesAndKeepsIndependentOwner()
     {
         using var service = new DigitalStorageContentService();
-        service.RegisterBatch("a_mod", batch => batch.RegisterBinding(new ModuleBayBinding("a.machine", "z_mod:bay", "z_mod:provider")));
+        service.RegisterBatch("a_mod", batch => Binding(batch, "a_mod", "a.machine", "z_mod:bay", "z_mod:provider"));
         service.RegisterBatch("z_mod", batch =>
         {
-            batch.RegisterDefinition(new ModuleBayDefinition("z_mod:bay", new[] { new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1)) }));
-            batch.RegisterProvider(new MemoryProvider("z_mod:provider"));
-            batch.RegisterBinding(new ModuleBayBinding("z.machine", "missing:bay", "z_mod:provider"));
+            Definition(batch, "z_mod:bay");
+            Provider(batch, "z_mod:provider");
+            Binding(batch, "z_mod", "z.machine", "missing:bay", "z_mod:provider");
         });
-        service.RegisterBatch("good_mod", batch => batch.RegisterProvider(new MemoryProvider("good_mod:provider")));
+        service.RegisterBatch("good_mod", batch => Provider(batch, "good_mod:provider"));
         service.Bootstrap(false);
         Assert.That(service.ModuleBayBindings.Entries, Is.Empty);
         Assert.That(service.ModuleBays.Entries, Is.Empty);
-        Assert.That(service.GetRegistry<IModuleBayProvider>(Identifier.Parse(DigitalStorageContentService.ProviderRegistryId)).Entries.Select(entry => entry.Key.ToString()),
+        Assert.That(service.GetRegistry<IModuleBayProvider>(DigitalStorageRegistries.ModuleBayProvider.EntryId).Entries.Select(entry => entry.Key.ToString()),
             Is.EqualTo(new[] { "good_mod:provider" }));
-    }
-
-    [Test]
-    public void Bootstrap_KeyedJsonUsesDeclaredDecoderAfterCodeStaging()
-    {
-        using var service = new DigitalStorageContentService();
-        var id = Identifier.Parse("z_mod:numbers");
-        var calls = 0;
-        var stillUnbound = false;
-        DeferredHolder<int, int>? holder = null;
-        service.SubmitJson("a_mod", id, Identifier.Parse("a_mod:answer"), "Data/answer.json");
-        service.LoadSource(service.Sources.Single(), "42", (_, _) => throw new InvalidOperationException("No external reads"));
-        service.RegisterBatch("z_mod", batch =>
-        {
-            batch.Registries.NewRegistry += e => e.Create<int>(id);
-            holder = DeferredRegister<int>.Create(batch.Registries, id).Register("code", () => 7);
-            batch.Registries.DataPackRegistry += e => e.NewRegistry(id, json =>
-            {
-                calls++;
-                try { _ = holder.Value; }
-                catch (InvalidOperationException) { stillUnbound = true; }
-                return int.Parse(json, System.Globalization.CultureInfo.InvariantCulture);
-            });
-        });
-        Assert.That(calls, Is.Zero);
-        service.Bootstrap(false);
-        Assert.That(service.GetRegistry<int>(id).GetRequired(Identifier.Parse("a_mod:answer")), Is.EqualTo(42));
-        Assert.That(holder!.Value, Is.EqualTo(7));
-        Assert.That(calls, Is.EqualTo(1));
-        Assert.That(stillUnbound, Is.True);
-    }
-
-    [Test]
-    public void Bootstrap_DecoderFailureRejectsOnlySourceOwnerAndInvalidatesItsCodeHolder()
-    {
-        using var service = new DigitalStorageContentService();
-        var id = Identifier.Parse("z_mod:numbers");
-        DeferredHolder<int, int>? bad = null;
-        service.RegisterBatch("z_mod", batch =>
-        {
-            batch.Registries.NewRegistry += e => e.Create<int>(id);
-            batch.Registries.DataPackRegistry += e => e.NewRegistry(id, json => int.Parse(json, System.Globalization.CultureInfo.InvariantCulture));
-            DeferredRegister<int>.Create(batch.Registries, id).Register("good", () => 7);
-        });
-        service.RegisterBatch("bad_mod", batch => bad = DeferredRegister<int>.Create(batch.Registries, id, "bad_mod").Register("code", () => 99));
-        service.SubmitJson("bad_mod", id, Identifier.Parse("bad_mod:data"), "Data/bad.json");
-        service.LoadSource(service.Sources.Single(), "false", (_, _) => throw new InvalidOperationException("No external reads"));
-        service.Bootstrap(false);
-        Assert.That(service.GetRegistry<int>(id).Entries.Select(entry => entry.Key.ToString()), Is.EqualTo(new[] { "z_mod:good" }));
-        Assert.Throws<ObjectDisposedException>((Action)(() => _ = bad!.Value));
     }
 
     [TestCase("missing")]
@@ -485,24 +546,19 @@ public sealed class ModuleBayContentBootstrapTests
     }
 
     [Test]
-    public void Bootstrap_DataCodecOwnerFailureExcludesDependentSourceOwner()
+    public void Bootstrap_PublishesTypedRegistriesAndDisposesSubscriptions()
     {
         using var service = new DigitalStorageContentService();
-        var id = Identifier.Parse("z_mod:numbers");
-        service.RegisterBatch("z_mod", batch =>
-        {
-            batch.Registries.NewRegistry += e => e.Create<int>(id);
-            batch.Registries.DataPackRegistry += e => e.NewRegistry(id, json => int.Parse(json, System.Globalization.CultureInfo.InvariantCulture));
-            batch.RegisterBinding(new ModuleBayBinding("z.machine", "missing:bay", "missing:provider"));
-        });
-        service.RegisterBatch("a_mod", batch => batch.RegisterProvider(new MemoryProvider("a_mod:provider")));
-        service.SubmitJson("a_mod", id, Identifier.Parse("a_mod:data"), "Data/entry.json");
-        service.LoadSource(service.Sources.Single(), "42", (_, _) => throw new InvalidOperationException("No external reads"));
-        service.RegisterBatch("good_mod", batch => batch.RegisterProvider(new MemoryProvider("good_mod:provider")));
+        IDigitalStorageContentApi api = service;
+        RegisterExternalMachine(service);
         service.Bootstrap(false);
-        Assert.Throws<KeyNotFoundException>((Action)(() => service.GetRegistry<int>(id)));
-        Assert.That(service.GetRegistry<IModuleBayProvider>(Identifier.Parse(DigitalStorageContentService.ProviderRegistryId)).Entries.Select(entry => entry.Key.ToString()),
-            Is.EqualTo(new[] { "good_mod:provider" }));
+        Assert.That(api.Bootstrap.IsFrozen, Is.True);
+        Assert.Throws<InvalidOperationException>((Action)(() => api.Bootstrap.RegisterBatch("late", _ => { })));
+        Assert.That(service.ModuleBays.Entries, Has.Count.EqualTo(1));
+        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(1));
+        using var token = service.SubscribeLayoutChanged((_, _) => { });
+        service.Dispose();
+        Assert.Throws<ObjectDisposedException>((Action)(() => service.SubscribeLayoutChanged((_, _) => { })));
     }
 
     private sealed class CustomValue
@@ -514,66 +570,9 @@ public sealed class ModuleBayContentBootstrapTests
     private sealed class MemoryProvider : IModuleBayProvider
     {
         private readonly Identifier _id;
-        internal MemoryProvider(string id = "test_mod:provider") => _id = Identifier.Parse(id);
+        internal MemoryProvider(string id) => _id = Identifier.Parse(id);
         public Identifier Id => _id;
         public bool TryGetInventory(GameItem item, out GameGridInventory inventory) { inventory = null!; return false; }
         public bool IsAvailable(GameItem item, out string? refusalReason) { refusalReason = "memory-only"; return false; }
-    }
-
-    [Test]
-    public void LoadSource_UsesInjectedReaderForIndexedMemorySources()
-    {
-        using var service = new DigitalStorageContentService();
-        IDigitalStorageContentApi api = service;
-        api.Bootstrap.RegisterBatch("memory_mod", batch => batch.RegisterProvider(new MemoryProvider("memory_mod:provider")));
-        var index = "{\"format_version\":1,\"profiles\":[{\"path\":\"Data/bay.json\"}],\"bindings\":[{\"path\":\"Data/bindings.json\"}]}";
-        var files = new System.Collections.Generic.Dictionary<string, string>
-        {
-            ["Data/bay.json"] = "{\"format_version\":1,\"id\":\"memory_mod:bay\",\"stages\":[{\"level\":0,\"key\":\"base\",\"layout\":{\"type\":\"rectangle\",\"width\":1,\"height\":1}}]}",
-            ["Data/bindings.json"] = "{\"format_version\":1,\"bindings\":[{\"native_item_id\":\"memory.item\",\"definition_id\":\"memory_mod:bay\",\"provider_id\":\"memory_mod:provider\"}]}"
-        };
-        service.LoadSource("memory_mod", "Data/registries.json", index, true, (owner, path) =>
-        {
-            Assert.That(owner, Is.EqualTo("memory_mod"));
-            return files[path];
-        });
-        service.Bootstrap(false);
-        Assert.That(api.ModuleBays.Entries, Has.Count.EqualTo(1));
-        Assert.That(api.ModuleBayBindings.Entries, Has.Count.EqualTo(1));
-    }
-
-    [Test]
-    public void LoadSource_PreservesRootPathWhenAnIndexedSourceFails()
-    {
-        using var service = new DigitalStorageContentService();
-        var index = "{\"format_version\":1,\"profiles\":[{\"path\":\"Data/missing.json\"}],\"bindings\":[]}";
-        var error = Assert.Throws<InvalidOperationException>((Action)(() => service.LoadSource("memory_mod", "Data/registries.json", index, true, (_, _) => throw new FormatException("missing"))));
-        Assert.That(error!.Message, Does.Contain("Data/registries.json"));
-        Assert.That(error.InnerException!.Message, Does.Contain("Data/missing.json"));
-        Assert.Throws<InvalidOperationException>((Action)(() => service.RegisterBatch("memory_mod", _ => { })));
-    }
-
-    [Test]
-    public void Bootstrap_PublishesTypedRegistriesAndDisposesSubscriptions()
-    {
-        using var service = new DigitalStorageContentService();
-        IDigitalStorageContentApi api = service;
-        api.Bootstrap.RegisterBatch("test_mod", batch =>
-        {
-            batch.RegisterProvider(new MemoryProvider());
-            batch.RegisterDefinition(new ModuleBayDefinition("test_mod:bay", new[]
-            {
-                new ModuleBayStage(0, "base", ModuleBayLayout.Rectangle(1, 1))
-            }));
-            batch.RegisterBinding(new ModuleBayBinding("test_mod.machine", "test_mod:bay", "test_mod:provider"));
-        });
-        service.Bootstrap(false);
-        Assert.That(api.Bootstrap.IsFrozen, Is.True);
-        Assert.Throws<InvalidOperationException>((Action)(() => api.Bootstrap.RegisterBatch("late", _ => { })));
-        Assert.That(service.ModuleBays.Entries, Has.Count.EqualTo(1));
-        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(1));
-        using var token = service.SubscribeLayoutChanged((_, _) => { });
-        service.Dispose();
-        Assert.Throws<ObjectDisposedException>((Action)(() => service.SubscribeLayoutChanged((_, _) => { })));
     }
 }

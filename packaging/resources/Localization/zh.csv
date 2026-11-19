@@ -165,16 +165,15 @@ debug_show_cell_pages_name,双击存储元件时显示存储页
 debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其中的存储页; 关闭时只显示存储组件. 存储页始终锁定, 物品只能通过终端存取.
 debug_storage_diagnostics_name,存储诊断日志
 debug_storage_diagnostics_desc,开启后限量记录存储页和模块栏的结构信息。关闭后仍记录错误详情。异常消息保留原文。
-config_section_vendors,商人
-upper_engineer_daily_chance_name,上层区工程师每日来访概率 %
-upper_engineer_daily_chance_desc,每天生成顾客时上层区工程师加入队伍的概率. 范围 0-100. 默认: 25. 设为 0 则不再来访.
-upper_engineer_name,上层区工程师
-upper_engineer_greet_1,上层区的数据中心又换了一批存储设备. 淘汰下来的零件扔了可惜.
-upper_engineer_greet_2,我带了点存储元件和组件过来. 你要是有多余的存储零件或网络设备, 我也收.
-upper_engineer_wrong_item,这不是我要的. 我只收存储零件和网络设备.
-upper_engineer_right_item,嗯, 这个能用.
-upper_engineer_repeat,存储零件, 网络设备. 别的不收.
-upper_engineer_accept,成交. 数据中心下个月还要换设备, 到时候再来.
+network_tab_digital_storage,数字存储
+network_card_digital_storage,存储网络
+network_digital_storage_starter_title,数字存储入门
+network_digital_storage_starter_desc,"立刻获取一套入门级数字存储设备: 控制器 (附电池), 驱动器, 终端和一个空的 1k 存储元件. 一名数据科学家将定期造访你的店铺."
+network_digital_storage_advanced_title,进阶数据管理
+network_digital_storage_advanced_desc,"立刻获得元件工作台, 均分模块, 堆叠显示模块和种类上限模块各一件. 此后杰克逊博士会供应存储模块和高容量存储组件, 数据科学家也会出售更高级的模块和存储组件."
+data_scientist_name,数据科学家
+data_scientist_greet_1,"楼上实验室又多订了一批存储设备. 与其吃灰, 不如交给用得上的人."
+data_scientist_greet_2,"外壳, 组件, 模块, 需要什么自己挑. 不过我只卖不收, 实在没地方放了."
 priority_configure,优先级
 priority_title,驱动器优先级
 priority_desc,存入时先放入优先级高的驱动器, 取出时先从优先级低的驱动器取出. 范围 {0} 到 {1}.

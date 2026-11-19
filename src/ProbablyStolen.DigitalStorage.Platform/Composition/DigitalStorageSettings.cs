@@ -42,7 +42,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
-    private readonly ConfigEntry<int> _engineerDailyChance;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _storageDiagnostics;
     private readonly ConfigEntry<bool> _itemIdentityLog;
@@ -88,7 +87,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         // loaded, so these start as keys and RefreshSectionNames replaces them once the text is available.
         const string power = "config_section_power";
         const string debug = "config_section_debug";
-        const string vendors = "config_section_vendors";
         const string search = "config_section_terminal_search";
         const string view = "config_section_terminal_view";
         _controllerPowerUsage = config.Define("controller_power_usage", 3, power,
@@ -97,8 +95,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("network_power_drive_name"), tooltip: () => text.Get("network_power_drive_desc"));
         _terminalPowerUsage = config.Define("terminal_power_usage", 1, power,
             () => text.Get("network_power_terminal_name"), tooltip: () => text.Get("network_power_terminal_desc"));
-        _engineerDailyChance = config.Define("upper_engineer_daily_chance", 25, vendors,
-            () => text.Get("upper_engineer_daily_chance_name"), tooltip: () => text.Get("upper_engineer_daily_chance_desc"));
         _showCellPages = config.Define("debug_show_cell_pages", false, debug,
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
         _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
@@ -141,7 +137,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
-            (_engineerDailyChance, vendors),
             (_showCellPages, debug), (_terminalDiagnostics, debug), (_storageDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
@@ -396,9 +391,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
     /// <summary>Gets whether double-clicking a storage cell also shows its storage pages.</summary>
     internal bool GetShowCellPages() => _showCellPages.Value;
-
-    /// <summary>Gets the daily chance, in percent, that the upper-level engineer visits.</summary>
-    internal int GetEngineerDailyChance() => Clamp(_engineerDailyChance.Value, 0, 100);
 
     public int GetPowerUsage(GridNodeKind kind) => Clamp(kind switch
     {
