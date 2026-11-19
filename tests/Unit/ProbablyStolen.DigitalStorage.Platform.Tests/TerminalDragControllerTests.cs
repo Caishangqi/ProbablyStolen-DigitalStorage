@@ -542,6 +542,44 @@ internal sealed class TerminalDragControllerTests
     }
 
     [Test]
+    public void ItemTarget_WithoutAnchor_PreservesOwnedInventoryDescriptor()
+    {
+        var inventory = (GameSlotInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory));
+        var secondInventory = (GameSlotInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory));
+        var hoveredItem = (GameItemElement)RuntimeHelpers.GetUninitializedObject(typeof(GameItemElement));
+        var inventories = new GameInventory[] { inventory, secondInventory };
+        var target = new InventoryDropTarget(inventory, new GridDropAnchor(1, 1), hoveredItem: hoveredItem,
+            itemInventories: inventories);
+
+        var withoutAnchor = target.WithoutAnchor();
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(withoutAnchor.HoveredItem, Is.SameAs(hoveredItem));
+            Assert.That(withoutAnchor.ItemInventories, Is.SameAs(inventories));
+            Assert.That(withoutAnchor.Anchor, Is.Null);
+        }));
+    }
+
+    [Test]
+    public void NativeItemDestination_MustBeCapturedSupportedInventory()
+    {
+        var ownedSlots = Enumerable.Range(0, 8)
+            .Select(_ => (GameInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory)))
+            .ToArray();
+        var externalSlot = (GameInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory));
+        var ownedGrid = (GameInventory)RuntimeHelpers.GetUninitializedObject(typeof(GameGridInventory));
+        var candidates = ownedSlots.Append(ownedGrid).ToArray();
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(InventoryDropTarget.IsSupportedItemInventory(ownedSlots[7], candidates), Is.True);
+            Assert.That(InventoryDropTarget.IsSupportedItemInventory(ownedGrid, candidates), Is.True);
+            Assert.That(InventoryDropTarget.IsSupportedItemInventory(externalSlot, candidates), Is.False);
+        }));
+    }
+
+    [Test]
     public void Release_UsesNewlyResolvedAnchorRatherThanHoverCell()
     {
         var fixture = CreateFixture();

@@ -436,7 +436,7 @@ internal sealed class StorageService
 
         var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true,
             pointPlacement: target.ForSinglePlacement(requested), useNativeDragSearch: true,
-            containerTarget: target.HoveredItem);
+            containerTarget: target.HoveredItem, itemInventories: target.ItemInventories);
         long moved = 0;
         var status = TerminalExtractionStatus.Success;
         _contentsUncertain = false;

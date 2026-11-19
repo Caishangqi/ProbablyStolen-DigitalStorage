@@ -3,12 +3,29 @@ using System.Runtime.CompilerServices;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Tests;
 
 [TestFixture]
 internal sealed class TerminalDragTargetResolverTests
 {
+    [Test]
+    public void HitClassification_PreservesNearestNativeElementType()
+    {
+        var slot = (PixelElement)RuntimeHelpers.GetUninitializedObject(typeof(GameSlotInventory));
+        var item = (PixelElement)RuntimeHelpers.GetUninitializedObject(typeof(GameItemElement));
+        var window = (PixelElement)RuntimeHelpers.GetUninitializedObject(typeof(PixelWindow));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(TerminalDragTargetResolver.ClassifyHit(slot), Is.EqualTo(TerminalDropHitKind.Inventory));
+            Assert.That(TerminalDragTargetResolver.ClassifyHit(item), Is.EqualTo(TerminalDropHitKind.Item));
+            Assert.That(TerminalDragTargetResolver.ClassifyHit(window), Is.EqualTo(TerminalDropHitKind.Window));
+            Assert.That(TerminalDragTargetResolver.ClassifyHit(null), Is.EqualTo(TerminalDropHitKind.Unsupported));
+        }));
+    }
+
     [Test]
     public void Constructor_NullWindow_IsRejectedWithoutCreatingUnityObjects()
     {

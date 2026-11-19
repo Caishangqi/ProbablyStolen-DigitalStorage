@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
@@ -12,7 +13,8 @@ internal sealed class InventoryDropTarget
     private readonly TerminalDiagnostics? _diagnostics;
 
     internal InventoryDropTarget(GameInventory inventory, GridDropAnchor? anchor = null, Vector2? worldPointer = null,
-        TerminalDiagnostics? diagnostics = null, GameItemElement? hoveredItem = null, bool isAnchorValid = true)
+        TerminalDiagnostics? diagnostics = null, GameItemElement? hoveredItem = null, bool isAnchorValid = true,
+        IReadOnlyList<GameInventory>? itemInventories = null)
     {
         Inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         Anchor = anchor;
@@ -20,19 +22,41 @@ internal sealed class InventoryDropTarget
         _diagnostics = diagnostics;
         HoveredItem = hoveredItem;
         IsAnchorValid = isAnchorValid;
+        ItemInventories = itemInventories ?? Array.Empty<GameInventory>();
     }
 
     internal GameInventory Inventory { get; }
     internal GridDropAnchor? Anchor { get; }
     internal Vector2? WorldPointer { get; }
     internal GameItemElement? HoveredItem { get; }
+    internal IReadOnlyList<GameInventory> ItemInventories { get; }
     internal bool IsAnchorValid { get; }
     internal InventoryDropTarget WithoutAnchor() => Anchor.HasValue || !IsAnchorValid
-        ? new InventoryDropTarget(Inventory, diagnostics: _diagnostics, hoveredItem: HoveredItem)
+        ? new InventoryDropTarget(Inventory, diagnostics: _diagnostics, hoveredItem: HoveredItem,
+            itemInventories: ItemInventories)
         : this;
 
-    internal bool MayAccept(GameItem item) => item != null && IsUsable(Inventory, HoveredItem) &&
-        Inventory.MayHaveValidInventorySlot(item);
+    internal bool MayAccept(GameItem item) => item != null &&
+        (HoveredItem != null
+            ? IsItemTargetUsable(HoveredItem, ItemInventories) && HoveredItem.MayHaveValidInventorySlot(item)
+            : IsUsable(Inventory, null) && Inventory.MayHaveValidInventorySlot(item));
+
+    internal static bool IsSupportedItemInventory(GameInventory inventory,
+        IReadOnlyList<GameInventory> itemInventories)
+    {
+        if (inventory is not (GameGridInventory or GameSlotInventory)) return false;
+        foreach (var candidate in itemInventories)
+            if (ReferenceEquals(candidate, inventory)) return true;
+        return false;
+    }
+
+    internal static bool IsItemTargetUsable(GameItemElement item, IReadOnlyList<GameInventory> itemInventories)
+    {
+        if (item.IsDestroyed() || !GeneralHelper.MayPlayerInsertInto(item)) return false;
+        foreach (var inventory in itemInventories)
+            if (IsUsable(inventory, item)) return true;
+        return false;
+    }
 
     internal static bool IsUsable(GameInventory inventory, GameItemElement? container)
     {
@@ -52,6 +76,9 @@ internal sealed class InventoryDropTarget
     internal bool? PreviewWholeAcceptance(GameItem item, bool useAnchor)
     {
         if (item == null || item.unitCount <= 0 || !MayAccept(item)) return false;
+        // Native item placement searches all child inventories at release. Its capacity is intentionally unknown
+        // while the source root remains locked, so item targets keep the neutral pending feedback.
+        if (HoveredItem != null) return null;
 
         if (Inventory is GameSlotInventory slot)
         {

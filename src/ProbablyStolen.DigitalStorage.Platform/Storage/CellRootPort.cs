@@ -258,6 +258,7 @@ internal sealed class InventoryRootSink : IRootSink
     private readonly InventoryDropTarget? _pointPlacement;
     private readonly bool _useNativeDragSearch;
     private readonly GameItemElement? _containerTarget;
+    private readonly IReadOnlyList<GameInventory> _itemInventories;
 
     /// <summary>Creates a sink into a native inventory.</summary>
     /// <param name="destination">The native inventory that receives roots.</param>
@@ -268,15 +269,17 @@ internal sealed class InventoryRootSink : IRootSink
     /// <param name="pointPlacement">The release cell anchoring a single drop onto the visible grid.</param>
     /// <param name="useNativeDragSearch">Whether to use native orientation search within the resolved drop target.</param>
     /// <param name="containerTarget">The visible container icon authorizing insertion while its window is closed.</param>
+    /// <param name="itemInventories">The supported inventories owned by <paramref name="containerTarget"/> before commit.</param>
     internal InventoryRootSink(GameInventory destination, bool wholeRootOnly = false,
         InventoryDropTarget? pointPlacement = null, bool useNativeDragSearch = false,
-        GameItemElement? containerTarget = null)
+        GameItemElement? containerTarget = null, IReadOnlyList<GameInventory>? itemInventories = null)
     {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
         _wholeRootOnly = wholeRootOnly;
         _pointPlacement = pointPlacement;
         _useNativeDragSearch = useNativeDragSearch;
         _containerTarget = containerTarget;
+        _itemInventories = itemInventories ?? Array.Empty<GameInventory>();
     }
 
     /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
@@ -327,15 +330,28 @@ internal sealed class InventoryRootSink : IRootSink
             {
                 var shape = item.modifiedShape;
                 var pointCenter = _pointPlacement?.CenterFor(shape);
-                slot = pointCenter is { } center
-                    ? _destination.TryInventorySlot(item, requested, center, shape, item.modifiedState)
-                    : _destination is GameGridInventory grid
-                        ? grid.TryFindOneValidInventorySlot(item, keepOrientation: !_useNativeDragSearch)
-                        : _destination.TryInventorySlot(item, requested, shape, item.modifiedState);
-                // Native search may return a slot inside an item in the grid. Drag targets name one inventory.
-                if (slot != null && (!_useNativeDragSearch || slot.inventory == _destination) &&
-                    (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
-                    moved = slot.TryAcceptOnce(requested);
+                if (_containerTarget != null)
+                {
+                    // Item targets own several native inventories (for example a gun's eight mod slots). Native
+                    // chooses the actual child only after the stored root has been released from its locked page.
+                    if (_containerTarget.MayHaveValidInventorySlot(item))
+                        slot = _containerTarget.TryFindOneValidInventorySlot(item);
+                    if (slot != null && IsValidItemSlot(slot) &&
+                        (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
+                        moved = slot.TryAcceptOnce(requested);
+                }
+                else
+                {
+                    slot = pointCenter is { } center
+                        ? _destination.TryInventorySlot(item, requested, center, shape, item.modifiedState)
+                        : _destination is GameGridInventory grid
+                            ? grid.TryFindOneValidInventorySlot(item, keepOrientation: !_useNativeDragSearch)
+                            : _destination.TryInventorySlot(item, requested, shape, item.modifiedState);
+                    // Native search may return a slot inside an item in the grid. Drag targets name one inventory.
+                    if (slot != null && (!_useNativeDragSearch || slot.inventory == _destination) &&
+                        (!_wholeRootOnly || AcceptsWhole(slot.numTransfer, requested)))
+                        moved = slot.TryAcceptOnce(requested);
+                }
                 _pointPlacement?.RecordPlacement("native_slot", shape, pointCenter, slot, requested, moved);
             }
             else
@@ -371,14 +387,32 @@ internal sealed class InventoryRootSink : IRootSink
         return moved == 0 ? TransferStep.Rejected(StoreRejection.PhysicalLimit) : TransferStep.Returned;
     }
 
-    private bool IsTargetUsable() => InventoryDropTarget.IsUsable(_destination, _containerTarget);
+    private bool IsValidItemSlot(SlotMarker slot)
+    {
+        if (_containerTarget == null || slot.inventory == null ||
+            !InventoryDropTarget.IsSupportedItemInventory(slot.inventory, _itemInventories)) return false;
+        return ReferenceEquals(GraphUtils.FindParentType<GameItem>(slot.inventory), _containerTarget) &&
+            InventoryDropTarget.IsUsable(slot.inventory, _containerTarget);
+    }
+
+    private bool IsTargetUsable() => _containerTarget == null
+        ? InventoryDropTarget.IsUsable(_destination, null)
+        : InventoryDropTarget.IsItemTargetUsable(_containerTarget, _itemInventories);
 
     private static bool Owns(GameInventory inventory, GameItem item) =>
         item.parentInventory == inventory && inventory.childItems.Contains(item);
 
     private bool OwnsTarget(SlotMarker? slot, GameItem item)
     {
-        if (slot == null || slot.inventory != _destination) return false;
+        if (slot == null || slot.inventory == null) return false;
+        if (_containerTarget != null)
+        {
+            if (!IsValidItemSlot(slot)) return false;
+            var accepted = slot.targetItem ?? slot.item;
+            return accepted != null && Owns(slot.inventory, accepted);
+        }
+
+        if (slot.inventory != _destination) return false;
         return slot.targetItem != null
             ? Owns(_destination, slot.targetItem)
             : slot.item != null && Owns(_destination, slot.item);

@@ -33,9 +33,8 @@ internal sealed class TerminalPotentialTargetHighlightView : IDisposable
             var parent = item.parentInventory;
             try
             {
-                var destination = TerminalDragTargetResolver.ResolveContainerInventory(item.child);
-                if (destination == null || !new InventoryDropTarget(destination, hoveredItem: item).MayAccept(source))
-                    continue;
+                if (!TerminalDragTargetResolver.TryCreateItemTarget(item, null, out var destination) ||
+                    !destination!.MayAccept(source)) continue;
                 var highlight = _pool.Count == 0 ? new TerminalTargetHoverView() : _pool.Pop();
                 _active.Add(item, highlight);
                 if (!_byInventory.TryGetValue(parent, out var items))
