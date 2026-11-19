@@ -214,8 +214,8 @@ class GameWorkflowTests(unittest.TestCase):
         self.assertFalse(result["failed"])
         self.assertEqual([], result["events"])
 
-    def test_eleven_file_package_and_actual_layout_failure_propagation(self):
-        from digital_storage_tools.package import CURRENT_FILES
+    def test_declared_package_inventory_and_actual_layout_failure_propagation(self):
+        from digital_storage_tools.package import CURRENT_FILES, RESOURCE_FILES
         package = self.root / "candidate package"
         for name in CURRENT_FILES:
             path = package / name
@@ -223,15 +223,11 @@ class GameWorkflowTests(unittest.TestCase):
             if name == "manifest.xml":
                 shutil.copyfile(REPOSITORY_ROOT / "packaging/manifest.xml", path)
             else:
-                source = REPOSITORY_ROOT / "packaging/resources" / name if name.startswith("Data/") else None
-                if source is not None and source.is_file():
-                    shutil.copyfile(source, path)
-                else:
-                    path.write_bytes(b"synthetic workflow package file")
+                path.write_bytes(b"synthetic workflow package file")
         result = self.run_workflow(WORKFLOW_TEST_BUILD="1", WORKFLOW_TEST_VALIDATE_PACKAGE=str(package))
         self.assertFalse(result["failed"])
         self.assertEqual(["package.ps1", "deploy.ps1", "launch"], result["events"])
-        (package / "Localization/en.csv").unlink()
+        (package / RESOURCE_FILES[0]).unlink()
         result = self.run_workflow(WORKFLOW_TEST_BUILD="1", WORKFLOW_TEST_VALIDATE_PACKAGE=str(package))
         self.assertTrue(result["failed"])
         self.assertEqual(["package.ps1"], result["events"])

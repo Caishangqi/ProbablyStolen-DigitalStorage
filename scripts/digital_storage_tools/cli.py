@@ -129,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=1).run(suite)
         return 0 if result.wasSuccessful() and not result.skipped else 1
+    if args.command in ("package-zip", "verify-package-zip"):
+        from . import package_zip
+        run_zip = package_zip.create_main if args.command == "package-zip" else package_zip.verify_main
+        return run_zip(remaining)
     from . import assets, decompile, deployment, environment, extract_assets, package, workshop
     if args.command in ("check-assets", "prepare-assets"):
         remaining = ["--check" if args.command == "check-assets" else "--write", *remaining]
@@ -145,13 +149,19 @@ def main(argv: list[str] | None = None) -> int:
                 "extract-assets": extract_assets.main, "verify-package": package.main,
                 "internal-deployment": deployment.main, "internal-workshop-upload": workshop.main}
     if args.command == "verify-layout":
-        if remaining:
-            parser.error("verify-layout takes no arguments")
+        json_output = remaining == ["--json"]
+        if remaining and not json_output:
+            parser.error("verify-layout takes only optional --json")
         try:
-            package.load_layouts()
+            declaration = package.load_layouts()
+            package.load_installed_layouts()
         except (package.PackageValidationError, OSError, ValueError) as error:
             print(f"Package layout error: {error}", file=sys.stderr)
             return 2
+        if json_output:
+            import json
+            print(json.dumps({"assemblies": declaration["assemblies"],
+                              "resources": [item["path"] for item in declaration["resources"]]}))
         return 0
     if args.command in commands:
         return commands[args.command](remaining)

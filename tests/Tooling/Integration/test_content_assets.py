@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
+from digital_storage_tools.package import load_layouts  # noqa: E402
 from digital_storage_tools.assets import (  # noqa: E402
     ASSETS, ContentValidationError, check_assets, check_image, image_api,
     check_content, format_parameters, main, prepare_assets, read_localization, validate_write_root,
@@ -30,19 +31,28 @@ class ContentContractTests(unittest.TestCase):
         (self.root / catalog).parent.mkdir(parents=True)
         shutil.copy2(REPOSITORY / catalog, self.root / catalog)
         self.output = self.root / "resources"
-        for name in ("Localization", "Search", "Licenses"):
-            shutil.copytree(REPOSITORY / "packaging/resources" / name, self.output / name)
-        shutil.copytree(REPOSITORY / "packaging/resources/Data", self.output / "Data")
+        self.resource_entries = load_layouts()["resources"]
+        self.localization_paths = tuple(entry["path"] for entry in self.resource_entries
+                                        if Path(entry["path"]).suffix == ".csv")
+        for entry in self.resource_entries:
+            if "image" in entry:
+                continue
+            relative = Path(entry["path"])
+            destination = self.output / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPOSITORY / "packaging/resources" / relative, destination)
 
     def test_tier_vendor_value_and_resource_wiring(self):
         vendor = (self.platform / "Content/StorageVendors.cs").read_text(encoding="utf-8")
         self.assertIn("RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId)", vendor)
-        self.assertIn("StorageCellTier.All.Select(tier => tier.ComponentId)", vendor)
-        self.assertIn("if (roll <= 30) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId)", vendor)
-        self.assertIn("else if (roll <= 55) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().CellId)", vendor)
-        self.assertIn("TypeLimitRolls.RollQuality(NativeRandom.Instance)", vendor)
-        self.assertIn("OfferTypeLimitModule(ModuleQuality.Common)", vendor)
+        self.assertIn("_goods.OfferOnCounter(StorageOffer.TypeLimit(ModuleQuality.Common))", vendor)
         self.assertIn("RNG.GetRandomInt(1, 100)", vendor)
+        # No vendor of this mod buys storage goods back; the data scientist only sells.
+        self.assertNotIn("SELLNBUY", vendor)
+        self.assertNotIn("clientBuyingIdList", vendor)
+        self.assertIn("StoreClient.ClientIntent.SELL", vendor)
+        self.assertIn("DigitalStorageOffers.ScientistStock(", vendor)
+        self.assertIn("DigitalStorageOffers.JacksonGuaranteedStock(", vendor)
         definitions = (self.platform / "Content/ItemContentSynchronization.cs").read_text(encoding="utf-8")
         self.assertIn("tier.ComponentValue", definitions)
         self.assertIn('cellKey + "_desc", ItemPrices.CellHousing', definitions)
@@ -66,8 +76,8 @@ class ContentContractTests(unittest.TestCase):
                   / "DropRefusalReasons.cs").read_text(encoding="utf-8")
         keys = set(re.findall(r'"((?:terminal|storage)_[a-z_]+)"', source))
         self.assertIn("terminal_drag_reason_not_owned", keys)
-        for language in ("en", "zh"):
-            texts = read_localization(REPOSITORY / "packaging/resources/Localization" / (language + ".csv"))
+        for index, language in enumerate(self.localization_paths):
+            texts = read_localization(REPOSITORY / "packaging/resources" / language)
             self.assertEqual(set(), keys - set(texts), language)
             self.assertIn("terminal_storage_drag_refused", texts)
 
@@ -77,22 +87,22 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn('Define("debug_storage_diagnostics", false, debug', settings)
         self.assertIn("GetStorageDiagnostics() => _storageDiagnostics.Value", settings)
         self.assertIn("new StorageDiagnostics", composition)
-        english = read_localization(REPOSITORY / "packaging/resources/Localization/en.csv")
-        chinese = read_localization(REPOSITORY / "packaging/resources/Localization/zh.csv")
+        english = read_localization(REPOSITORY / "packaging/resources" / self.localization_paths[0])
+        chinese = read_localization(REPOSITORY / "packaging/resources" / self.localization_paths[1])
         for key in ("debug_storage_diagnostics_name", "debug_storage_diagnostics_desc"):
             self.assertTrue(english[key])
             self.assertTrue(chinese[key])
 
 
     def test_missing_search_resources_are_rejected(self):
-        for name in ("Search/pinyin-dictionary.txt", "Licenses/PininSharp-LICENSE.txt",
-                     "Licenses/pinyin-data-LICENSE.txt", "Licenses/Rime-Terra-Pinyin-LICENSE.txt"):
+        text_resources = [entry["path"] for entry in self.resource_entries if Path(entry["path"]).suffix == ".txt"]
+        for name in text_resources:
             with self.subTest(resource=name):
                 path = self.output / name
                 content = path.read_bytes()
                 path.unlink()
                 try:
-                    with self.assertRaisesRegex(ContentValidationError, "Required search resource"):
+                    with self.assertRaisesRegex(ContentValidationError, "Required text resource"):
                         check_content(self.root, self.output)
                 finally:
                     path.write_bytes(content)
@@ -107,7 +117,9 @@ class ContentContractTests(unittest.TestCase):
         load = source[source.index("internal void MarkAssetsReady()"):
                       source.index("    internal void Update(")]
         self.assertIn("_dictionaryGate.MarkAssetsReady()", load)
-        self.assertIn("ReadModFileText(_modId, \"Search/pinyin-dictionary.txt\")", source)
+        dictionary_path = next(entry["path"] for entry in self.resource_entries
+                               if Path(entry["path"]).suffix == ".txt" and Path(entry["path"]).parent.name == "Search")
+        self.assertIn(f'ReadModFileText(_modId, "{dictionary_path}")', source)
         self.assertNotIn("ReadModFileText", constructor)
         platform = (original / "PlatformComposition.cs").read_text(encoding="utf-8")
         callback = platform[platform.index("private void OnAssetsLoaded("):
@@ -131,8 +143,8 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("element.SetIndex(selectedIndex, notify: false)", dropdown)
         self.assertIn("dropdown!.RefreshShownValue()", dropdown)
         self.assertNotIn("entry.Choices =", dropdown)
-        english = read_localization(self.output / "Localization/en.csv")
-        chinese = read_localization(self.output / "Localization/zh.csv")
+        english = read_localization(self.output / self.localization_paths[0])
+        chinese = read_localization(self.output / self.localization_paths[1])
         for suffix in ("auto", "on", "off"):
             key = "terminal_search_pinyin_mode_option_" + suffix
             self.assertTrue(english[key])
@@ -261,20 +273,14 @@ class ContentContractTests(unittest.TestCase):
                 with self.assertRaises(ContentValidationError):
                     check_content(self.root, self.output)
 
-    def test_removed_command_source_and_language_keys_are_rejected(self):
-        path = self.platform / "Diagnostics/ItemCommands.cs"
-        path.parent.mkdir()
-        path.write_text("// stale command source\n", encoding="utf-8")
-        with self.assertRaisesRegex(ContentValidationError, "Removed custom command"):
-            check_content(self.root, self.output)
-        path.unlink()
-        language = self.output / "Localization/en.csv"
+    def test_obsolete_localization_keys_are_rejected(self):
+        language = self.output / self.localization_paths[0]
         language.write_text(language.read_text(encoding="utf-8") + "command_spawn_help,obsolete\n", encoding="utf-8")
         with self.assertRaisesRegex(ContentValidationError, "required content keys"):
             check_content(self.root, self.output)
 
     def test_missing_empty_duplicate_bom_multiline_and_placeholder_drift_fail(self):
-        path = self.output / "Localization/zh.csv"
+        path = self.output / self.localization_paths[1]
         original = path.read_text(encoding="utf-8")
         first = original.splitlines()[0]
         key, value = first.split(",", 1)

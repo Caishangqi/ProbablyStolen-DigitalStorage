@@ -20,7 +20,10 @@ SCRIPTS = {
     "publish-workshop": ("publish-workshop.ps1",),
 }
 CHECKS = {"check-source": ("scripts/check_quality.py", "--scope", "all")}
-PUBLIC = tuple(SCRIPTS) + tuple(CHECKS) + ("doctor", "check-assets", "check-ci", "check-format", "ci-core", "test-tools-unit", "test-tools-integration", "verify-package", "decompile", "extract-assets", "prepare-assets")
+PUBLIC = tuple(SCRIPTS) + tuple(CHECKS) + (
+    "doctor", "check-assets", "check-ci", "check-format", "ci-core", "test-tools-unit", "test-tools-integration",
+    "verify-package", "package-zip", "verify-package-zip", "decompile", "extract-assets", "prepare-assets",
+)
 
 
 def local_environment() -> dict[str, str]:
@@ -76,10 +79,26 @@ def run(command: str, args: list[str]) -> int:
     elif command == "ci-core":
         if args:
             raise ValueError("ci-core takes no arguments")
-        for name in ("check-source", "check-assets", "check-ci", "check-format", "test-tools-unit", "test-tools-integration", "test-core"):
-            result = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/tool.py"), name], cwd=ROOT, env=env)
-            if result.returncode:
-                return result.returncode
+        groups = (
+            ("Checks", ("check-source", "check-ci")),
+            ("Assets", ("check-assets",)),
+            ("Python Tooling Unit", ("test-tools-unit",)),
+            ("Python Tooling Integration", ("test-tools-integration",)),
+            (".NET Core", ("check-format", "test-core")),
+        )
+        grouped = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+        for title, names in groups:
+            if grouped:
+                print(f"::group::{title}", flush=True)
+            try:
+                for name in names:
+                    result = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/tool.py"), name],
+                                            cwd=ROOT, env=env)
+                    if result.returncode:
+                        return result.returncode
+            finally:
+                if grouped:
+                    print("::endgroup::", flush=True)
         return 0
     else:
         raise ValueError(f"Unknown command: {command}")

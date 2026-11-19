@@ -12,46 +12,53 @@ import tempfile
 from pathlib import Path
 from typing import Sequence
 
-from .module_bay_data import ModuleBayDataError, validate_registry_data
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-# Source dimensions are deliberate: the 47px drive gains transparent right/bottom edges.
-ASSETS = {
-    "terminal": ((48, 48), (48, 48)),
-    "drive": ((47, 47), (48, 48)),
-    "controller": ((32, 48), (32, 48)),
-    "item_storage_cell_1k": ((16, 32), (16, 32)),
-    "item_cell_housing": ((16, 32), (16, 32)),
-    "cell_component_1k": ((16, 32), (16, 32)),
-}
-TIERS = ("1k", "4k", "16k", "64k", "256k")
-for tier in TIERS[1:]:
-    for prefix in ("item_storage_cell_", "cell_component_"):
-        ASSETS[prefix + tier] = ((16, 32), (16, 32))
-ASSETS["workbench"] = ((48, 48), (48, 48))
-# Three workbench corner cells are transparent, so their centres are exempt from the opacity check.
-OPEN_CENTER_ASSETS = frozenset({"workbench"})
-for module in ("module_type_expansion_common", "module_type_expansion_rare", "module_type_expansion_epic",
-               "module_equal_distribution", "module_type_stack_display"):
-    ASSETS[module] = ((32, 32), (32, 32))
-
-
-BUTTON_ASSETS = (
-    "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
-    "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
-    "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_placeholder",
-    "button_stack", "button_add", "button_keep_open_off", "button_keep_open_on", "annotation_square", "button_sample_attributes",
-)
-for button in BUTTON_ASSETS:
-    ASSETS[button] = ((16, 16), (16, 16))
-# Interface textures that sit beside the buttons in Textures/ but are not button sized.
-FRAME_ASSETS = ("window_frame",)
-ASSETS["window_frame"] = ((64, 64), (64, 64))
-INTERFACE_ASSETS = frozenset((*BUTTON_ASSETS, *FRAME_ASSETS))
 
 
 class ContentValidationError(ValueError):
     """A required content input or runtime resource is invalid."""
+
+
+def _resource_contract():
+    from .package import PackageValidationError, load_layouts
+    try:
+        return load_layouts()
+    except PackageValidationError as error:
+        raise ContentValidationError(str(error)) from error
+
+
+def _image_contracts() -> dict[str, dict[str, object]]:
+    return IMAGE_CONTRACTS
+
+
+def _dimensions(name: str) -> tuple[tuple[int, int], tuple[int, int]]:
+    image = _image_contracts()[name]
+    return tuple(image["source"]), tuple(image["runtime"])
+
+
+def _resource_path(name: str) -> Path:
+    contract = _image_contracts()[name]
+    return Path(contract["path"])
+
+
+def _as_name(item: str) -> str:
+    images = _image_contracts()
+    name = Path(item).stem if item.lower().endswith(".png") else item
+    if name not in images:
+        raise ContentValidationError(f"Undeclared image resource: {item}")
+    if item.lower().endswith(".png") and Path(item).as_posix() != _resource_path(name).as_posix():
+        raise ContentValidationError(f"Image resource path does not match declaration: {item}")
+    return name
+
+
+IMAGE_CONTRACTS = _resource_contract()["images"]
+ASSETS = {name: _dimensions(name) for name in IMAGE_CONTRACTS}
+BUTTON_ASSETS = tuple(name for name, image in _image_contracts().items() if image["interface"] and image["runtime"] == [16, 16])
+OPEN_CENTER_ASSETS = frozenset(name for name, image in _image_contracts().items() if image["openCenters"])
+PICTURE_ASSETS = tuple(name for name, image in _image_contracts().items() if image["visible"] and name not in BUTTON_ASSETS)
+INTERFACE_ASSETS = frozenset(name for name, image in _image_contracts().items() if image["interface"])
+
 
 
 def image_api():
@@ -96,13 +103,13 @@ def validate_write_root(source: Path, output: Path) -> Path:
 
 def source_png(source: Path, name: str):
     Image = image_api()
-    path = plain_path(source / (name + ".png"))
+    path = plain_path(source / (_resource_path(name).name))
     try:
         data = path.read_bytes()
         with Image.open(io.BytesIO(data)) as opened:
             if opened.format != "PNG" or getattr(opened, "n_frames", 1) != 1:
                 raise ContentValidationError(f"Expected a single PNG: {path}")
-            if opened.size != ASSETS[name][0]:
+            if opened.size != _dimensions(name)[0]:
                 raise ContentValidationError(f"Unexpected source dimensions for {name}: {opened.size}")
             rgba = opened.convert("RGBA")
             if name in BUTTON_ASSETS:
@@ -116,14 +123,14 @@ def source_png(source: Path, name: str):
 
 def validate_button_image(image, name: str) -> None:
     if image.getchannel("A").getbbox() is None:
-        raise ContentValidationError(f"Empty button icon: {name}")
+        raise ContentValidationError(f"Image has no visible pixels: {name}")
 
 
 def expected_png(source: Path, name: str) -> bytes:
     data, rgba = source_png(source, name)
-    if ASSETS[name][0] == ASSETS[name][1]:
+    if _dimensions(name)[0] == _dimensions(name)[1]:
         return data
-    padded = image_api().new("RGBA", ASSETS[name][1], (0, 0, 0, 0))
+    padded = image_api().new("RGBA", _dimensions(name)[1], (0, 0, 0, 0))
     padded.paste(rgba, (0, 0))
     stream = io.BytesIO()
     padded.save(stream, format="PNG")
@@ -131,13 +138,13 @@ def expected_png(source: Path, name: str) -> bytes:
 
 
 def runtime_png(output: Path, name: str):
-    path = plain_path(output / "Textures" / ("" if name in INTERFACE_ASSETS else "Items") / (name + ".png"))
+    path = plain_path(output / _resource_path(name))
     try:
         data = path.read_bytes()
         with image_api().open(io.BytesIO(data)) as opened:
             if opened.format != "PNG" or getattr(opened, "n_frames", 1) != 1:
                 raise ContentValidationError(f"Expected a single runtime PNG: {name}")
-            if opened.size != ASSETS[name][1]:
+            if opened.size != _dimensions(name)[1]:
                 raise ContentValidationError(f"Runtime dimensions mismatch for {name}: {opened.size}")
             return data, opened.convert("RGBA")
     except (OSError, ValueError) as error:
@@ -149,10 +156,16 @@ def runtime_png(output: Path, name: str):
 def check_image(output: Path, name: str) -> None:
     """Validate a committed runtime PNG on its own; art source files are not part of the repository."""
     _, actual = runtime_png(output, name)
-    if name in BUTTON_ASSETS:
+    if name in BUTTON_ASSETS or name in PICTURE_ASSETS:
         validate_button_image(actual, name)
+        sheet_cells = _image_contracts()[name]["sheetCells"]
+        if sheet_cells:
+            cell_width, cell_height = _image_contracts()[name]["sheetCellSize"]
+            for cell in range(sheet_cells):
+                validate_button_image(actual.crop((cell * cell_width, 0, cell * cell_width + cell_width, cell_height)),
+                                      f"{name} cell {cell + 1}")
         return
-    width, height = ASSETS[name][0]
+    width, height = _dimensions(name)[0]
     for y in range(actual.height):
         for x in range(actual.width):
             if (x >= width or y >= height) and actual.getpixel((x, y)) != (0, 0, 0, 0):
@@ -169,17 +182,18 @@ def check_matches_source(source: Path, output: Path, name: str) -> None:
     width, height = original.size
     if actual.crop((0, 0, width, height)).tobytes() != original.tobytes():
         raise ContentValidationError(f"Source pixels changed: {name}")
-    if ASSETS[name][0] == ASSETS[name][1] and actual_data != source_data:
+    if _dimensions(name)[0] == _dimensions(name)[1] and actual_data != source_data:
         raise ContentValidationError(f"Unchanged asset must retain original bytes: {name}")
 
 
-def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
+def prepare_assets(source: Path, output: Path, names: Sequence[str] | None = None) -> None:
+    names = tuple(ASSETS) if names is None else tuple(_as_name(item) for item in names)
     output = validate_write_root(source, output)
     if not names or len(set(names)) != len(names) or any(name not in ASSETS for name in names):
         raise ContentValidationError("Choose unique known asset names.")
     # Preflight all inputs and destination paths before writing any image.
     prepared = {name: expected_png(source, name) for name in names}
-    paths = {name: plain_path(output / "Textures" / ("" if name in INTERFACE_ASSETS else "Items") / (name + ".png")) for name in names}
+    paths = {name: plain_path(output / _resource_path(name)) for name in names}
     for path in paths.values():
         if path.exists() and not path.is_file():
             raise ContentValidationError(f"Runtime destination is not a file: {path}")
@@ -199,11 +213,27 @@ def prepare_assets(source: Path, output: Path, names: Sequence[str] = tuple(ASSE
         check_image(output, name)
 
 
-def check_assets(output: Path, names: Sequence[str] = tuple(ASSETS)) -> None:
+def check_assets(output: Path, names: Sequence[str] | None = None) -> None:
+    names = tuple(ASSETS) if names is None else tuple(_as_name(item) for item in names)
     for name in names:
         check_image(output, name)
-    if tuple(names) == tuple(ASSETS):
-        validate_registry_data(output, plain_path)
+
+
+def check_resource_tree(output: Path) -> None:
+    output = plain_path(output)
+    if not output.is_dir():
+        raise ContentValidationError(f"Runtime resource directory is missing: {output}")
+    contract = _resource_contract()
+    expected = {entry["path"] for entry in contract["resources"]}
+    actual: set[str] = set()
+    for path in output.rglob("*"):
+        if path.is_symlink() or getattr(path.lstat(), "st_file_attributes", 0) & 0x400:
+            raise ContentValidationError(f"Links/reparse points are not accepted in runtime resources: {path}")
+        if path.is_file():
+            actual.add(path.relative_to(output).as_posix())
+    missing, unexpected = sorted(expected - actual), sorted(actual - expected)
+    if missing or unexpected:
+        raise ContentValidationError(f"Runtime resource path mismatch; missing={missing}, unexpected={unexpected}")
 
 
 def read_localization(path: Path) -> dict[str, str]:
@@ -284,7 +314,9 @@ def check_content(project: Path, output: Path) -> None:
                       ("256k", "256", "1600", "2")]
     if declarations != expected_tiers:
         raise ContentValidationError("Storage tier catalog contract mismatch")
-    for tier in TIERS[1:]:
+    tiers = sorted({name.removeprefix("item_storage_cell_") for name in ASSETS
+                    if name.startswith("item_storage_cell_")}, key=lambda value: int(value.removesuffix("k")))
+    for tier in tiers[1:]:
         for prefix in ("item_storage_cell_", "cell_component_"):
             keys.update((prefix + tier + "_name", prefix + tier + "_desc"))
     keys.update(("component_panel", "storage_pages_panel", "modules_panel", "cells_panel"))
@@ -412,7 +444,7 @@ def check_content(project: Path, output: Path) -> None:
         "cell_storage_partition_invalid", "cell_storage_unavailable", "cell_storage_bytes", "cell_storage_types",
         "cell_storage_partition_include", "cell_storage_partition_exclude", "cell_storage_schema",
         "cell_storage_type_modules", "cell_storage_equal_distribution",
-        "cell_storage_expansion", "cell_storage_migration_refused",
+        "cell_storage_expansion", "cell_storage_migration_refused", "cell_storage_page_protected",
         "cell_storage_migration_failed", "cell_storage_compaction_blocked", "cell_storage_locked",
         "cell_storage_schema_too_new", "cell_storage_rollback_failed", "cell_storage_type_limit_invalid",
         "terminal_storage_reject_capacity", "terminal_storage_reject_quota", "terminal_storage_reject_read_only",
@@ -456,9 +488,10 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_search_highlighting_name", "terminal_search_highlighting_desc",
         "debug_show_cell_pages_name", "debug_show_cell_pages_desc", "debug_storage_diagnostics_name", "debug_storage_diagnostics_desc",
         "priority_configure", "priority_title", "priority_desc", "priority_invalid",
-        "config_section_vendors", "upper_engineer_daily_chance_name", "upper_engineer_daily_chance_desc",
-        "upper_engineer_name", "upper_engineer_greet_1", "upper_engineer_greet_2", "upper_engineer_wrong_item",
-        "upper_engineer_right_item", "upper_engineer_repeat", "upper_engineer_accept",
+        "network_tab_digital_storage", "network_card_digital_storage",
+        "network_digital_storage_starter_title", "network_digital_storage_starter_desc",
+        "network_digital_storage_advanced_title", "network_digital_storage_advanced_desc",
+        "data_scientist_name", "data_scientist_greet_1", "data_scientist_greet_2",
         "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
         "integration_itemdetails_section", "integration_itemdetails_label", "integration_itemdetails_tooltip", "tooltip_scroll_hint",
         "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
@@ -505,14 +538,17 @@ def check_content(project: Path, output: Path) -> None:
         "stacking_field_feature",
         "stacking_field_feature_desc",
     ))
-    if (platform / "Diagnostics" / "ItemCommands.cs").exists():
-        raise ContentValidationError("Removed custom command source must not be present.")
-    for resource in ("Search/pinyin-dictionary.txt", "Licenses/PininSharp-LICENSE.txt",
-                     "Licenses/pinyin-data-LICENSE.txt", "Licenses/Rime-Terra-Pinyin-LICENSE.txt"):
+    text_resources = [entry["path"] for entry in _resource_contract()["resources"]
+                      if Path(entry["path"]).suffix == ".txt"]
+    dictionaries = [name for name in text_resources if Path(name).parent.name == "Search"]
+    licenses = [name for name in text_resources if Path(name).parent.name == "Licenses"]
+    if len(dictionaries) != 1 or not licenses:
+        raise ContentValidationError("The resource declaration must contain one search dictionary and at least one license.")
+    for resource in text_resources:
         path = plain_path(output / resource)
         if not path.is_file() or path.stat().st_size == 0:
-            raise ContentValidationError(f"Required search resource is missing or empty: {resource}")
-    dictionary = (output / "Search/pinyin-dictionary.txt").read_text(encoding="utf-8")
+            raise ContentValidationError(f"Required text resource is missing or empty: {resource}")
+    dictionary = (output / dictionaries[0]).read_text(encoding="utf-8")
     if "材: cai2" not in dictionary or "重: zhong4, chong2" not in dictionary:
         raise ContentValidationError("Pinyin dictionary content is invalid")
     languages = [read_localization(output / "Localization" / (language + ".csv")) for language in ("en", "zh")]
@@ -531,20 +567,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode.add_argument("--check", action="store_true")
     parser.add_argument("--source-dir", type=Path, help="art source folder; required with --write")
     parser.add_argument("--output-dir", type=Path, default=REPOSITORY / "packaging" / "resources")
-    parser.add_argument("--items", choices=tuple(ASSETS), nargs="+", default=tuple(ASSETS))
+    parser.add_argument("--items", nargs="+", help="declared image identifiers or runtime PNG paths")
     args = parser.parse_args(argv)
     if args.write and args.source_dir is None:
         parser.error("--write requires --source-dir pointing at the local art source folder")
     try:
+        selected = None if args.items is None else tuple(_as_name(item) for item in args.items)
         if args.write:
-            prepare_assets(args.source_dir, args.output_dir, args.items)
-        check_assets(args.output_dir, args.items)
-        if args.check and tuple(args.items) == tuple(ASSETS):
+            prepare_assets(args.source_dir, args.output_dir, selected)
+        check_assets(args.output_dir, selected)
+        if args.check and selected is None:
+            check_resource_tree(args.output_dir)
             check_content(REPOSITORY, args.output_dir)
-    except (ContentValidationError, ModuleBayDataError, OSError) as error:
+    except (ContentValidationError, OSError) as error:
         print(f"Content error: {error}", file=sys.stderr)
         return 1
-    print(f"[PASS] {len(args.items)} runtime PNGs validated.")
+    print(f"[PASS] {len(ASSETS) if selected is None else len(selected)} runtime PNGs validated.")
     return 0
 
 

@@ -9,145 +9,37 @@ import os
 import re
 import stat
 import sys
+import unicodedata
 import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
-from typing import Sequence
-
-from .assets import BUTTON_ASSETS, plain_path
-from .module_bay_data import ModuleBayDataError, validate_registry_data
-
+from typing import BinaryIO, Sequence
 
 EXPECTED_ID = "digital_storage"
 EXPECTED_NAME = "Digital Storage"
 EXPECTED_AUTHOR = "Caizii"
 # The mods menu compares only the leading digits and dots of Application.version, ignoring the letter suffix.
 EXPECTED_GAME_VERSION = "0.46"
-CURRENT_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.dll"
-CORE_ASSEMBLIES = (
-    "ProbablyStolen.DigitalStorage.Common.dll",
-    "ProbablyStolen.DigitalStorage.Client.dll",
-    CURRENT_PLATFORM_ASSEMBLY,
-    "ProbablyStolen.DigitalStorage.Mod.dll",
+SOURCE_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "packaging/manifest.xml"
+LAYOUT_PATH = Path(__file__).resolve().parents[2] / "packaging/package-files.json"
+INSTALLED_LAYOUT_PATH = Path(__file__).resolve().parents[2] / "packaging/installed-layouts.json"
+MANIFEST_MAX_BYTES = 1_048_576
+EXPECTED_ELEMENTS = (
+    "ID", "Name", "Author", "ModVersion", "Description", "GameVersions", "Prerequisites", "Assemblies", "Capabilities"
 )
-# The public API assemblies must load first, and integration plugins before the entry.
-EXPECTED_ASSEMBLIES = (
+APPROVED_ASSEMBLY_LOAD_ORDER = (
     "ProbablyStolen.DigitalStorage.Api.Core.dll",
     "ProbablyStolen.DigitalStorage.Api.dll",
     "ProbablyStolen.DigitalStorage.Common.dll",
     "ProbablyStolen.DigitalStorage.Client.dll",
-    CURRENT_PLATFORM_ASSEMBLY,
+    "ProbablyStolen.DigitalStorage.Platform.dll",
     "ProbablyStolen.DigitalStorage.Compat.dll",
     "ProbablyStolen.DigitalStorage.Mod.dll",
 )
-# Layouts with 5 or 11 files predate the Platform assembly rename and retain the old DLL name for safe replacement
-# and removal. The current layout never lists both names.
 LEGACY_PLATFORM_ASSEMBLY = "ProbablyStolen.DigitalStorage.Platform.ProbablyStolen.dll"
-LEGACY_FILES = (
-    "manifest.xml",
-    "ProbablyStolen.DigitalStorage.Common.dll",
-    "ProbablyStolen.DigitalStorage.Client.dll",
-    LEGACY_PLATFORM_ASSEMBLY,
-    "ProbablyStolen.DigitalStorage.Mod.dll",
-)
-PREVIOUS_FILES = (*LEGACY_FILES,
-    "Textures/Items/storage_terminal.png", "Textures/Items/storage_drive.png",
-    "Textures/Items/storage_cell.png", "Textures/Items/storage_network_controller.png",
-    "Localization/en.csv", "Localization/zh.csv")
-LEGACY_RESOURCE_FILES = (
-    "Textures/Items/terminal.png", "Textures/Items/drive.png", "Textures/Items/controller.png",
-    "Textures/Items/item_storage_cell_1k.png", "Textures/Items/item_cell_housing.png",
-    "Textures/Items/cell_component_1k.png", "Localization/en.csv", "Localization/zh.csv",
-)
-WORKBENCH_RESOURCE_FILES = (
-    "Textures/Items/workbench.png", "Textures/Items/module_type_expansion_common.png",
-    "Textures/Items/module_type_expansion_rare.png", "Textures/Items/module_type_expansion_epic.png",
-    "Textures/Items/module_equal_distribution.png",
-)
-SEARCH_RESOURCE_FILES = (
-    "Search/pinyin-dictionary.txt",
-    "Licenses/PininSharp-LICENSE.txt",
-    "Licenses/pinyin-data-LICENSE.txt",
-    "Licenses/Rime-Terra-Pinyin-LICENSE.txt",
-)
-DATA_RESOURCE_FILES = (
-    "Data/registries.json",
-    "Data/module_bays/vanilla_standard.json",
-    "Data/module_bays/terminal.json",
-    "Data/module_bays/bindings.json",
-)
-PRE_BUTTON_RESOURCE_FILES = (*LEGACY_RESOURCE_FILES,
-    *(f"Textures/Items/{prefix}_{tier}.png" for tier in ("4k", "16k", "64k", "256k")
-      for prefix in ("item_storage_cell", "cell_component")),
-    *WORKBENCH_RESOURCE_FILES,
-    SEARCH_RESOURCE_FILES[0],
-    *DATA_RESOURCE_FILES,
-    *SEARCH_RESOURCE_FILES[1:],
-)
-# Textures of the stack display module and its pages; an installation without them has the pre-stacking layout.
-STACKING_RESOURCE_FILES = ("Textures/Items/module_type_stack_display.png", "Textures/button_stack.png",
-    "Textures/button_add.png", "Textures/annotation_square.png", "Textures/window_frame.png",
-    "Textures/button_sample_attributes.png")
-KEEP_OPEN_RESOURCE_FILES = ("Textures/button_keep_open_off.png", "Textures/button_keep_open_on.png")
-PRE_STACKING_RESOURCE_FILES = (*PRE_BUTTON_RESOURCE_FILES,
-    *(f"Textures/{name}.png" for name in BUTTON_ASSETS
-      if f"Textures/{name}.png" not in (*STACKING_RESOURCE_FILES, *KEEP_OPEN_RESOURCE_FILES)))
-PRE_KEEP_OPEN_RESOURCE_FILES = (*PRE_STACKING_RESOURCE_FILES, *STACKING_RESOURCE_FILES)
-RESOURCE_FILES = (*PRE_KEEP_OPEN_RESOURCE_FILES, *KEEP_OPEN_RESOURCE_FILES)
-CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *RESOURCE_FILES)
-PRE_KEEP_OPEN_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *PRE_KEEP_OPEN_RESOURCE_FILES)
-PRE_STACKING_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *PRE_STACKING_RESOURCE_FILES)
-PRE_BUTTON_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *PRE_BUTTON_RESOURCE_FILES)
-HISTORICAL_RESOURCE_FILES = tuple(name for name in PRE_BUTTON_RESOURCE_FILES if name not in DATA_RESOURCE_FILES)
-PRE_DATA_CURRENT_FILES = ("manifest.xml", *EXPECTED_ASSEMBLIES, *HISTORICAL_RESOURCE_FILES)
-PREVIOUS_API_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *HISTORICAL_RESOURCE_FILES)
-PREVIOUS_SEARCH_FILES = tuple(name for name in PREVIOUS_API_FILES if name not in WORKBENCH_RESOURCE_FILES)
-# An installation made before the Platform assembly rename has the current 13 file layout with the old
-# Platform DLL name. Deployment must still recognize it so upgrade and removal stay safe.
-RENAMED_PLATFORM_ASSEMBLIES = tuple(
-    LEGACY_PLATFORM_ASSEMBLY if name == CURRENT_PLATFORM_ASSEMBLY else name
-    for name in CORE_ASSEMBLIES
-)
-RENAMED_PLATFORM_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
-PREVIOUS_CURRENT_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *LEGACY_RESOURCE_FILES)
-TIER_RESOURCE_FILES = tuple(
-    f"Textures/Items/{prefix}_{tier}.png"
-    for tier in ("4k", "16k", "64k", "256k")
-    for prefix in ("item_storage_cell", "cell_component")
-)
-PREVIOUS_TIER_FILES = ("manifest.xml", *CORE_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
-RENAMED_PLATFORM_TIER_FILES = ("manifest.xml", *RENAMED_PLATFORM_ASSEMBLIES, *LEGACY_RESOURCE_FILES, *TIER_RESOURCE_FILES)
-# Each known installation layout pins the single Platform DLL name that its manifest must declare.
-KNOWN_LAYOUTS = (
-    ("current", CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("pre-keep-open-current", PRE_KEEP_OPEN_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("pre-stacking-current", PRE_STACKING_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("pre-button-current", PRE_BUTTON_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("pre-data-current", PRE_DATA_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("previous-api", PREVIOUS_API_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("previous-search", PREVIOUS_SEARCH_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("previous21", PREVIOUS_TIER_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("previous21-renamed", RENAMED_PLATFORM_TIER_FILES, LEGACY_PLATFORM_ASSEMBLY),
-    ("current13", PREVIOUS_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY),
-    ("old13", RENAMED_PLATFORM_FILES, LEGACY_PLATFORM_ASSEMBLY),
-    ("previous11", PREVIOUS_FILES, LEGACY_PLATFORM_ASSEMBLY),
-    ("legacy5", LEGACY_FILES, LEGACY_PLATFORM_ASSEMBLY),
-)
-EXPECTED_FILES = set(CURRENT_FILES)
-SOURCE_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "packaging/manifest.xml"
-LAYOUT_PATH = Path(__file__).resolve().parents[2] / "packaging/package-files.json"
-EXPECTED_ELEMENTS = (
-    "ID",
-    "Name",
-    "Author",
-    "ModVersion",
-    "Description",
-    "GameVersions",
-    "Prerequisites",
-    "Assemblies",
-    "Capabilities",
-)
 _ID_PATTERN = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}\Z")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
 
 
 def _is_reparse_point(status: object) -> bool:
@@ -193,17 +85,25 @@ def _layout_assemblies(names: Sequence[str]) -> tuple[str, ...]:
     return tuple(name for name in names if name.endswith(".dll"))
 
 
-def _validate_manifest(
-    path: Path, expected_assemblies: Sequence[str], require_current_metadata: bool
-) -> None:
+def _validate_manifest(path: Path, expected_assemblies: Sequence[str], require_current_metadata: bool) -> str:
     try:
-        if path.stat().st_size > 1_048_576:
-            raise PackageValidationError("manifest.xml exceeds the 1 MiB validation limit.")
-        document = ET.parse(path)
-    except (OSError, ET.ParseError) as error:
+        with path.open("rb") as stream:
+            return validate_manifest_stream(stream, expected_assemblies, require_current_metadata)
+    except OSError as error:
+        raise PackageValidationError(f"manifest.xml could not be read: {error}") from error
+
+
+def validate_manifest_stream(
+    stream: BinaryIO, expected_assemblies: Sequence[str], require_current_metadata: bool = True
+) -> str:
+    data = stream.read(MANIFEST_MAX_BYTES + 1)
+    if len(data) > MANIFEST_MAX_BYTES:
+        raise PackageValidationError("manifest.xml exceeds the 1 MiB validation limit.")
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as error:
         raise PackageValidationError(f"manifest.xml could not be parsed: {error}") from error
 
-    root = document.getroot()
     if root.tag != "Manifest" or root.attrib:
         raise PackageValidationError("manifest.xml must have a plain Manifest root element.")
 
@@ -221,7 +121,7 @@ def _validate_manifest(
     if identity != EXPECTED_ID:
         raise PackageValidationError(f"Expected package ID {EXPECTED_ID!r}, got {identity!r}.")
 
-    _element_text(fields["ModVersion"], "ModVersion")
+    version = _element_text(fields["ModVersion"], "ModVersion")
     _element_text(fields["Description"], "Description")
     expected_values = {
         "Name": EXPECTED_NAME,
@@ -265,39 +165,206 @@ def _validate_manifest(
         )
     if any("/" in item or "\\" in item or ":" in item or ".." in item for item in declared):
         raise PackageValidationError("Assembly entries must be plain DLL file names inside the package root.")
+    return version
+
+
+def _safe_relative_path(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value or "\\" in value or ":" in value:
+        raise PackageValidationError(f"Unsafe {label} path: {value!r}")
+    path = PurePosixPath(value)
+    parts = value.split("/")
+    if path.is_absolute() or any(part in ("", ".", "..") for part in parts):
+        raise PackageValidationError(f"Unsafe {label} path: {value!r}")
+    if unicodedata.normalize("NFKC", value) != value:
+        raise PackageValidationError(f"Non-normalized {label} path: {value!r}")
+    for part in parts:
+        if part[-1:] in (".", " ") or any(ord(char) < 32 or char in '<>"|?*' for char in part):
+            raise PackageValidationError(f"Unsafe Windows {label} path segment: {part!r}")
+        stem = part.split(".", 1)[0].upper()
+        if stem in _WINDOWS_RESERVED:
+            raise PackageValidationError(f"Reserved Windows {label} path segment: {part!r}")
+    return value
+
+
+def _validate_path_set(paths: Sequence[str], label: str) -> None:
+    for value in paths:
+        _safe_relative_path(value, label)
+    nodes: dict[str, tuple[str, bool]] = {}
+    for value in paths:
+        parts = value.split("/")
+        for index, part in enumerate(parts):
+            spelling = "/".join(parts[:index + 1])
+            key = unicodedata.normalize("NFKC", spelling).casefold()
+            is_file = index == len(parts) - 1
+            if key in nodes:
+                old_spelling, old_is_file = nodes[key]
+                if old_spelling != spelling:
+                    raise PackageValidationError(f"Case/normalization collision in {label}: {old_spelling!r} and {spelling!r}")
+                if old_is_file or is_file:
+                    raise PackageValidationError(f"File/directory collision in {label}: {value!r}")
+            else:
+                nodes[key] = (spelling, is_file)
+
+
+def _manifest_assemblies(path: Path = SOURCE_MANIFEST_PATH) -> tuple[str, ...]:
+    try:
+        root = ET.parse(path).getroot()
+        container = root.find("Assemblies")
+        names = tuple((item.text or "").strip() for item in container if item.tag == "Assembly") if container is not None else ()
+    except (OSError, ET.ParseError) as error:
+        raise PackageValidationError(f"Could not read product assembly list from manifest.xml: {error}") from error
+    if names != APPROVED_ASSEMBLY_LOAD_ORDER:
+        raise PackageValidationError("Manifest product assemblies differ from the independently approved assembly/load order.")
+    _validate_path_set(names, "manifest assembly")
+    if any(not name.endswith(".dll") or "/" in name for name in names):
+        raise PackageValidationError("Manifest assemblies must be product DLL file names.")
+    return names
 
 
 def load_layouts(path: Path = LAYOUT_PATH) -> dict[str, object]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        raise PackageValidationError(f"Invalid package layout: {error}") from error
-    if not isinstance(data, dict) or set(data) != {"schemaVersion", "current", "legacy", "previous"} or data["schemaVersion"] != 1:
-        raise PackageValidationError("Unsupported package layout schema.")
-    for key, expected in (("current", CURRENT_FILES), ("legacy", LEGACY_FILES), ("previous", PREVIOUS_FILES)):
-        names = data[key]
-        if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
-            raise PackageValidationError("Package layout must contain lists of relative paths.")
-        for name in names:
-            if not name or "\\" in name or ":" in name or PurePosixPath(name).is_absolute() or \
-                    any(part in {"", ".", ".."} for part in name.split("/")):
-                raise PackageValidationError(f"Unsafe package layout path: {name}")
-        if tuple(names) != expected:
-            raise PackageValidationError(f"Package layout {key} must match the approved exact file set/order.")
+        raise PackageValidationError(f"Invalid package declaration: {error}") from error
+    if not isinstance(data, dict) or set(data) != {"schemaVersion", "resources"} or data["schemaVersion"] != 2:
+        raise PackageValidationError("Unsupported package declaration schema.")
+    entries = data["resources"]
+    if not isinstance(entries, list) or not entries:
+        raise PackageValidationError("Package resources must be a non-empty list.")
+    resource_paths: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) - {"path", "image"} or "path" not in entry:
+            raise PackageValidationError("Each package resource must contain a path and optional image constraints.")
+        resource_path = _safe_relative_path(entry["path"], "package resource")
+        suffix = PurePosixPath(resource_path).suffix.lower()
+        if suffix not in {".png", ".csv", ".txt", ".json"}:
+            raise PackageValidationError(f"Unsupported package resource type: {resource_path}")
+        resource_paths.append(resource_path)
+        if suffix == ".png" and "image" not in entry:
+            raise PackageValidationError(f"PNG resource requires image constraints: {resource_path}.")
+        if "image" in entry:
+            if not resource_path.endswith(".png"):
+                raise PackageValidationError(f"Image constraints require a .png resource: {resource_path}.")
+            image = entry["image"]
+            if not isinstance(image, dict) or set(image) != {"source", "runtime", "interface", "visible", "sheetCells", "sheetCellSize", "openCenters"}:
+                raise PackageValidationError(f"Invalid image constraints for {resource_path}.")
+            for dimension in (image["source"], image["runtime"]):
+                if not isinstance(dimension, list) or len(dimension) != 2 or any(type(n) is not int or n <= 0 for n in dimension):
+                    raise PackageValidationError(f"Invalid image dimensions for {entry['path']}.")
+            if any(type(image[key]) is not bool for key in ("interface", "visible", "openCenters")) or type(image["sheetCells"]) is not int or image["sheetCells"] < 0:
+                raise PackageValidationError(f"Invalid image behavior constraints for {entry['path']}.")
+            cell_size = image["sheetCellSize"]
+            if cell_size is not None and (not isinstance(cell_size, list) or len(cell_size) != 2 or
+                                          any(type(n) is not int or n <= 0 for n in cell_size)):
+                raise PackageValidationError(f"Invalid image sheet-cell size for {entry['path']}.")
+            if (image["sheetCells"] == 0) != (cell_size is None):
+                raise PackageValidationError(f"Image sheet-cell count and dimensions disagree for {entry['path']}.")
+            if cell_size is not None and (image["runtime"][0] % cell_size[0] or image["runtime"][1] % cell_size[1]):
+                raise PackageValidationError(f"Image dimensions do not align to sheet cells for {entry['path']}.")
+    _validate_path_set(resource_paths, "package resource")
+    assemblies = _manifest_assemblies()
+    all_paths = ("manifest.xml", *assemblies, *resource_paths)
+    _validate_path_set(all_paths, "current package")
+    image_names = [PurePosixPath(entry["path"]).stem for entry in entries if "image" in entry]
+    if len(image_names) != len(set(image_names)):
+        raise PackageValidationError("Image resource identifiers must have unique PNG stems.")
+    data["assemblies"] = list(assemblies)
+    data["current"] = list(all_paths)
+    data["images"] = {PurePosixPath(entry["path"]).stem: {**entry["image"], "path": entry["path"]}
+                      for entry in entries if "image" in entry}
     return data
 
 
-def _earlier_build_of_current(actual_names: set[str]) -> tuple[str, ...] | None:
-    """Recognize an earlier build of the current layout that only lacks resource files.
+def load_installed_layouts(path: Path = INSTALLED_LAYOUT_PATH) -> dict[str, object]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise PackageValidationError(f"Invalid installed-layout declaration: {error}") from error
+    if not isinstance(data, dict) or set(data) != {"schemaVersion", "lastReleased", "earlierLocalBuild", "layouts"} or data["schemaVersion"] != 1:
+        raise PackageValidationError("Unsupported installed-layout schema.")
+    layouts = data["layouts"]
+    if not isinstance(layouts, list) or not layouts:
+        raise PackageValidationError("Installed layouts must be a non-empty list.")
+    seen_ids: set[str] = set()
+    for layout in layouts:
+        if not isinstance(layout, dict) or set(layout) != {"id", "files", "platformAssembly"}:
+            raise PackageValidationError("Each installed layout must define id, files, and platformAssembly.")
+        identity, files, platform = layout["id"], layout["files"], layout["platformAssembly"]
+        if not isinstance(identity, str) or not identity or identity in seen_ids or not isinstance(platform, str):
+            raise PackageValidationError("Installed layout identifiers and platform assemblies must be unique strings.")
+        seen_ids.add(identity)
+        if not isinstance(files, list) or not files or any(not isinstance(name, str) for name in files):
+            raise PackageValidationError(f"Installed layout {identity} must list files.")
+        _validate_path_set(files, f"installed layout {identity}")
+        expected = tuple(name for name in files if name.endswith(".dll"))
+        if not expected or platform not in expected or "manifest.xml" not in files:
+            raise PackageValidationError(f"Installed layout {identity} has no valid manifest/assembly declaration.")
+        approved_names = {*APPROVED_ASSEMBLY_LOAD_ORDER, LEGACY_PLATFORM_ASSEMBLY}
+        if not set(expected) <= approved_names:
+            raise PackageValidationError(f"Installed layout {identity} contains a non-product assembly.")
+    last_released = data["lastReleased"]
+    if not isinstance(last_released, str) or last_released not in seen_ids:
+        raise PackageValidationError("Last released layout must identify a declared installed layout.")
+    earlier = data["earlierLocalBuild"]
+    if not isinstance(earlier, dict) or set(earlier) != {"requiredAssemblies", "allowResourcesFrom"}:
+        raise PackageValidationError("Invalid earlier-local-build policy.")
+    required = earlier["requiredAssemblies"]
+    allowed = earlier["allowResourcesFrom"]
+    if not isinstance(required, list) or any(not isinstance(name, str) for name in required) or \
+            not isinstance(allowed, list) or any(not isinstance(name, str) for name in allowed):
+        raise PackageValidationError("Earlier-local-build policy values must be string lists.")
+    if tuple(required) != tuple(load_layouts()["assemblies"]):
+        raise PackageValidationError("Earlier-local-build assembly requirement differs from the current product assemblies.")
+    if set(allowed) != {"current", last_released}:
+        raise PackageValidationError("Earlier-local-build resources must come only from current and last-released layouts.")
+    return data
 
-    Resources are added during development, so an earlier local build has fewer of them than any released layout.
-    It is still ours when its manifest and every current assembly are present and nothing outside the current
-    allowlist exists; missing files never put foreign data at risk, while any extra file still refuses replacement.
-    """
-    required = {"manifest.xml", *EXPECTED_ASSEMBLIES}
-    if not required <= actual_names or not actual_names <= set(CURRENT_FILES):
+
+def _known_layouts() -> tuple[tuple[str, tuple[str, ...], str], ...]:
+    data = load_installed_layouts()
+    layouts = [(item["id"], tuple(item["files"]), item["platformAssembly"]) for item in data["layouts"]]
+    current = tuple(load_layouts()["current"])
+    layouts.insert(0, ("current", current, next(name for name in load_layouts()["assemblies"] if name.endswith("Platform.dll"))))
+    return tuple(layouts)
+
+
+def _earlier_build_of_current(actual_names: set[str]) -> tuple[str, ...] | None:
+    data = load_installed_layouts()
+    current = tuple(load_layouts()["current"])
+    required = {"manifest.xml", *data["earlierLocalBuild"]["requiredAssemblies"]}
+    released = next(tuple(item["files"]) for item in data["layouts"] if item["id"] == data["lastReleased"])
+    allowed = tuple(dict.fromkeys((*current, *(name for name in released if name not in current))))
+    if not required <= actual_names or not actual_names <= set(allowed):
         return None
-    return tuple(name for name in CURRENT_FILES if name in actual_names)
+    return tuple(name for name in allowed if name in actual_names)
+
+
+KNOWN_LAYOUTS = _known_layouts()
+CURRENT_FILES = tuple(load_layouts()["current"])
+EXPECTED_ASSEMBLIES = tuple(load_layouts()["assemblies"])
+RESOURCE_FILES = tuple(entry["path"] for entry in load_layouts()["resources"])
+_LAYOUTS_BY_ID = {identity: files for identity, files, _ in KNOWN_LAYOUTS}
+_PLATFORM_BY_ID = {identity: platform for identity, _, platform in KNOWN_LAYOUTS}
+CURRENT_PLATFORM_ASSEMBLY = _PLATFORM_BY_ID["current"]
+LEGACY_FILES = _LAYOUTS_BY_ID["legacy5"]
+PREVIOUS_FILES = _LAYOUTS_BY_ID["previous11"]
+PRE_CODE_REGISTRY_CURRENT_FILES = _LAYOUTS_BY_ID["pre-code-registry-current"]
+PRE_KEEP_OPEN_CURRENT_FILES = _LAYOUTS_BY_ID["pre-keep-open-current"]
+PRE_STACKING_CURRENT_FILES = _LAYOUTS_BY_ID["pre-stacking-current"]
+PRE_BUTTON_CURRENT_FILES = _LAYOUTS_BY_ID["pre-button-current"]
+PRE_DATA_CURRENT_FILES = _LAYOUTS_BY_ID["pre-data-current"]
+PREVIOUS_API_FILES = _LAYOUTS_BY_ID["previous-api"]
+PREVIOUS_SEARCH_FILES = _LAYOUTS_BY_ID["previous-search"]
+PREVIOUS_TIER_FILES = _LAYOUTS_BY_ID["previous21"]
+RENAMED_PLATFORM_TIER_FILES = _LAYOUTS_BY_ID["previous21-renamed"]
+PREVIOUS_CURRENT_FILES = _LAYOUTS_BY_ID["current13"]
+RENAMED_PLATFORM_FILES = _LAYOUTS_BY_ID["old13"]
+DATA_RESOURCE_FILES = tuple(name for name in _LAYOUTS_BY_ID[load_installed_layouts()["lastReleased"]]
+                            if name not in CURRENT_FILES)
+HISTORICAL_RESOURCE_FILES = tuple(name for name in PRE_DATA_CURRENT_FILES if name not in (*EXPECTED_ASSEMBLIES, "manifest.xml"))
+TIER_RESOURCE_FILES = tuple(name for name in PREVIOUS_TIER_FILES if name not in PREVIOUS_CURRENT_FILES)
+CORE_ASSEMBLIES = tuple(name for name in LEGACY_FILES if name.endswith(".dll"))
+EXPECTED_FILES = set(CURRENT_FILES)
 
 
 def package_directories(names: Sequence[str]) -> set[str]:
@@ -332,7 +399,8 @@ def validate_package_directory(
 
     actual_names: set[str] = set()
     actual_directories: set[str] = set()
-    allowed_directories = package_directories(CURRENT_FILES)
+    # Earlier approved layouts may hold directories the current one dropped, such as the module bay Data/.
+    allowed_directories = package_directories([name for _, names, _ in KNOWN_LAYOUTS for name in names])
     case_names: set[str] = set()
 
     def visit(directory: Path) -> None:
@@ -367,32 +435,32 @@ def validate_package_directory(
         else:
             if allow_earlier_build:
                 names = _earlier_build_of_current(actual_names) or names
-    if actual_names != set(names) or actual_directories != package_directories(names):
+    expected_directories = package_directories(names)
+    # An installation whose layout dropped a directory may keep it empty; every directory was already checked to
+    # belong to an approved layout, and with the file set exact such a leftover holds no files.
+    leftover_directories_allowed = allow_earlier_build and expected_directories <= actual_directories
+    if actual_names != set(names) or (actual_directories != expected_directories and not leftover_directories_allowed):
         missing = sorted(set(names) - actual_names)
         extra = sorted(actual_names - set(names))
         raise PackageValidationError(f"Package file allowlist mismatch; missing={missing}, extra={extra}; directories={sorted(actual_directories)}.")
 
-    # An earlier package only needs its ownership checked before replacement; its data follows that version's schema.
-    try:
-        if require_current_metadata and "Data/registries.json" in names:
-            validate_registry_data(candidate, plain_path)
-    except (ModuleBayDataError, OSError, ValueError) as error:
-        raise PackageValidationError(f"Invalid module-bay data: {error}") from error
-
     _validate_manifest(candidate / "manifest.xml", _layout_assemblies(names), require_current_metadata)
     inventory: list[dict[str, object]] = []
     for name in names:
-        path = candidate / name
-        digest = hashlib.sha256()
-        size = 0
-        with path.open("rb") as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b""):
-                size += len(block)
-                digest.update(block)
-        if size == 0:
-            raise PackageValidationError(f"Package file is empty: {name}")
-        inventory.append({"name": name, "size": size, "sha256": digest.hexdigest()})
+        with (candidate / name).open("rb") as stream:
+            inventory.append(file_inventory_entry(name, stream))
     return inventory
+
+
+def file_inventory_entry(name: str, stream: BinaryIO) -> dict[str, object]:
+    digest = hashlib.sha256()
+    size = 0
+    for block in iter(lambda: stream.read(1024 * 1024), b""):
+        size += len(block)
+        digest.update(block)
+    if size == 0:
+        raise PackageValidationError(f"Package file is empty: {name}")
+    return {"name": name, "size": size, "sha256": digest.hexdigest()}
 
 
 def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:

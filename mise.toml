@@ -121,6 +121,14 @@ run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-tools-
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py verify-package'
 
+[tasks.package-zip]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py package-zip'
+
+[tasks.verify-package-zip]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py verify-package-zip'
+
 [tasks.decompile]
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py decompile'

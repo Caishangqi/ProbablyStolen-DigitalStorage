@@ -29,7 +29,19 @@ class CommandTests(unittest.TestCase):
             return SimpleNamespace(returncode=13 if argv[-1] == "check-format" else 0)
         with patch.object(commands.subprocess, "run", side_effect=fake_run):
             self.assertEqual(commands.run("ci-core", []), 13)
-        self.assertEqual(calls, ["check-source", "check-assets", "check-ci", "check-format"])
+        self.assertEqual(calls, ["check-source", "check-ci", "check-assets", "test-tools-unit",
+                                 "test-tools-integration", "check-format"])
+
+    def test_ci_core_groups_shared_steps_only_on_github(self):
+        output = []
+        def fake_run(argv, **kwargs):
+            return SimpleNamespace(returncode=7 if argv[-1] == "test-tools-unit" else 0)
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), \
+             patch.object(commands.subprocess, "run", side_effect=fake_run), \
+             patch("builtins.print", side_effect=lambda *args, **kwargs: output.append(args[0])):
+            self.assertEqual(commands.run("ci-core", []), 7)
+        self.assertEqual(output, ["::group::Checks", "::endgroup::", "::group::Assets", "::endgroup::",
+                                  "::group::Python Tooling Unit", "::endgroup::"])
 
     def test_format_rejects_protected_paths_before_dotnet(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(commands, "ROOT", Path(directory).resolve()):

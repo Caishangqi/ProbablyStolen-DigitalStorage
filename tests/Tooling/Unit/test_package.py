@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.package import *
-from digital_storage_tools.package import _REPARSE_POINT
+from digital_storage_tools.package import _REPARSE_POINT, _manifest_assemblies
 
 class PackageValidationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -51,11 +51,7 @@ class PackageValidationTests(unittest.TestCase):
                 continue
             path = self.package_directory / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            source = REPOSITORY / "packaging/resources" / name if name.startswith("Data/") else None
-            if source is not None and source.is_file():
-                shutil.copyfile(source, path)
-            else:
-                path.write_bytes(f"synthetic {name}".encode("ascii"))
+            path.write_bytes(f"synthetic {name}".encode("ascii"))
         (self.package_directory / "manifest.xml").write_bytes(
             manifest_text(platform_assembly, [name for name in names if name.endswith(".dll")]).encode("utf-8")
         )
@@ -72,9 +68,19 @@ class PackageValidationTests(unittest.TestCase):
         element.text = version
         tree.write(path, encoding="utf-8", xml_declaration=True)
 
-    def test_valid_package_returns_hash_inventory(self) -> None:
+    def test_manifest_assembly_source_remains_guarded_by_approved_load_order(self) -> None:
+        manifest = Path(self.temporary_directory.name) / "manifest.xml"
+        text = SOURCE_MANIFEST_PATH.read_text(encoding="utf-8")
+        first, second = EXPECTED_ASSEMBLIES[:2]
+        manifest.write_text(text.replace(f"<Assembly>{first}</Assembly>\n    <Assembly>{second}</Assembly>",
+                                         f"<Assembly>{second}</Assembly>\n    <Assembly>{first}</Assembly>"), encoding="utf-8")
+        with self.assertRaisesRegex(PackageValidationError, "independently approved assembly/load order"):
+            _manifest_assemblies(manifest)
+
+    def test_current_package_declaration_matches_staged_file_inventory(self) -> None:
+        declared = set(load_layouts()["current"])
         inventory = validate_package_directory(self.package_directory)
-        self.assertEqual([item["name"] for item in inventory], list(CURRENT_FILES))
+        self.assertEqual(declared, {item["name"] for item in inventory})
         self.assertTrue(all(len(str(item["sha256"])) == 64 for item in inventory))
 
     def test_current_package_allows_mod_version_changes(self) -> None:
@@ -84,42 +90,29 @@ class PackageValidationTests(unittest.TestCase):
         inventory = validate_package_directory(self.package_directory)
         self.assertEqual(len(inventory), len(CURRENT_FILES))
 
-    def test_earlier_package_data_schema_is_checked_only_for_current_packages(self) -> None:
-        path = self.package_directory / "Data/module_bays/bindings.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data["bindings"][0]["obsolete_field"] = True
-        path.write_text(json.dumps(data), encoding="utf-8")
-        self.assertEqual(len(validate_package_directory(self.package_directory, require_current_metadata=False)), len(CURRENT_FILES))
-        with self.assertRaisesRegex(PackageValidationError, "Invalid module-bay data"):
-            validate_package_directory(self.package_directory)
+    def test_all_declared_installed_layouts_are_accepted_with_their_own_manifest(self) -> None:
+        self.assertEqual(len(KNOWN_LAYOUTS), len(load_installed_layouts()["layouts"]) + 1)
+        for label, names, platform_assembly in KNOWN_LAYOUTS:
+            with self.subTest(layout=label):
+                self._write_layout(names, platform_assembly)
+                inventory = validate_package_directory(self.package_directory, require_current_metadata=False)
+                self.assertEqual([item["name"] for item in inventory], list(names))
+                alternatives = {candidate for _, _, candidate in KNOWN_LAYOUTS if candidate != platform_assembly}
+                if alternatives:
+                    self._write_layout(names, next(iter(alternatives)))
+                    with self.assertRaisesRegex(PackageValidationError, "load order"):
+                        validate_package_directory(self.package_directory, require_current_metadata=False)
+
+    def test_historical_layouts_are_loaded_as_data(self) -> None:
+        for label, names, platform_assembly in KNOWN_LAYOUTS[1:]:
+            with self.subTest(layout=label):
+                self._write_layout(names, platform_assembly)
+                self.assertEqual([entry["name"] for entry in validate_package_directory(self.package_directory, False)], list(names))
 
     def test_mod_version_must_not_be_empty(self) -> None:
         self._set_mod_version("")
         with self.assertRaisesRegex(PackageValidationError, "ModVersion must not be empty"):
             validate_package_directory(self.package_directory)
-
-    def test_known_layouts_require_their_own_manifest_platform_assembly(self) -> None:
-        for label, names, platform_assembly in KNOWN_LAYOUTS:
-            other_assembly = (
-                LEGACY_PLATFORM_ASSEMBLY if platform_assembly == CURRENT_PLATFORM_ASSEMBLY else CURRENT_PLATFORM_ASSEMBLY
-            )
-            with self.subTest(layout=label, direction="matching"):
-                self._write_layout(names, platform_assembly)
-                inventory = validate_package_directory(self.package_directory, require_current_metadata=False)
-                self.assertEqual([item["name"] for item in inventory], list(names))
-            with self.subTest(layout=label, direction="mismatched"):
-                self._write_layout(names, other_assembly)
-                with self.assertRaisesRegex(PackageValidationError, "load order"):
-                    validate_package_directory(self.package_directory, require_current_metadata=False)
-
-    def test_historical_api_and_search_layouts_exclude_data(self) -> None:
-        for names, resources in ((PREVIOUS_API_FILES, HISTORICAL_RESOURCE_FILES),
-                                 (PREVIOUS_SEARCH_FILES, tuple(n for n in HISTORICAL_RESOURCE_FILES if n not in WORKBENCH_RESOURCE_FILES))):
-            with self.subTest(names=names):
-                self.assertEqual(names, ("manifest.xml", *CORE_ASSEMBLIES, *resources))
-                self.assertTrue(set(names).isdisjoint(DATA_RESOURCE_FILES))
-                self._write_layout(names, CURRENT_PLATFORM_ASSEMBLY)
-                self.assertEqual([entry["name"] for entry in validate_package_directory(self.package_directory, False)], list(names))
 
     def test_manifest_listing_both_platform_names_is_rejected(self) -> None:
         path = self.package_directory / "manifest.xml"
@@ -147,14 +140,24 @@ class PackageValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory, False)
 
-    def test_earlier_build_missing_only_resources_is_replaceable(self) -> None:
-        missing_resources = ("Textures/button_keep_open_on.png",)
+    def test_earlier_build_missing_a_declared_resource_is_replaceable(self) -> None:
+        missing_resources = (RESOURCE_FILES[-1],)
         for name in missing_resources:
             (self.package_directory / name).unlink()
         inventory = validate_package_directory(self.package_directory, False, allow_earlier_build=True)
         self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) - set(missing_resources))
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory, False)
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory)
+
+    def test_earlier_build_still_holding_last_released_files_is_replaceable(self) -> None:
+        for name in DATA_RESOURCE_FILES:
+            path = self.package_directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"synthetic {name}".encode("ascii"))
+        inventory = validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+        self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) | set(DATA_RESOURCE_FILES))
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory)
 
@@ -197,21 +200,36 @@ class PackageValidationTests(unittest.TestCase):
         with patch.object(Path, "lstat", new=reparse), self.assertRaisesRegex(PackageValidationError, "reparse"):
             validate_package_directory(self.package_directory)
 
-    def test_layout_rejects_traversal_backslashes_case_and_unknown_paths(self) -> None:
+    def test_layout_rejects_unsafe_and_colliding_paths(self) -> None:
         path = Path(self.temporary_directory.name) / "layout.json"
         valid = load_layouts()
-        for name in ("../foreign", "/absolute", "Textures\\foreign.png", "Localization/EN.csv", "./manifest.xml"):
+        for name in ("../foreign", "/absolute", "Textures\\foreign.png", "NUL.txt", "safe/../foreign", "bad. "):
             with self.subTest(name=name):
-                data = dict(valid, current=[*CURRENT_FILES[:-1], name])
+                data = {"schemaVersion": 2, "resources": [dict(entry) for entry in valid["resources"]]}
+                data["resources"][0] = {"path": name}
                 path.write_text(json.dumps(data), encoding="utf-8")
                 with self.assertRaises(PackageValidationError):
                     load_layouts(path)
+        data = {"schemaVersion": 2, "resources": [{"path": "a/file.txt"}, {"path": "A/other.txt"}]}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with self.assertRaisesRegex(PackageValidationError, "collision"):
+            load_layouts(path)
+
+    def test_layout_rejects_missing_or_null_png_constraints(self) -> None:
+        path = Path(self.temporary_directory.name) / "layout.json"
+        for constraints, message in (({}, "requires image constraints"), ({"image": None}, "Invalid image constraints")):
+            with self.subTest(constraints=constraints):
+                data = {"schemaVersion": 2, "resources": [{"path": "example/icon.png", **constraints}]}
+                path.write_text(json.dumps(data), encoding="utf-8")
+                with self.assertRaisesRegex(PackageValidationError, message):
+                    load_layouts(path)
 
     def test_wrong_case_resource_name_is_rejected(self) -> None:
-        path = self.package_directory / "Localization/en.csv"
-        interim = path.with_name("temp.csv")
+        relative = RESOURCE_FILES[0]
+        path = self.package_directory / relative
+        interim = path.with_name("temp" + path.suffix)
         path.rename(interim)
-        interim.rename(path.with_name("EN.csv"))
+        interim.rename(path.with_name(path.name.swapcase()))
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory)
 

@@ -11,15 +11,6 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repositoryRoot ".venv/Scripts/python.exe"
 $toolPath = Join-Path $repositoryRoot "scripts/tool.py"
 $manifestPath = Join-Path $repositoryRoot 'packaging/manifest.xml'
-$productAssemblies = @(
-    'ProbablyStolen.DigitalStorage.Api.Core.dll',
-    'ProbablyStolen.DigitalStorage.Api.dll',
-    'ProbablyStolen.DigitalStorage.Common.dll',
-    'ProbablyStolen.DigitalStorage.Client.dll',
-    'ProbablyStolen.DigitalStorage.Platform.dll',
-    'ProbablyStolen.DigitalStorage.Compat.dll',
-    'ProbablyStolen.DigitalStorage.Mod.dll'
-)
 $stagingDirectory = $null
 $backupDirectory = $null
 $destinationCommitted = $false
@@ -58,6 +49,18 @@ try {
     $environment = ($resolverOutput -join [Environment]::NewLine) | ConvertFrom-Json
     $env:DIGITAL_STORAGE_PACKAGE_DIR = $environment.package_directory
     $env:DIGITAL_STORAGE_GAME_DIR = $environment.game_directory
+
+    $assetCheckArguments = @($toolPath, 'check-assets')
+    Write-Host ('> python -B ' + ($assetCheckArguments -join ' '))
+    & $python -B @assetCheckArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Runtime resource validation failed before staging.' }
+
+    $layoutArguments = @($toolPath, 'verify-layout', '--json')
+    Write-Host ('> python -B ' + ($layoutArguments -join ' '))
+    $layoutOutput = & $python -B @layoutArguments
+    if ($LASTEXITCODE -ne 0) { throw 'The package resource declaration is invalid.' }
+    $layout = ($layoutOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    $productAssemblies = @($layout.assemblies)
 
     $destination = [System.IO.Path]::GetFullPath($environment.package_directory)
     if (Test-Path -LiteralPath $destination) {
@@ -112,11 +115,7 @@ try {
         Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $stagingDirectory $assembly)
     }
 
-    & $python -B $toolPath verify-layout
-    if ($LASTEXITCODE -ne 0) { throw 'The package layout is invalid.' }
-    $layout = Get-Content -LiteralPath (Join-Path $repositoryRoot 'packaging/package-files.json') -Raw | ConvertFrom-Json
-    foreach ($relativePath in $layout.current) {
-        if ($relativePath -eq 'manifest.xml' -or $relativePath -in $productAssemblies) { continue }
+    foreach ($relativePath in $layout.resources) {
         $sourcePath = Join-Path $repositoryRoot ('packaging/resources/' + $relativePath)
         $targetPath = Join-Path $stagingDirectory $relativePath
         [System.IO.Directory]::CreateDirectory((Split-Path -Parent $targetPath)) | Out-Null

@@ -20,7 +20,7 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.deployment import *
 from digital_storage_tools.deployment import _REPARSE_POINT
 from digital_storage_tools.package import DATA_RESOURCE_FILES, PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES
-from digital_storage_tools.package import PRE_KEEP_OPEN_CURRENT_FILES
+from digital_storage_tools.package import PRE_CODE_REGISTRY_CURRENT_FILES, PRE_KEEP_OPEN_CURRENT_FILES
 
 class DeploymentTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -60,11 +60,7 @@ class DeploymentTests(unittest.TestCase):
         for name in RESOURCE_FILES:
             path = self.package / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            source = REPOSITORY / "packaging/resources" / name if name.startswith("Data/") else None
-            if source is not None and source.is_file():
-                shutil.copyfile(source, path)
-            else:
-                path.write_bytes(b"synthetic runtime resource")
+            path.write_bytes(b"synthetic runtime resource")
         self.target = self.mods / "DigitalStorage"
 
     def test_direct_cli_refuses_unknown_running_process_without_writes(self):
@@ -158,34 +154,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual({change["action"] for change in changes}, {"Unchanged"})
         self.assertEqual(self.installed_files(), EXPECTED_FILES)
 
-    def test_pre_data_current_upgrade_and_removal_plans_are_exact(self) -> None:
-        self._install_layout(PRE_DATA_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
-        before = self.installed_contents()
+    def test_last_released_layout_upgrade_adds_and_removes_declared_differences(self) -> None:
+        self._install_layout(PRE_CODE_REGISTRY_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
         changes = plan_deployment(self.package, self.game, self.target)
         self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"},
-                         set(CURRENT_FILES) - set(PRE_DATA_CURRENT_FILES))
-        self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
-        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_DATA_CURRENT_FILES))
-        self.assertEqual(self.installed_contents(), before)
-
-    def test_pre_button_layout_upgrade_and_removal_plans_are_exact(self) -> None:
-        self._install_layout(PRE_BUTTON_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
-        changes = plan_deployment(self.package, self.game, self.target)
-        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"},
-                         set(CURRENT_FILES) - set(PRE_BUTTON_CURRENT_FILES))
-        self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
-        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_BUTTON_CURRENT_FILES))
-
-    def test_pre_keep_open_upgrade_and_removal_plans_preserve_the_old_layout(self) -> None:
-        self._install_layout(PRE_KEEP_OPEN_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
-        before = self.installed_contents()
-        changes = plan_deployment(self.package, self.game, self.target)
-        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Add"}, {
-            "Textures/button_keep_open_off.png", "Textures/button_keep_open_on.png",
-        })
-        self.assertFalse(any(entry["action"] == "Remove" for entry in changes))
-        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_KEEP_OPEN_CURRENT_FILES))
-        self.assertEqual(self.installed_contents(), before)
+                         set(CURRENT_FILES) - set(PRE_CODE_REGISTRY_CURRENT_FILES))
+        self.assertEqual({entry["name"] for entry in changes if entry["action"] == "Remove"},
+                         set(PRE_CODE_REGISTRY_CURRENT_FILES) - set(CURRENT_FILES))
+        self.assertEqual(set(plan_removal(self.game, self.target)), set(PRE_CODE_REGISTRY_CURRENT_FILES))
 
     def test_update_replaces_only_changed_owned_files(self) -> None:
         self._install_initial_package()
@@ -326,7 +302,7 @@ class DeploymentTests(unittest.TestCase):
             nonlocal failed
             if Path(destination) == self.target / "manifest.xml" and not failed:
                 failed = True
-                self.assertFalse((self.target / "Textures/Items/storage_cell.png").exists())
+                self.assertFalse((self.target / next(name for name in PREVIOUS_FILES if name not in CURRENT_FILES)).exists())
                 raise PermissionError("injected final manifest lock")
             real_replace(source, destination)
 
@@ -409,6 +385,41 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(shutil, "copyfile", side_effect=fail_backup), self.assertRaises(DeploymentError):
             deploy_package(self.package, self.game, self.target)
         self.assertEqual(validate_package_directory(self.target, False), original)
+        self.assertFalse(any(path.name.startswith(".DigitalStorage") for path in self.mods.iterdir()))
+
+    def test_upgrade_from_last_released_layout_prunes_its_dropped_directories(self) -> None:
+        self._install_layout(PRE_CODE_REGISTRY_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
+        deploy_package(self.package, self.game, self.target)
+        dropped_directories = {str(Path(name).parent) for name in DATA_RESOURCE_FILES}
+        self.assertTrue(all(not (self.target / directory).exists() for directory in dropped_directories))
+        self.assertEqual([item["name"] for item in validate_package_directory(self.target)], list(CURRENT_FILES))
+        self.assertFalse(any(path.name.startswith(".DigitalStorage") for path in self.mods.iterdir()))
+
+    def test_current_files_with_leftover_empty_historical_directories_are_redeployed_and_pruned(self) -> None:
+        self._install_initial_package()
+        dropped_directories = {str(Path(name).parent) for name in DATA_RESOURCE_FILES}
+        for directory in dropped_directories:
+            (self.target / directory).mkdir(parents=True, exist_ok=True)
+        self.assertEqual(len(validate_package_directory(self.target, False, allow_earlier_build=True)), len(CURRENT_FILES))
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.target, False)
+        deploy_package(self.package, self.game, self.target)
+        self.assertTrue(all(not (self.target / directory).exists() for directory in dropped_directories))
+        self.assertEqual(len(validate_package_directory(self.target)), len(CURRENT_FILES))
+
+    def test_failed_upgrade_restores_dropped_resources(self) -> None:
+        installed = self._install_layout(PRE_CODE_REGISTRY_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)
+        real_replace = os.replace
+        failed = False
+        def fail_manifest(source, destination):
+            nonlocal failed
+            if not failed and Path(destination) == self.target / "manifest.xml":
+                failed = True
+                raise PermissionError("injected manifest failure")
+            real_replace(source, destination)
+        with patch.object(os, "replace", side_effect=fail_manifest), self.assertRaisesRegex(DeploymentError, "Could not replace installed files"):
+            deploy_package(self.package, self.game, self.target)
+        self.assertEqual(self.installed_contents(), installed)
         self.assertFalse(any(path.name.startswith(".DigitalStorage") for path in self.mods.iterdir()))
 
     def test_rollback_failure_retains_complete_backup_and_blocks_success(self) -> None:

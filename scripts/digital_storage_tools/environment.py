@@ -66,6 +66,7 @@ def resolve_environment(
     arguments: argparse.Namespace,
     environ: Mapping[str, str] | None = None,
     repository_root: Path | None = None,
+    for_release_archive: bool = False,
 ) -> ResolvedEnvironment:
     environment = os.environ if environ is None else environ
     root = (Path(__file__).resolve().parents[2] if repository_root is None else repository_root).resolve()
@@ -132,7 +133,12 @@ def resolve_environment(
     ):
         if candidate is not None:
             _reject_workshop_path(candidate, root, label)
-    for label, candidate in (("output directory", output_directory), ("package directory", package_directory)):
+    protected_outputs = [("output directory", output_directory), ("package directory", package_directory)]
+    if for_release_archive:
+        release_directory = output_directory / "release"
+        _reject_linked_output(str(release_directory), root, "release directory")
+        protected_outputs.append(("release directory", release_directory))
+    for label, candidate in protected_outputs:
         _reject_protected_path(candidate, protected_paths, label)
 
     return ResolvedEnvironment(

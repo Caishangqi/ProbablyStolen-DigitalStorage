@@ -187,6 +187,19 @@ def _ensure_resource_directories(root: Path, names: Sequence[str], created: list
     return created
 
 
+def _prune_dropped_directories(root: Path, names: Sequence[str]) -> list[Path]:
+    """Remove empty directories of earlier approved layouts that the new layout does not use, deepest first."""
+    kept = package_directories(names)
+    known = package_directories([name for _, layout, _ in KNOWN_LAYOUTS for name in layout])
+    removed: list[Path] = []
+    for name in sorted(known - kept, key=lambda value: value.count("/"), reverse=True):
+        path = root / name
+        if _existing_plain_directory(path, "Resource directory") and not any(path.iterdir()):
+            path.rmdir()
+            removed.append(path)
+    return removed
+
+
 def _clean_attempt_tree(directory: Path, names: Sequence[str]) -> None:
     """Clean only a self-created staging/backup tree, allowing known partial files."""
     if not _existing_plain_directory(directory, "Attempt directory"):
@@ -222,6 +235,10 @@ def deploy_package(
     _assert_game_stopped(game_directory)
     changes = plan_deployment(package_directory, game_directory, deploy_directory)
     if all(change["action"] == "Unchanged" for change in changes):
+        # Identical files can still sit beside empty directories an earlier layout used.
+        target, _ = _validate_target(game_directory, deploy_directory)
+        if _prune_dropped_directories(target, [change["name"] for change in changes]):
+            validate_package_directory(target)
         return changes
     target, mods = _validate_target(game_directory, deploy_directory)
     package, source_inventory = _validate_package_source(package_directory, game_directory)
@@ -235,6 +252,7 @@ def deploy_package(
     staging = mods / (".DigitalStorage.staging." + uuid.uuid4().hex)
     backup = mods / (".DigitalStorage.backup." + uuid.uuid4().hex)
     created_directories: list[Path] = []
+    pruned_directories: list[Path] = []
     target_created = False
     attempted: list[str] = []
     backup_ready = False
@@ -266,6 +284,7 @@ def deploy_package(
             if name not in source_names:
                 attempted.append(name)
                 (target / name).unlink()
+        pruned_directories.extend(_prune_dropped_directories(target, source_names))
         attempted.append("manifest.xml")
         os.replace(staging / "manifest.xml", target / "manifest.xml")
         if validate_package_directory(target) != source_inventory:
@@ -275,6 +294,11 @@ def deploy_package(
             if attempted:
                 if target_existed and not backup_ready:
                     raise DeploymentError("A complete backup is unavailable.")
+                # Old files may sit in directories the new layout dropped: restore them in staging and target first.
+                for directory in reversed(pruned_directories):
+                    directory.mkdir()
+                _ensure_resource_directories(staging, old_names)
+                _ensure_resource_directories(target, old_names)
                 for name in old_names:
                     if name in attempted:
                         shutil.copyfile(backup / name, staging / name)
@@ -299,7 +323,7 @@ def deploy_package(
                 f"backup retained at {backup}; staging retained at {staging}. Do not launch."
             ) from rollback_error
         try:
-            _clean_attempt_tree(staging, source_names)
+            _clean_attempt_tree(staging, [*source_names, *old_names])
             _clean_attempt_tree(backup, old_names)
             if not mods_existed and mods.exists() and not any(mods.iterdir()):
                 mods.rmdir()
