@@ -2,10 +2,10 @@
 
 把存储元件装进驱动器，用终端搜索、存入和取出整个网络中的物品。
 
-本模组的数字存储和网络终端设计受到 [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] 的启发，并根据 Probably Stolen 的物品、机器和库存规则重新设计。
+数字存储和网络终端参考了 [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url]，并按 Probably Stolen 的物品、机器和库存规则重新设计。
 
 [h2]从 Wild 的人脉入手[/h2]
-打开 Wild 人脉中的「数字存储」页签，解锁「数字存储入门」。你会拿到带电池的控制器、驱动器、终端和一个空的 1k 存储元件。数据科学家会在退休农夫到访的那天来店里卖存储设备，只卖不收。
+在 Wild 人脉的「数字存储」页签解锁「数字存储入门」，可领到带电池的控制器、驱动器、终端和一个空的 1k 存储元件。数据科学家和退休农夫同一天到访，存储设备只卖不收。
 
 解锁「进阶数据管理」可领到元件工作台、均分模块、堆叠显示模块和种类上限模块各一件。之后，数据科学家每周轮换进阶货品，杰克逊博士固定供应存储模块和高容量存储组件。
 

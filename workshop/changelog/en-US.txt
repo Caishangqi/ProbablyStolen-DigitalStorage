@@ -1,4 +1,4 @@
-0.6.0
+0.6.1
 
 Wild's network has a new Digital Storage tab. Unlock Digital Storage Basics to get a starter setup and bring the Data Scientist to your shop.
 
@@ -6,6 +6,8 @@ Wild's network has a new Digital Storage tab. Unlock Digital Storage Basics to g
 - Advanced Data Management gives you a Cell Workbench, an Equal Distribution Module, a Stack Display Module, and a Type Limit Module. After this upgrade, the Data Scientist rotates advanced stock weekly, and Dr. Jackson always brings storage modules and high-capacity storage components.
 - Removed the Upper-Level Engineer and the buyback service.
 - The mod now tries to recover misplaced items in storage cells when you load a save.
+- Module bays can now be expanded even when a layout warning appears.
+- Choose logging levels for storage and item transfers separately in the mod settings.
 - Items dragged out of the terminal now use the game's native drop targets.
 - Fixed tooltip spacing when the Item Details badge appears late. If an integration fails to start, its status appears in settings and the game log has the details.
 - Content registration moved from JSON files into code. The public API is now 2.0, and the content service key is content.v2. Removed outdated data validation tests.
