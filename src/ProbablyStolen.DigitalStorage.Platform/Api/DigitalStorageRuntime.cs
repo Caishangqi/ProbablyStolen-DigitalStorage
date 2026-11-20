@@ -27,7 +27,7 @@ internal sealed class DigitalStorageRuntime : IDigitalStorageRuntime
         if (contentsChanged == null) throw new ArgumentNullException(nameof(contentsChanged));
 
         var thread = new ApiThread();
-        _access = new ExternalAccessScope(root => CellPages.CellOfStored(root, out _), IsCellOnline, CellPages.Compact,
+        _access = new ExternalAccessScope(root => CellPages.CellOfStored(root, out _), IsCellOnline, networkPower.Storage.Compact,
             () => UnityEngine.Time.frameCount, () => thread.IsMain, log);
         _grids = new GridHelper(scanner, networkPower.IsPowered,
             machine => new NetworkStorageFacade(networkPower.Storage, machine, _access, thread, log, contentsChanged));

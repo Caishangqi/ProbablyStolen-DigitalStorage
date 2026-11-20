@@ -4,6 +4,7 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Content;
@@ -17,15 +18,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 internal sealed class CellRecovery
 {
     private readonly CellHealth _health;
-    private readonly StorageDiagnostics _diagnostics;
-    private readonly ModLog _log;
+    private readonly CellDiagnostics _diagnostics;
     private readonly List<GameItem> _heldRecoveryItems = new();
 
-    internal CellRecovery(CellHealth health, StorageDiagnostics diagnostics, ModLog log)
+    internal CellRecovery(CellHealth health, CellDiagnostics diagnostics)
     {
         _health = health ?? throw new ArgumentNullException(nameof(health));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
     internal void Run()
@@ -50,12 +49,12 @@ internal sealed class CellRecovery
                 if (!prewarmed.Add(cell) || !CellHealth.Get(cell).IsMountable) continue;
                 try
                 {
-                    _ = BasicCellHandler.GetCellInventory(cell, _log.Log, _diagnostics);
+                    _ = BasicCellHandler.GetCellInventory(cell, _diagnostics);
                 }
                 catch (Exception error)
                 {
-                    _diagnostics.Failure(cell, "cell_prewarm_failed", "Digital Storage: cell prewarm failed.", error,
-                        () => NativeStorageDiagnosticContext.Cell(cell));
+                    _diagnostics.Once(cell, LogVerbosity.Error, "cell_prewarm_failed", "Cell prewarm failed.",
+                        () => CellLogFields.For(cell), error);
                 }
             }
         }
@@ -71,11 +70,11 @@ internal sealed class CellRecovery
         {
             return Fail(cell, "reason=layout_unreadable", -1, -1);
         }
-        if (!CellPages.IsComplete(cell, out var linkFailure))
+        if (!CellPages.IsComplete(cell))
         {
             // CellHealth already owns the normal warning for unknown schema and broken page linkage.
-            _diagnostics.VerboseOnce(cell, "cell_recovery_skipped", "Digital Storage: recovery skipped for an unverified cell.",
-                () => NativeStorageDiagnosticContext.Cell(cell) + " " + (linkFailure ?? "reason=layout_unreadable"));
+            _diagnostics.Once(cell, LogVerbosity.Verbose, "cell_recovery_skipped", "Recovery skipped for an unverified cell.",
+                () => CellLogFields.For(cell));
             return true;
         }
 
@@ -193,7 +192,7 @@ internal sealed class CellRecovery
                 var targetGeometry = move.AppendPage ? StripLayout.PageFor(move.Size) : layout!.Pages[move.TargetPage];
                 var (x, y) = StripLayout.SlotOrigin(targetGeometry, move.TargetSlot);
                 var targetShape = new GridShapeBuilder(entry.Item.modifiedShape).SetPosition(x, y).Build();
-                if (!Move(entry, target, targetShape))
+                if (!Move(cell, entry, target, targetShape))
                     throw new RecoveryException("reason=native_move_refused");
                 applied.Add(new AppliedMove(entry, target, targetShape, move));
             }
@@ -204,9 +203,8 @@ internal sealed class CellRecovery
                 MarkDegraded(cell, protectedPages, "reason=identity_unreadable");
             else
                 CellInventoryCache.Forget(cell);
-            StorageDiagnostics.Report(message => _log.Log(message), "cell_recovery_applied",
-                "Digital Storage: restored strip roots were relocated.", context: () =>
-                    NativeStorageDiagnosticContext.Cell(cell) + " moves=" + applied.Count);
+            _diagnostics.Write(LogVerbosity.Info, "cell_recovery_applied", "Restored strip roots were relocated.",
+                () => CellLogFields.For(cell, LogField.Of("moves", applied.Count)));
             return true;
         }
         catch (Exception error)
@@ -232,7 +230,7 @@ internal sealed class CellRecovery
         }
     }
 
-    private bool Move(Observation entry, GameGridInventory target, GridShape targetShape)
+    private bool Move(GameItem cell, Observation entry, GameGridInventory target, GridShape targetShape)
     {
         var source = entry.Item.parentInventory;
         if (source == null || !ReferenceEquals(source, entry.SourcePage) || !source.childItems.Contains(entry.Item))
@@ -248,7 +246,13 @@ internal sealed class CellRecovery
         if (!target.CheckShapePlacement(entry.Item, targetShape, new List<GameItem>())) return false;
 
         var result = ItemMove.Run(NativeItemMove.Into(entry.Item, target, targetShape));
-        NativeItemMove.Report(result, entry.Item, "recovery");
+        if (result.Outcome == ItemMoveOutcome.Unowned || result.Error != null)
+        {
+            var level = result.Outcome == ItemMoveOutcome.Unowned ? LogVerbosity.Error : LogVerbosity.Warning;
+            _diagnostics.Once(cell, level, "cell_recovery_move_failed", "A recovery move did not end cleanly.",
+                () => CellLogFields.For(cell, LogField.Of("page", entry.Page), LogField.Of("slot", entry.Slot),
+                    LogField.Of("outcome", result.Outcome.ToString())), result.Error);
+        }
         return result.Outcome == ItemMoveOutcome.Moved && OwnsAt(entry.Item, target, targetShape, entry);
     }
 
@@ -390,9 +394,8 @@ internal sealed class CellRecovery
         if (CellHealth.Get(cell).Status == CellHealthStatus.Available)
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Protected));
         CellInventoryCache.Forget(cell);
-        StorageDiagnostics.Report(message => _log.Log(message), "cell_recovery_degraded",
-            "Digital Storage: some cell pages are protected; insertion and compaction are disabled.", context: () =>
-                NativeStorageDiagnosticContext.Cell(cell) + " pages=" + string.Join(",", pageList) + " " + reason);
+        _diagnostics.Write(LogVerbosity.Warning, "cell_recovery_degraded", "Protected pages prevent insertion and compaction.",
+            () => CellLogFields.For(cell, LogField.Of("protected_pages", pageList.Length), LogField.Of("reason", reason)));
     }
     private bool Fail(GameItem cell, string reason, int page, int slot, Exception? error = null, bool rollbackFailed = false)
     {
@@ -407,13 +410,8 @@ internal sealed class CellRecovery
         }
         CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Unavailable,
             rollbackFailed ? CellUnavailableReason.RollbackFailed : CellUnavailableReason.RestoreFailed));
-        var message = "Digital Storage: cell recovery stopped; do not save.";
-        if (error == null)
-            _diagnostics.Failure(cell, "cell_recovery_unavailable", message,
-                () => NativeStorageDiagnosticContext.Cell(cell) + " " + reason + " page=" + page + " slot=" + slot);
-        else
-            _diagnostics.Failure(cell, "cell_recovery_unavailable", message, error,
-                () => NativeStorageDiagnosticContext.Cell(cell) + " " + reason + " page=" + page + " slot=" + slot);
+        _diagnostics.Once(cell, LogVerbosity.Error, "cell_recovery_unavailable", "Cell recovery stopped. Do not save.",
+            () => CellLogFields.For(cell, LogField.Of("reason", reason), LogField.Of("page", page), LogField.Of("slot", slot)), error);
         return false;
     }
 

@@ -12,18 +12,21 @@ internal static class ModConfigWindowPatch
 {
     private const string TooltipLinkPrefix = "modcfg:";
     private static readonly Dictionary<string, CustomUIWindow> OpenWindows = new(StringComparer.Ordinal);
+    private static Action<LoadedMod?, CustomUIWindow?>? _groupLogSettings;
     private static bool _attached;
 
-    internal static void Attach()
+    internal static void Attach(Action<LoadedMod?, CustomUIWindow?> groupLogSettings)
     {
         if (_attached) return;
         IntegrationSettingsView.SwitchStateChanged += OnSwitchStateChanged;
+        _groupLogSettings = groupLogSettings;
         _attached = true;
     }
 
     internal static void Detach()
     {
         if (_attached) IntegrationSettingsView.SwitchStateChanged -= OnSwitchStateChanged;
+        _groupLogSettings = null;
         _attached = false;
         OpenWindows.Clear();
     }
@@ -32,6 +35,7 @@ internal static class ModConfigWindowPatch
     {
         PinyinModeDropdown.Localize(mod, __result);
         TerminalViewDropdowns.Localize(mod, __result);
+        _groupLogSettings?.Invoke(mod, __result);
         if (mod == null || __result == null) return;
 
         var modId = mod.Manifest.ID;

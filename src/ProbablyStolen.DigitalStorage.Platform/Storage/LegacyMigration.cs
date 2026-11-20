@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -22,13 +23,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 internal sealed class LegacyMigration
 {
     private readonly CellHealth _health;
-    private readonly ModLog _log;
+    private readonly CellDiagnostics _diagnostics;
     private readonly HashSet<GameItem> _running = new();
 
-    internal LegacyMigration(CellHealth health, ModLog log)
+    internal LegacyMigration(CellHealth health, CellDiagnostics diagnostics)
     {
         _health = health ?? throw new ArgumentNullException(nameof(health));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _diagnostics = diagnostics;
     }
 
     /// <summary>Migrates every pending cell of the loaded save; runs after the load audit and type backfill.</summary>
@@ -44,10 +45,8 @@ internal sealed class LegacyMigration
 
         if (pending > 0)
         {
-            var completed = EmporiumEntry.Instance.GetAllItems()
-                .Count(item => CellPages.Tabs(item) != null && CellTags.ReadSchema(item) == CellSchema.Current);
-            _log.Log($"Digital Storage: storage format migration checked {pending} cell(s); {failed} failed; " +
-                $"{completed} cell(s) now use format v{CellSchema.Current}.");
+            _diagnostics.Write(LogVerbosity.Info, "cell_migration_checked", "Storage format migration checked.",
+                () => new[] { LogField.Of("checked", pending), LogField.Of("failed", failed) });
         }
 
         if (failed > 0) _health.WarnDoNotSave(failed, "failed to migrate");
@@ -73,8 +72,8 @@ internal sealed class LegacyMigration
         catch (Exception error)
         {
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Unavailable, CellUnavailableReason.MigrationFailed));
-            StorageDiagnostics.Report(message => _log.Error(message), "cell_migration_failed",
-                "Digital Storage: cell migration stopped.", error, () => NativeStorageDiagnosticContext.Cell(cell));
+            _diagnostics.Once(cell, LogVerbosity.Error, "cell_migration_failed", "Cell migration stopped.",
+                () => CellLogFields.For(cell), error);
             return false;
         }
         finally
@@ -98,7 +97,8 @@ internal sealed class LegacyMigration
         var view = CellPages.Read(cell, StorageService.Identify, CellWriteState.Writable);
         if (view.Pages.Any(page => page.IsProtected))
         {
-            _log.Warning($"Digital Storage: migration of {cell.identifier} stopped because a page is protected.");
+            _diagnostics.Once(cell, LogVerbosity.Warning, "cell_migration_protected", "Cell migration stopped at a protected page.",
+                () => CellLogFields.For(cell));
             return;
         }
         var source = new CellRootSource(cell, StorageService.Identify, null, unslottedOnly: true);
@@ -107,7 +107,8 @@ internal sealed class LegacyMigration
         if (!forecast.Accepted)
         {
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.ReadOnly));
-            _log.Warning($"Digital Storage: migration of {cell.identifier} refused ({forecast.Rejection}); the cell is extract-only.");
+            _diagnostics.Once(cell, LogVerbosity.Warning, "cell_migration_refused", "Cell migration was refused. The cell allows extraction only.",
+                () => CellLogFields.For(cell, LogField.Of("reason", forecast.Rejection.ToString())));
             return;
         }
 
@@ -118,7 +119,7 @@ internal sealed class LegacyMigration
         if (!drain.Completed) throw new InvalidOperationException($"The drain stopped at {drain.LastStep}.");
         Verify(before, Capture(cell));
 
-        CellPages.Compact(cell);
+        CellPages.Compact(cell, _diagnostics);
         if (CellHealth.IsUnavailable(cell)) throw new InvalidOperationException("Removing the legacy pages failed.");
         if (!CellTags.TryReadLayout(cell, out var after) || after!.Pages.Any(page => page.Kind == PageKind.Legacy))
         {

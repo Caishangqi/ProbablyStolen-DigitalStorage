@@ -163,8 +163,15 @@ config_section_power,Network power
 config_section_debug,Debug
 debug_show_cell_pages_name,Show storage pages when opening a cell
 debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cell also shows its storage pages; when off, only the storage component shows. Pages stay locked and items move only through a terminal.
-debug_storage_diagnostics_name,Storage diagnostics
-debug_storage_diagnostics_desc,Record limited storage page and module bay structure details. Errors are still logged when off. Original exception messages are retained.
+config_section_logs,Logging
+log_category_storage,Storage log
+log_category_transfer,Transfer log
+log_category_temp,Temporary log
+log_category_enabled,Enabled
+log_level_error,Error
+log_level_warning,Warning
+log_level_info,Info
+log_level_verbose,Verbose
 network_tab_digital_storage,Digital Storage
 network_card_digital_storage,Storage Network
 network_digital_storage_starter_title,Digital Storage Basics

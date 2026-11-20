@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -72,11 +73,18 @@ internal sealed class NativeItemMove : IItemMovePort
     }
 
     /// <summary>Logs a move that did not end cleanly; identifiers and counts only.</summary>
-    internal static void Report(ItemMoveResult result, GameItem item, string operation)
+    internal static void Report(ItemMoveResult result, GameItem item, string operation, TransferOperation? aggregate = null)
     {
         if (result.Error == null && result.Outcome is ItemMoveOutcome.Moved or ItemMoveOutcome.Unchanged
                 or ItemMoveOutcome.Returned or ItemMoveOutcome.AlreadySafe)
         {
+            return;
+        }
+
+        if (aggregate != null)
+        {
+            if (result.Error != null) aggregate.Record(result.Error);
+            if (result.Outcome == ItemMoveOutcome.Unowned) aggregate.RecordUnowned();
             return;
         }
 

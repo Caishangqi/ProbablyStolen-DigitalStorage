@@ -16,6 +16,7 @@ using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 using ProbablyStolen.DigitalStorage.Platform.Network;
@@ -34,8 +35,8 @@ internal sealed class StorageService
     private const string RestoreUnavailableKey = "storage_restore_unavailable";
     private readonly NativeNetworkScanner _scanner;
     private readonly Func<NativeGridSnapshot, Grid, bool> _isPowered;
-    private readonly Action<string> _log;
-    private readonly StorageDiagnostics _diagnostics;
+    private readonly CellDiagnostics _diagnostics;
+    private readonly Action<string> _nativeLog;
     private const string NoSpaceKey = "terminal_storage_reject_no_space";
     private static readonly IActionSource Player = new PlayerSource("player");
     private readonly Func<GameItem, bool> _migrate;
@@ -49,12 +50,12 @@ internal sealed class StorageService
     private bool? _restoreApplied;
 
     internal StorageService(NativeNetworkScanner scanner, Func<NativeGridSnapshot, Grid, bool> isPowered,
-        Action<string> log, Func<GameItem, bool> migrate, StorageDiagnostics diagnostics)
+        Action<string> nativeLog, Func<GameItem, bool> migrate, CellDiagnostics diagnostics)
     {
+        _nativeLog = nativeLog;
         _migrate = migrate ?? throw new ArgumentNullException(nameof(migrate));
         _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
         _isPowered = isPowered ?? throw new ArgumentNullException(nameof(isPowered));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
     }
 
@@ -141,8 +142,9 @@ internal sealed class StorageService
         {
             if (!samples.TryGetValue(pair.Key, out var sample)) continue;
             // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
-            if (FallbackReasons.TryGetValue(pair.Key, out var reason) && _reportedFallbacks.Add((sample.identifier, reason)))
-                _log($"Digital Storage: identity fallback item={sample.identifier} reason={reason}");
+            if (_diagnostics.IsEnabled(LogVerbosity.Info) && FallbackReasons.TryGetValue(pair.Key, out var reason) && _reportedFallbacks.Add((sample.identifier, reason)))
+                _diagnostics.Write(LogVerbosity.Info, "identity_fallback", "Stored item identity uses a fallback.",
+                    () => new[] { LogField.Of("item_id", sample.identifier), LogField.Of("reason", reason.ToString()) });
             if (!_entryTexts.TryGetValue(pair.Key, out var text)) text = Entry(pair.Key, 0, 0, sample);
             texts[pair.Key] = text;
             entries.Add(new TerminalEntry(pair.Key, pair.Value.Pieces, text.DisplayName, text.SpriteKey, text.SpriteWidth,
@@ -229,7 +231,7 @@ internal sealed class StorageService
     internal MountedNetwork Mount(GameItem machine) => GetInventory(machine, migratePending: false);
 
     // Simulations pass false because checking availability must not trigger a migration that moves items.
-    private MountedNetwork GetInventory(GameItem terminal, bool migratePending)
+    private MountedNetwork GetInventory(GameItem terminal, bool migratePending, TransferOperation? operation = null)
     {
         var network = Connect(terminal);
         var storage = new NetworkStorage();
@@ -240,7 +242,7 @@ internal sealed class StorageService
         foreach (var cell in network.Cells)
         {
             if (migratePending) _migrate(cell);
-            var inventory = BasicCellHandler.GetCellInventory(cell, _log, _diagnostics, storedIdentityChanged);
+            var inventory = BasicCellHandler.GetCellInventory(cell, _diagnostics, storedIdentityChanged, operation);
             if (inventory == null) continue;
             var readOnly = inventory.View.WriteState == CellWriteState.ExtractOnly;
             storage.Mount(inventory.View.Priority,
@@ -268,18 +270,22 @@ internal sealed class StorageService
         _viewsStale = false;
     }
 
+    internal BasicCellInventory? ReadCell(GameItem cell) => BasicCellHandler.GetCellInventory(cell, _diagnostics);
+
+    internal void Compact(GameItem cell) => CellPages.Compact(cell, _diagnostics);
+
     /// <summary>Records that a move ended without being accounted for, so the operation's cells are read again.</summary>
     internal void MarkUncertain() => _contentsUncertain = true;
 
     /// <summary>Stores each item independently in selection order; stored items are never rolled back.</summary>
-    internal TerminalInsertionResult Store(GameItem terminal, IReadOnlyList<GameItem> items)
+    internal TerminalInsertionResult Store(GameItem terminal, IReadOnlyList<GameItem> items, TransferOperation? operation)
     {
         if (!IsRestoreApplied())
         {
             return TerminalInsertionResult.Create(TerminalInsertionStatus.Offline, 0, RestoreUnavailableKey);
         }
 
-        var mounted = GetInventory(terminal);
+        var mounted = GetInventory(terminal, migratePending: true, operation);
         if (!mounted.Network.Online)
         {
             return TerminalInsertionResult.Create(TerminalInsertionStatus.Offline, 0, UnavailableKey);
@@ -297,10 +303,10 @@ internal sealed class StorageService
             if (_viewsStale)
             {
                 Settle(mounted);
-                mounted = GetInventory(terminal, migratePending: false);
+                mounted = GetInventory(terminal, migratePending: false, operation);
             }
 
-            var rejection = TryStore(mounted, item, Actionable.Modulate);
+            var rejection = TryStore(mounted, item, Actionable.Modulate, operation);
             if (rejection == null)
             {
                 stored += units;
@@ -308,8 +314,9 @@ internal sealed class StorageService
             else
             {
                 firstRejection ??= rejection;
-                _log($"Digital Storage: store rejected item={item.identifier} units={item.unitCount} " +
-                    $"size={CellPages.SizeOf(item)} reason={rejection}");
+                if (operation == null)
+                    _nativeLog($"Digital Storage: store rejected item={item.identifier} units={item.unitCount} " +
+                        $"size={CellPages.SizeOf(item)} reason={rejection}");
             }
         }
 
@@ -360,7 +367,7 @@ internal sealed class StorageService
     /// Moves at most <paramref name="pieces"/> stored roots of one type into the player's inventory. A root the
     /// inventory cannot take whole stays stored, so no item is split and no more pieces move than asked.
     /// </summary>
-    internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces)
+    internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces, TransferOperation operation)
     {
         if (pieces <= 0)
         {
@@ -382,27 +389,23 @@ internal sealed class StorageService
         }
 
         // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
-        var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true), pieces);
+        var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true, operation: operation), pieces);
         _contentsUncertain = false;
         var failed = false;
         try
         {
             var result = mounted.Storage.Extract(key, long.MaxValue, destination, Actionable.Modulate, Player);
-            if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
-            {
-                failed = _contentsUncertain = true;
-                _log($"Digital Storage: extract left an item without an owner (key={key.Identifier}).");
-            }
+            if (result.StoppedBy.Outcome == TransferOutcome.Unowned) failed = _contentsUncertain = true;
         }
         catch (Exception error)
         {
             failed = _contentsUncertain = true;
-            _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
+            operation.Record(error);
         }
         finally
         {
             Settle(mounted);
-            foreach (var cell in mounted.Cells) CellPages.Compact(cell);
+            foreach (var cell in mounted.Cells) CellPages.Compact(cell, _diagnostics);
         }
 
         var moved = destination.Accepted;
@@ -421,7 +424,7 @@ internal sealed class StorageService
 
     /// <summary>Moves a display-ordered batch of whole roots into the resolved destination.</summary>
     internal TerminalExtractionResult ExtractBatchTo(GameItem terminal, TerminalDragBatch batch,
-        InventoryDropTarget target)
+        InventoryDropTarget target, TransferOperation operation)
     {
         if (batch == null) throw new ArgumentNullException(nameof(batch));
         if (target == null) throw new ArgumentNullException(nameof(target));
@@ -436,7 +439,7 @@ internal sealed class StorageService
 
         var sink = new InventoryRootSink(target.Inventory, wholeRootOnly: true,
             pointPlacement: target.ForSinglePlacement(requested), useNativeDragSearch: true,
-            containerTarget: target.HoveredItem, itemInventories: target.ItemInventories);
+            containerTarget: target.HoveredItem, itemInventories: target.ItemInventories, operation: operation);
         long moved = 0;
         var status = TerminalExtractionStatus.Success;
         _contentsUncertain = false;
@@ -458,7 +461,6 @@ internal sealed class StorageService
                 if (result.StoppedBy.Outcome == TransferOutcome.Unowned)
                 {
                     _contentsUncertain = true;
-                    _log($"Digital Storage: extract left an item without an owner (key={step.Key.Identifier}).");
                     status = TerminalExtractionStatus.Failed;
                     break;
                 }
@@ -480,13 +482,13 @@ internal sealed class StorageService
         catch (Exception error)
         {
             _contentsUncertain = true;
-            _log($"Digital Storage: extract failed ({error.GetType().Name}: {error.Message}).");
+            operation.Record(error);
             status = TerminalExtractionStatus.Failed;
         }
         finally
         {
             Settle(mounted);
-            foreach (var cell in mounted.Cells) CellPages.Compact(cell);
+            foreach (var cell in mounted.Cells) CellPages.Compact(cell, _diagnostics);
         }
 
         // Earlier successful roots can remain moved, but unknown ownership or an unexpected
@@ -506,7 +508,7 @@ internal sealed class StorageService
     }
 
     /// <summary>Stores or simulates one item; returns the rejection text key, or null when it went in.</summary>
-    private string? TryStore(MountedNetwork mounted, GameItem item, Actionable mode)
+    private string? TryStore(MountedNetwork mounted, GameItem item, Actionable mode, TransferOperation? operation = null)
     {
         if (StoreAdmission.Refusal(item) is { } refusal) return refusal;
         if (Identify(item) is not { } key) return StoreAdmission.UnsupportedKey;
@@ -514,7 +516,7 @@ internal sealed class StorageService
         try
         {
             var result = mounted.Storage.Insert(new ItemListSource(new[] { item }, new[] { key }), mode, Player);
-            return result.InsertedUnits > 0 ? null : MessageKey(result.StoppedBy);
+            return result.InsertedUnits > 0 ? null : MessageKey(result.StoppedBy, operation);
         }
         catch (Exception error)
         {
@@ -522,17 +524,20 @@ internal sealed class StorageService
             // stored, and reporting a rejection would be wrong.
             var stored = mode == Actionable.Modulate && IsStoredIn(item, mounted.Cells);
             if (mode == Actionable.Modulate) _viewsStale = true;
-            _log($"Digital Storage: store {(stored ? "bookkeeping " : "")}failed ({error.GetType().Name}: {error.Message}).");
+            if (operation != null) operation.Record(error);
+            else if (mode == Actionable.Modulate)
+                _nativeLog($"Digital Storage: store {(stored ? "bookkeeping " : "")}failed ({error.GetType().Name}: {error.Message}).");
             return stored ? null : NoSpaceKey;
         }
     }
 
-    private string MessageKey(TransferStep step)
+    private string MessageKey(TransferStep step, TransferOperation? operation)
     {
         if (step.Outcome == TransferOutcome.Unowned)
         {
             _contentsUncertain = true;
-            _log("Digital Storage: a store left an item without an owner.");
+            if (operation != null) operation.RecordUnowned();
+            else _nativeLog("Digital Storage: a store left an item without an owner.");
         }
         return step.Rejection switch
         {

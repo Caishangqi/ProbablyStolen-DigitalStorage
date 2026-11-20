@@ -211,6 +211,24 @@ public sealed class ProjectGraphTests
         Assert.DoesNotThrow(new Action(() => ValidateCoreAssembly(stream, module)));
     }
 
+    [Test]
+    public void ClassifiedDiagnostics_AreInternalAndAbsentFromApiCore()
+    {
+        const string diagnostics = "ProbablyStolen.DigitalStorage.Common.Diagnostics";
+        using var common = new PEReader(File.OpenRead(GetBuildMetadata("CommonTargetPath")));
+        var metadata = common.GetMetadataReader();
+        var definitions = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition)
+            .Where(type => metadata.GetString(type.Namespace) == diagnostics).ToArray();
+        Assert.That(definitions.Select(type => metadata.GetString(type.Name)), Does.Contain("LogCategory").And.Contain("DiagnosticLogger"));
+        foreach (var type in definitions)
+            Assert.That(type.Attributes & TypeAttributes.VisibilityMask, Is.EqualTo(TypeAttributes.NotPublic));
+
+        using var api = new PEReader(File.OpenRead(GetBuildMetadata("Api.CoreTargetPath")));
+        metadata = api.GetMetadataReader();
+        Assert.That(metadata.TypeDefinitions.Select(handle => metadata.GetString(metadata.GetTypeDefinition(handle).Namespace)),
+            Does.Not.Contain(diagnostics));
+    }
+
     private static void ValidateProductProject(XDocument document, string module)
     {
         var references = document

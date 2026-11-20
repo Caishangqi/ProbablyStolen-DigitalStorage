@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
@@ -19,15 +18,14 @@ internal sealed class GridNetworkPowerCoordinator
     private readonly NativeNetworkScanner _scanner;
     private readonly EnergyService _energyService = new();
     private readonly StorageService _storage;
+    private readonly Action<string> _nativeLog;
 
-    private readonly Action<string> _log;
-
-    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> log, Func<GameItem, bool> migrate,
-        StorageDiagnostics diagnostics)
+    internal GridNetworkPowerCoordinator(NativeNetworkScanner scanner, Action<string> nativeLog, Func<GameItem, bool> migrate,
+        CellDiagnostics diagnostics)
     {
         _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
-        _storage = new StorageService(scanner, IsPowered, log, migrate, diagnostics);
+        _nativeLog = nativeLog;
+        _storage = new StorageService(scanner, IsPowered, nativeLog, migrate, diagnostics);
     }
 
     /// <summary>Gets the storage operations shared by terminals and the public API.</summary>
@@ -40,18 +38,19 @@ internal sealed class GridNetworkPowerCoordinator
     internal IReadOnlyList<CellBayReference> ListCellBays(GameItem terminal) => _storage.ListCellBays(terminal);
 
     internal TerminalInsertionResult StoreSelected(GameItem terminal, IReadOnlyList<GameItem> items,
-        Action<string>? reportDiagnostic = null) => _storage.Store(terminal, items);
+        TransferOperation operation) => _storage.Store(terminal, items, operation);
 
     /// <summary>Stores one dragged root; part of a stack is not split off, so a partial drag is rejected.</summary>
     internal TerminalInsertionResult StoreSingle(GameItem terminal, GameItem item, int amount,
-        Action<string>? reportDiagnostic = null)
+        TransferOperation? operation = null)
     {
         if (amount >= item.unitCount)
         {
-            return _storage.Store(terminal, new[] { item });
+            return _storage.Store(terminal, new[] { item }, operation);
         }
 
-        _log($"Digital Storage: store rejected item={item.identifier} units={item.unitCount} dragged={amount} reason=PartialStack");
+        if (operation == null)
+            _nativeLog($"Digital Storage: store rejected item={item.identifier} units={item.unitCount} dragged={amount} reason=PartialStack");
         return TerminalInsertionResult.Create(TerminalInsertionStatus.Rejected, 0, WholeStackOnlyKey);
     }
 
@@ -81,11 +80,11 @@ internal sealed class GridNetworkPowerCoordinator
         return refusals;
     }
 
-    internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces) =>
-        _storage.ExtractPieces(terminal, key, pieces);
+    internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces, TransferOperation operation) =>
+        _storage.ExtractPieces(terminal, key, pieces, operation);
 
     internal TerminalExtractionResult ExtractBatch(GameItem terminal, TerminalDragBatch batch,
-        InventoryDropTarget target) => _storage.ExtractBatchTo(terminal, batch, target);
+        InventoryDropTarget target, TransferOperation operation) => _storage.ExtractBatchTo(terminal, batch, target, operation);
 
     internal GridPowerResult OnControllerCycleEnd(GameItem controller)
     {

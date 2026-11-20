@@ -65,9 +65,6 @@ internal sealed partial class DigitalStorageContentService
                 item.contentWindow?.Validate();
             }
             ReportLayoutMismatch(item, bay, session, stage, layout);
-            _storageDiagnostics?.VerboseOnce(item, "module_bay_initialized", "Digital Storage: module bay initialized.",
-                () => NativeStorageDiagnosticContext.Item(item) + " " +
-                    StorageDiagnostics.Field("stage", () => stage) + " " + StorageDiagnostics.Field("modules", () => bay?.childItems.Count));
             return new ModuleBayState(true, stage, definition, null, maximum);
         }
         catch (Exception error)

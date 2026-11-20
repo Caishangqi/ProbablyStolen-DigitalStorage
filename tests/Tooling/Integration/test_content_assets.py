@@ -81,18 +81,23 @@ class ContentContractTests(unittest.TestCase):
             self.assertEqual(set(), keys - set(texts), language)
             self.assertIn("terminal_storage_drag_refused", texts)
 
-    def test_storage_diagnostics_setting_and_localization_are_wired(self):
-        settings = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Platform/Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")
-        composition = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Platform/Composition/PlatformComposition.cs").read_text(encoding="utf-8")
-        self.assertIn('Define("debug_storage_diagnostics", false, debug', settings)
-        self.assertIn("GetStorageDiagnostics() => _storageDiagnostics.Value", settings)
-        self.assertIn("new StorageDiagnostics", composition)
-        english = read_localization(REPOSITORY / "packaging/resources" / self.localization_paths[0])
-        chinese = read_localization(REPOSITORY / "packaging/resources" / self.localization_paths[1])
-        for key in ("debug_storage_diagnostics_name", "debug_storage_diagnostics_desc"):
-            self.assertTrue(english[key])
-            self.assertTrue(chinese[key])
-
+    def test_log_category_settings_and_localization_are_wired(self):
+        platform = REPOSITORY / "src/ProbablyStolen.DigitalStorage.Platform"
+        settings = (platform / "Composition/DigitalStorageSettings.cs").read_text(encoding="utf-8")
+        categories = (platform / "Composition/BuiltinLogCategories.cs").read_text(encoding="utf-8")
+        self.assertNotIn("debug_storage_diagnostics", settings)
+        self.assertIn("foreach (var category in _logCategories.Entries)", settings)
+        self.assertIn("config.DefineEnum(setting.VerbosityKey, category.DefaultVerbosity", settings)
+        self.assertIn("config.Define(setting.EnabledKey, category.DefaultEnabled", settings)
+        for category in ("storage", "transfer", "temp"):
+            self.assertIn(f'Register("log_{category}", "log_category_{category}"', categories)
+        keys = {"config_section_logs", "log_category_enabled"}
+        keys.update("log_category_" + kind for kind in ("storage", "transfer", "temp"))
+        keys.update("log_level_" + level for level in ("error", "warning", "info", "verbose"))
+        for path in self.localization_paths:
+            texts = read_localization(REPOSITORY / "packaging/resources" / path)
+            self.assertTrue(keys <= texts.keys(), path)
+            self.assertNotIn("debug_storage_diagnostics_name", texts)
 
     def test_missing_search_resources_are_rejected(self):
         text_resources = [entry["path"] for entry in self.resource_entries if Path(entry["path"]).suffix == ".txt"]

@@ -39,7 +39,7 @@ public sealed class DigitalStorageMod : IMod
     {
         var composition = _composition ?? throw new InvalidOperationException("The mod has not been initialized.");
         composition.Enable();
-        ModConfigWindowPatch.Attach();
+        ModConfigWindowPatch.Attach(composition.GroupLogSettings);
     }
 
     /// <summary>Disposes the owned startup composition.</summary>

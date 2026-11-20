@@ -1,6 +1,7 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
@@ -21,8 +22,8 @@ internal sealed partial class BasicCellHandler
     /// cells that must not be mounted: locked, unavailable, still decoding, or unreadable. An unreadable cell becomes
     /// unavailable; it is never treated as empty.
     /// </summary>
-    internal static BasicCellInventory? GetCellInventory(GameItem cell, Action<string> log, StorageDiagnostics? diagnostics = null,
-        Action? storedIdentityChanged = null)
+    internal static BasicCellInventory? GetCellInventory(GameItem cell, CellDiagnostics diagnostics,
+        Action? storedIdentityChanged = null, TransferOperation? operation = null)
     {
         if (!IsCell(cell) || SaveManager.IsDecoding || CellPages.Tabs(cell) == null) return null;
         var health = CellHealth.Get(cell);
@@ -31,21 +32,19 @@ internal sealed partial class BasicCellHandler
         {
             var state = health.Status is CellHealthStatus.ReadOnly or CellHealthStatus.Protected
                 ? CellWriteState.ExtractOnly : CellWriteState.Writable;
-            if (!CellPages.IsComplete(cell, out var failure))
-                throw new InvalidOperationException("The pages do not match the layout. " + failure);
+            if (!CellPages.IsComplete(cell))
+                throw new InvalidOperationException("The pages do not match the layout.");
             var view = CellPages.ReadCached(cell, state);
-            diagnostics?.VerboseOnce(cell, "cell_mounted", "Digital Storage: cell mounted.", () =>
-                NativeStorageDiagnosticContext.Cell(cell) + $" types={view.TypeCount} area={view.Usage.AreaUnits}");
-            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify, view, storedIdentityChanged));
+            diagnostics.Once(cell, LogVerbosity.Verbose, "cell_mounted", "Cell mounted.", () =>
+                CellLogFields.For(cell, LogField.Of("types", view.TypeCount), LogField.Of("area", view.Usage.AreaUnits)));
+            return new BasicCellInventory(view, new CellRootPort(cell, StorageService.Identify, view, storedIdentityChanged, operation));
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {
             var reason = error is ArgumentException ? CellUnavailableReason.InvalidTypeLimit : CellUnavailableReason.InvalidLayout;
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Unavailable, reason));
-            const string message = "Digital Storage: cell cannot be read and is now unavailable.";
-            if (diagnostics == null)
-                StorageDiagnostics.Report(log, "cell_read_failed", message, error, () => NativeStorageDiagnosticContext.Cell(cell));
-            else diagnostics.Failure(cell, "cell_read_failed", message, error, () => NativeStorageDiagnosticContext.Cell(cell));
+            diagnostics.Once(cell, LogVerbosity.Error, "cell_read_failed", "Cell cannot be read and is unavailable.",
+                () => CellLogFields.For(cell, LogField.Of("reason", reason.ToString())), error);
             return null;
         }
     }

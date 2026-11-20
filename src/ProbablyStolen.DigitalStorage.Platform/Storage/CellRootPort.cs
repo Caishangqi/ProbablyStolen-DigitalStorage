@@ -10,6 +10,8 @@ using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Platform.Identity;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -30,6 +32,7 @@ internal sealed class CellRootPort : ICellPagesPort
     private readonly Func<GameItem, ItemKey?> _identify;
     private readonly CellView? _view;
     private readonly Action? _storedIdentityChanged;
+    private readonly TransferOperation? _operation;
 
     /// <param name="cell">The cell whose pages this port moves roots on.</param>
     /// <param name="identify">Reads a root's type.</param>
@@ -37,13 +40,15 @@ internal sealed class CellRootPort : ICellPagesPort
     /// The view whose slot types locate roots of one type; without one, every root's type is read.
     /// </param>
     /// <param name="storedIdentityChanged">Marks the mounted views stale if native move callbacks change the key of a stored root.</param>
+    /// <param name="operation">Collects native move failures for the terminal operation, when present.</param>
     internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify, CellView? view = null,
-        Action? storedIdentityChanged = null)
+        Action? storedIdentityChanged = null, TransferOperation? operation = null)
     {
         _cell = cell ?? throw new ArgumentNullException(nameof(cell));
         _identify = identify ?? throw new ArgumentNullException(nameof(identify));
         _view = view;
         _storedIdentityChanged = storedIdentityChanged;
+        _operation = operation;
     }
 
     /// <inheritdoc />
@@ -71,7 +76,7 @@ internal sealed class CellRootPort : ICellPagesPort
 
         var source = item.parentInventory;
         var result = ItemMove.Run(NativeItemMove.Into(item, target, shape));
-        NativeItemMove.Report(result, item, "store");
+        NativeItemMove.Report(result, item, "store", _operation);
         if (result.Outcome == ItemMoveOutcome.Moved)
         {
             if (item.parentInventory != target || item.modifiedShape.minX != x || item.modifiedShape.minY != y)
@@ -161,9 +166,13 @@ internal sealed class CellRootSource : INativeRootSource
             : null;
         if (item == null || _types.ContainsKey(item) || !_confirmed.Add(item)) return item;
         // Its type came from the slot record: the one root about to move is read to confirm it.
-        if (root.Key.Equals(_identify(item))) return item;
+        var actual = StorageService.Identify(item, out var failure);
+        var nativeId = item.identifier;
+        var reason = StoredRootIdentityMismatch.Classify(root.Key, actual, nativeId, failure != NativeItemIdentityFailure.None);
+        if (reason == null) return item;
         CellInventoryCache.Forget(_cell);
-        throw new InvalidOperationException($"A stored root on page {root.Page} is no longer of its recorded type.");
+        var slot = _view == null ? -1 : StripLayout.SlotIndexAt(_view.Pages[root.Page].Geometry, root.X, root.Y);
+        throw new StoredRootIdentityMismatch(reason, root.Key.Identifier, nativeId, _cell.uniqueId, root.Page, slot);
     }
 
     private static bool Before(GameItem item, GameItem other) =>
@@ -259,6 +268,7 @@ internal sealed class InventoryRootSink : IRootSink
     private readonly bool _useNativeDragSearch;
     private readonly GameItemElement? _containerTarget;
     private readonly IReadOnlyList<GameInventory> _itemInventories;
+    private readonly TransferOperation? _operation;
 
     /// <summary>Creates a sink into a native inventory.</summary>
     /// <param name="destination">The native inventory that receives roots.</param>
@@ -270,9 +280,10 @@ internal sealed class InventoryRootSink : IRootSink
     /// <param name="useNativeDragSearch">Whether to use native orientation search within the resolved drop target.</param>
     /// <param name="containerTarget">The visible container icon authorizing insertion while its window is closed.</param>
     /// <param name="itemInventories">The supported inventories owned by <paramref name="containerTarget"/> before commit.</param>
+    /// <param name="operation">Collects native move failures for the terminal operation, when present.</param>
     internal InventoryRootSink(GameInventory destination, bool wholeRootOnly = false,
         InventoryDropTarget? pointPlacement = null, bool useNativeDragSearch = false,
-        GameItemElement? containerTarget = null, IReadOnlyList<GameInventory>? itemInventories = null)
+        GameItemElement? containerTarget = null, IReadOnlyList<GameInventory>? itemInventories = null, TransferOperation? operation = null)
     {
         _destination = destination ?? throw new ArgumentNullException(nameof(destination));
         _wholeRootOnly = wholeRootOnly;
@@ -280,6 +291,7 @@ internal sealed class InventoryRootSink : IRootSink
         _useNativeDragSearch = useNativeDragSearch;
         _containerTarget = containerTarget;
         _itemInventories = itemInventories ?? Array.Empty<GameInventory>();
+        _operation = operation;
     }
 
     /// <summary>Whether a slot that can take <paramref name="transferable"/> units may receive a root of <paramref name="units"/>.</summary>
@@ -366,7 +378,7 @@ internal sealed class InventoryRootSink : IRootSink
         finally
         {
             var result = ItemMove.Recover(NativeItemMove.ReturnTo(item, page, original), error);
-            NativeItemMove.Report(result, item, "extract");
+            NativeItemMove.Report(result, item, "extract", _operation);
         }
 
         var targetOwnsAcceptedItem = moved > 0 && OwnsTarget(slot, item);

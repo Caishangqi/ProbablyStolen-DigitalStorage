@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -319,9 +320,9 @@ internal static class CellPages
     /// <summary>
     /// Removes empty pages after items left the cell; does nothing while compaction is blocked. Failures never
     /// propagate: they are recorded in <see cref="CellHealth"/> (blocked after a rollback, unavailable when the
-    /// rollback failed too) and logged with the original exception.
+    /// rollback failed too) and logged with the exception type.
     /// </summary>
-    internal static void Compact(GameItem cell)
+    internal static void Compact(GameItem cell, CellDiagnostics diagnostics)
     {
         var swap = SwapOf(cell);
         var status = CellHealth.Get(cell).Status;
@@ -337,8 +338,8 @@ internal static class CellPages
         }
         catch (Exception error)
         {
-            StorageDiagnostics.Report(UnityEngine.Debug.LogWarning, "cell_compaction_failed",
-                "Digital Storage: empty page removal failed.", error, () => NativeStorageDiagnosticContext.Cell(cell));
+            diagnostics.Once(cell, LogVerbosity.Warning, "cell_compaction_failed", "Empty page removal failed.",
+                () => CellLogFields.For(cell), error);
         }
     }
 

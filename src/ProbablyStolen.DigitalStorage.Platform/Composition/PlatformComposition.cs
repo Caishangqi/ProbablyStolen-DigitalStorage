@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Client.Initialization;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
@@ -154,25 +155,35 @@ public sealed class PlatformComposition : IDisposable
         var componentDefinition = new StorageComponent();
         var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
         var inventory = new DriveCellInventory(recipe);
-        var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text);
-        var diagnostics = new StorageDiagnostics(message => log.Error(message), networkPowerSettings.GetStorageDiagnostics,
-            message => log.Log(message));
+        var categories = new BuiltinLogCategories();
+        var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text, categories.Registry);
+        var diagnosticLogger = new DiagnosticLogger(categories.Registry, networkPowerSettings.GetLogSettings,
+            (level, message) =>
+            {
+                if (level == LogVerbosity.Error) log.Error(message);
+                else if (level == LogVerbosity.Warning) log.Warning(message);
+                else log.Log(message);
+            });
+        var diagnostics = new StorageDiagnostics(message => log.Error(message), () => false);
+        var cellDiagnostics = new CellDiagnostics(diagnosticLogger, categories.Storage);
         var search = new TerminalSearchComposition(identity.Id, text,
             networkPowerSettings.GetSearchConfiguration(null, message => log.Error(message)),
             message => log.Error(message), registerSearchAddons);
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
             message => log.Error(message),
             drive => NativeCellResolver.Get(drive));
-        var cellHealth = new CellHealth(text, log);
-        var migration = new LegacyMigration(cellHealth, log);
-        var recovery = new CellRecovery(cellHealth, diagnostics, log);
-        var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message), cell =>
+        var cellHealth = new CellHealth(text, cellDiagnostics);
+        var migration = new LegacyMigration(cellHealth, cellDiagnostics);
+        var recovery = new CellRecovery(cellHealth, cellDiagnostics);
+        var transferDiagnostics = new TransferDiagnostics(diagnosticLogger, categories.Transfer);
+        var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message),
+            cell =>
         {
             // Migration failures during play need the same warning as failures during loading.
             var migrated = migration.TryMigrate(cell);
             if (!migrated) cellHealth.WarnDoNotSave(1, "failed to migrate");
             return migrated;
-        }, diagnostics);
+        }, cellDiagnostics);
         var eventBus = new StorageEventBus(message => log.Error(message));
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
@@ -204,7 +215,7 @@ public sealed class PlatformComposition : IDisposable
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,
-            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons);
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics);
         var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
@@ -225,6 +236,13 @@ public sealed class PlatformComposition : IDisposable
                 () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
+    }
+
+    /// <summary>Groups this mod's logging controls in an already constructed native settings window.</summary>
+    public void GroupLogSettings(LoadedMod? mod, CustomUIWindow? window)
+    {
+        if (_isEnabled && mod?.Manifest?.ID == "digital_storage" && window is { IsAlive: true })
+            _settings.GroupLogSettings(window);
     }
 
     /// <summary>Records the enabled state once for this composition.</summary>

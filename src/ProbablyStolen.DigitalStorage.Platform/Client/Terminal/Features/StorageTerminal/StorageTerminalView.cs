@@ -12,6 +12,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using GestureButton = ProbablyStolen.DigitalStorage.Client.Interaction.Drag.PointerButton;
@@ -195,7 +196,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _dragController = new TerminalDragController(() => IsDragSessionCurrent(),
             CurrentDragPage, () => _host.Pipeline.Revision,
             (shown, current, ids, revision, amount) => _menu.CreateDragBatch(shown, current, ids, revision, amount),
-            ResolveDragTarget, _services.ExtractBatch, CompleteDragBatch, HighlightGroups,
+            ResolveDragTarget, ExtractDragBatch, CompleteDragBatch, HighlightGroups,
             ShowSelectionBand, ShowDragGhost, HideDragGhost, SetDragTargetFeedback, IsDragPointCurrent);
         _dropInput.SetGestureHandler(HandleDragGesture, () => _dragController?.AllowsPrimaryClick == true);
         // On the root as well, so the per-frame session check keeps running while the view is hidden.
@@ -418,19 +419,33 @@ internal sealed class StorageTerminalView : ITerminalView
         return false;
     }
 
+    private TerminalExtractionResult ExtractDragBatch(TerminalDragBatch batch, InventoryDropTarget target)
+    {
+        var operation = _services.Transfers.Begin("drag", batch.RequestedPieces);
+        try
+        {
+            var result = _services.ExtractBatch(batch, target, operation);
+            _services.Transfers.Extracted(operation, result);
+            return result;
+        }
+        catch (Exception error)
+        {
+            operation.Record(error);
+            _services.Transfers.Failed(operation, extraction: true);
+            throw;
+        }
+    }
+
     private void CompleteDragBatch(TerminalExtractionResult? result, Exception? error)
     {
         if (!IsDragSessionCurrent()) return;
         if (error != null)
         {
-            Diagnostics?.Record("extract_batch_failed", $"error={error.GetType().Name}");
             _messageKey = "terminal_storage_no_items";
             _messageAmount = 0;
         }
         else if (result != null)
         {
-            Diagnostics?.Record("extract_batch_result",
-                $"status={result.Status} requested={result.RequestedAmount} extracted={result.ExtractedAmount}");
             _messageKey = result.MessageKey;
             _messageAmount = result.ExtractedAmount;
         }
@@ -689,9 +704,8 @@ internal sealed class StorageTerminalView : ITerminalView
             return;
         }
 
-        var result = _menu.HandleInsertion(() => _services.StoreSelection(items,
-            code => Diagnostics?.Record("store_source", $"result={code}")));
-        Diagnostics?.Record("store_result", $"status={result.Status} sources={items.Count} stored={result.StoredAmount}");
+        var operation = _services.Transfers.Begin("store_selection", items.Count);
+        var result = Store(operation, () => _menu.HandleInsertion(() => _services.StoreSelection(items, operation)));
         _messageKey = result.MessageKey;
         _messageAmount = result.StoredAmount;
         Refresh(ReadSnapshot(), preserveView: true);
@@ -700,12 +714,27 @@ internal sealed class StorageTerminalView : ITerminalView
     private void StoreSingle(GameItem item, int amount)
     {
         if (!_host.IsCurrentSession()) return;
-        var result = _menu.HandleInsertion(() => _services.StoreSingle(item, amount,
-            code => Diagnostics?.Record("store_source", $"result={code}")));
-        Diagnostics?.Record("store_result", $"status={result.Status} sources=1 requested={amount} stored={result.StoredAmount}");
+        var operation = _services.Transfers.Begin("store_single", 1);
+        var result = Store(operation, () => _menu.HandleInsertion(() => _services.StoreSingle(item, amount, operation)));
         _messageKey = result.MessageKey;
         _messageAmount = result.StoredAmount;
         Refresh(ReadSnapshot(), preserveView: true);
+    }
+
+    private TerminalInsertionResult Store(TransferOperation operation, Func<TerminalInsertionResult> store)
+    {
+        try
+        {
+            var result = store();
+            _services.Transfers.Stored(operation, result);
+            return result;
+        }
+        catch (Exception error)
+        {
+            operation.Record(error);
+            _services.Transfers.Failed(operation, extraction: false);
+            throw;
+        }
     }
 
     private TerminalInventorySnapshot ReadSnapshot()
@@ -865,9 +894,20 @@ internal sealed class StorageTerminalView : ITerminalView
         if (group == null || group.Total <= 0) return;
         var pieces = TerminalClickAmount.For(click, group.Total);
         RecordIdentities(group);
-        var result = _menu.HandleGroupInteraction(group, pieces, _services.Extract);
-        Diagnostics?.Record("extract_result",
-            $"click={click} stored={group.Total} members={group.Members.Count} requested={pieces} moved={result.ExtractedAmount} status={result.Status}");
+        var mode = click == TerminalClick.Half ? "half" : click == TerminalClick.All ? "all" : "single";
+        var operation = _services.Transfers.Begin(mode, pieces);
+        TerminalExtractionResult result;
+        try
+        {
+            result = _menu.HandleGroupInteraction(group, pieces, (entry, count) => _services.Extract(entry, count, operation));
+        }
+        catch (Exception error)
+        {
+            operation.Record(error);
+            _services.Transfers.Failed(operation, extraction: true);
+            throw;
+        }
+        _services.Transfers.Extracted(operation, result);
         _messageKey = result.MessageKey;
         _messageAmount = result.ExtractedAmount;
         Refresh(ReadSnapshot(), preserveView: true);

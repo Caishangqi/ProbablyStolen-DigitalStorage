@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
@@ -16,16 +17,17 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Storag
 internal sealed class StorageTerminalServices
 {
     internal StorageTerminalServices(ModText text, ITerminalViewSettings settings,
-        Func<TerminalInventorySnapshot> readSnapshot, Func<TerminalEntry, long, TerminalExtractionResult> extract,
-        Func<TerminalDragBatch, InventoryDropTarget, TerminalExtractionResult> extractBatch,
+        Func<TerminalInventorySnapshot> readSnapshot, Func<TerminalEntry, long, TransferOperation, TerminalExtractionResult> extract,
+        Func<TerminalDragBatch, InventoryDropTarget, TransferOperation, TerminalExtractionResult> extractBatch,
         IReadOnlyList<IEntryAttributeCapture> attributeCaptures,
-        Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> storeSelection,
-        Func<GameItem, int, Action<string>, TerminalInsertionResult> storeSingle,
+        Func<IReadOnlyList<GameItem>, TransferOperation, TerminalInsertionResult> storeSelection,
+        Func<GameItem, int, TransferOperation, TerminalInsertionResult> storeSingle,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
         Func<ItemKey, GameItem?> findPreviewSample, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
         Action<string> writeDiagnostic,
-        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search)
+        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers)
     {
+        Transfers = transfers;
         Text = text ?? throw new ArgumentNullException(nameof(text));
         Settings = settings ?? throw new ArgumentNullException(nameof(settings));
         ReadSnapshot = readSnapshot ?? throw new ArgumentNullException(nameof(readSnapshot));
@@ -44,17 +46,18 @@ internal sealed class StorageTerminalServices
         Search = search ?? throw new ArgumentNullException(nameof(search));
     }
 
+    internal TransferDiagnostics Transfers { get; }
     internal ModText Text { get; }
     internal ITerminalViewSettings Settings { get; }
     internal Func<TerminalInventorySnapshot> ReadSnapshot { get; }
     /// <summary>Takes up to the given pieces of one entry into the player's inventory.</summary>
-    internal Func<TerminalEntry, long, TerminalExtractionResult> Extract { get; }
+    internal Func<TerminalEntry, long, TransferOperation, TerminalExtractionResult> Extract { get; }
     /// <summary>Moves a validated display batch to its target after release-time checks.</summary>
-    internal Func<TerminalDragBatch, InventoryDropTarget, TerminalExtractionResult> ExtractBatch { get; }
+    internal Func<TerminalDragBatch, InventoryDropTarget, TransferOperation, TerminalExtractionResult> ExtractBatch { get; }
     /// <summary>Reads named attributes from samples for an active storage projector.</summary>
     internal IReadOnlyList<IEntryAttributeCapture> AttributeCaptures { get; }
-    internal Func<IReadOnlyList<GameItem>, Action<string>, TerminalInsertionResult> StoreSelection { get; }
-    internal Func<GameItem, int, Action<string>, TerminalInsertionResult> StoreSingle { get; }
+    internal Func<IReadOnlyList<GameItem>, TransferOperation, TerminalInsertionResult> StoreSelection { get; }
+    internal Func<GameItem, int, TransferOperation, TerminalInsertionResult> StoreSingle { get; }
     /// <summary>
     /// Gets why each dragged item could not be stored as a text key, or null when it could, reading the network once.
     /// The amount is the single drag's quantity; null for a group drag, which moves whole stacks.

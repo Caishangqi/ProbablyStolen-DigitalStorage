@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 
@@ -18,12 +19,12 @@ internal sealed class CellHealth
     private static readonly Dictionary<GameItem, CellHealthState> States = new();
     private static CellHealth? _current;
     private readonly ModText _text;
-    private readonly ModLog _log;
+    private readonly CellDiagnostics _diagnostics;
 
-    internal CellHealth(ModText text, ModLog log)
+    internal CellHealth(ModText text, CellDiagnostics diagnostics)
     {
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _diagnostics = diagnostics;
         _current = this;
     }
 
@@ -61,19 +62,24 @@ internal sealed class CellHealth
             if (CellPages.Tabs(item) == null) continue;
             var state = Assess(item);
             Set(item, state);
-            if (state.RisksItemLoss) atRisk++;
+            if (state.RisksItemLoss)
+            {
+                atRisk++;
+                _diagnostics.Once(item, LogVerbosity.Error, "cell_health_unavailable", "A storage cell may lose items if saved.",
+                    () => CellLogFields.For(item, LogField.Of("reason", state.Reason.ToString())));
+            }
         }
 
         if (CellPageRestore.TakeLastFailure() is { } error)
-            StorageDiagnostics.Report(message => _log.Error(message), "cell_page_restore_failed",
-                "Digital Storage: page restore failed.", error);
+            _diagnostics.Write(LogVerbosity.Error, "cell_page_restore_failed", "Page restore failed.", error: error);
         if (atRisk > 0) WarnDoNotSave(atRisk, "lost pages while loading");
     }
 
     /// <summary>Tells the player not to save; used only when saving now could lose items.</summary>
     internal void WarnDoNotSave(int cells, string cause)
     {
-        _log.Error($"Digital Storage: {cells} storage cell(s) {cause}. Do not save.");
+        _diagnostics.Write(LogVerbosity.Error, "storage_save_risk", "Do not save while storage cells are at risk.",
+            () => new[] { LogField.Of("cells", cells), LogField.Of("reason", cause) });
         try
         {
             // The window id is shared, so a second warning replaces the first instead of stacking.
@@ -84,8 +90,7 @@ internal sealed class CellHealth
         }
         catch (Exception error)
         {
-            StorageDiagnostics.Report(message => _log.Error(message), "restore_warning_failed",
-                "Digital Storage: the do-not-save window could not be shown.", error);
+            _diagnostics.Write(LogVerbosity.Error, "restore_warning_failed", "The save risk warning could not be shown.", error: error);
         }
     }
 

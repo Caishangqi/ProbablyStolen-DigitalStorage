@@ -10,6 +10,7 @@ using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTer
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -26,6 +27,7 @@ internal sealed class TerminalItem
     /// <summary>Universal modules as on vanilla machines, plus modules made for the terminal.</summary>
     private static readonly string[] ModuleTypes = { "MODULE_TYPE_UNIVERSAL", StackingModule.TerminalModuleType };
     private readonly ButtonIcons _icons;
+    private readonly TransferDiagnostics _transfers;
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
@@ -43,8 +45,9 @@ internal sealed class TerminalItem
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, ModLog log,
         NativeNetworkEvents events,
         TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
-        ButtonIcons icons)
+        ButtonIcons icons, TransferDiagnostics transfers)
     {
+        _transfers = transfers;
         _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -70,15 +73,15 @@ internal sealed class TerminalItem
             _windows.Attach(item, moduleTypes: ModuleTypes);
             var storage = new StorageTerminalServices(_text, _view,
                 () => _networkPower.ReadTerminalInventory(item),
-                (entry, pieces) => _networkPower.ExtractPiecesToPlayer(item, entry.Key, pieces),
-                (batch, target) => _networkPower.ExtractBatch(item, batch, target),
+                (entry, pieces, operation) => _networkPower.ExtractPiecesToPlayer(item, entry.Key, pieces, operation),
+                (batch, target, operation) => _networkPower.ExtractBatch(item, batch, target, operation),
                 TerminalFeatures.AttributeCaptures,
                 (items, diagnostic) => _networkPower.StoreSelected(item, items, diagnostic),
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
                 (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
                 key => _networkPower.Storage.FindPreviewSample(item, key),
-                _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search);
+                _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 (source, amount) => _networkPower.StoreSingle(item, source, amount), _text, message => _log.Log(message)).Attach();

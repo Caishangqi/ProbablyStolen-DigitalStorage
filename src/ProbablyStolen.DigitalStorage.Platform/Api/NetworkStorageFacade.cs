@@ -133,7 +133,7 @@ internal sealed class NetworkStorageFacade : IStorage
             return StorageResult.None(CellHealth.Get(cell).IsMountable ? StorageStatus.NotStored : StorageStatus.Unavailable);
         }
 
-        var inventory = BasicCellHandler.GetCellInventory(cell, _log);
+        var inventory = _storage.ReadCell(cell);
         if (inventory == null || page < 0 || page >= inventory.View.Pages.Count ||
             inventory.View.Pages[page].IsProtected) return StorageResult.None(StorageStatus.NotStored);
 

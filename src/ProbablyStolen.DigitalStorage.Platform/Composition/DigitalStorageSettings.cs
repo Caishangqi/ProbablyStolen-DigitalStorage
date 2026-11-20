@@ -9,6 +9,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
@@ -39,13 +40,14 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ModText _text;
     private readonly ModConfig _config;
     private readonly string _modId;
+    private readonly LogCategories _logCategories;
     private readonly Dictionary<string, IntegrationSwitchState> _integrationStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (LogSetting Setting, ConfigEntry<LogVerbosity> Verbosity, ConfigEntry<bool> Enabled)> _logSettings = new(StringComparer.Ordinal);
     private readonly List<KeyValuePair<ConfigEntry, string>> _sections = new();
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
-    private readonly ConfigEntry<bool> _storageDiagnostics;
     private readonly ConfigEntry<bool> _itemIdentityLog;
     private readonly ConfigEntry<bool> _terminalTestView;
     private readonly ConfigEntry<bool> _showCellPages;
@@ -70,7 +72,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<bool> _terminalKeepOpen;
     private bool _invalidPinyinModeLogged;
 
-    internal DigitalStorageSettings(string modId, ModText text)
+    internal DigitalStorageSettings(string modId, ModText text, LogCategories logCategories)
     {
         if (string.IsNullOrWhiteSpace(modId))
         {
@@ -83,6 +85,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         }
 
         _text = text;
+        _logCategories = logCategories ?? throw new ArgumentNullException(nameof(logCategories));
         _modId = modId;
         var config = ModHelper.GetConfig(modId);
         _config = config;
@@ -102,8 +105,17 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
         _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
             () => text.Get("terminal_diagnostics_name"), tooltip: () => text.Get("terminal_diagnostics_desc"));
-        _storageDiagnostics = config.Define("debug_storage_diagnostics", false, debug,
-            () => text.Get("debug_storage_diagnostics_name"), tooltip: () => text.Get("debug_storage_diagnostics_desc"));
+        foreach (var category in _logCategories.Entries)
+        {
+            var setting = new LogSetting(category);
+            var verbosity = config.DefineEnum(setting.VerbosityKey, category.DefaultVerbosity, LogSetting.Section,
+                () => setting.Label(Translate));
+            var enabled = config.Define(setting.EnabledKey, category.DefaultEnabled, LogSetting.Section,
+                () => LogSetting.Localized(Translate, LogSetting.EnabledLabel, "Enabled"));
+            _logSettings.Add(category.Id, (setting, verbosity, enabled));
+            _sections.Add(new KeyValuePair<ConfigEntry, string>(verbosity, LogSetting.Section));
+            _sections.Add(new KeyValuePair<ConfigEntry, string>(enabled, LogSetting.Section));
+        }
         // Off by default and separate from the diagnostics log: it writes full item data, tags and feature values
         // included, which ordinary logs never carry.
         _itemIdentityLog = config.Define("debug_item_identity_log", false, debug,
@@ -140,7 +152,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
-            (_showCellPages, debug), (_terminalDiagnostics, debug), (_storageDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
+            (_showCellPages, debug), (_terminalDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
@@ -352,8 +364,25 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
     internal bool GetTerminalDiagnostics() => _terminalDiagnostics.Value;
 
-    /// <summary>Gets whether bounded storage structure diagnostics are enabled.</summary>
-    internal bool GetStorageDiagnostics() => _storageDiagnostics.Value;
+    internal LogCategorySettings GetLogSettings(LogCategory category)
+    {
+        if (category == null || !_logSettings.TryGetValue(category.Id, out var settings))
+            return new LogCategorySettings(category?.DefaultEnabled == true, category?.DefaultVerbosity ?? LogVerbosity.Info);
+        return new LogCategorySettings(settings.Enabled.Value, settings.Setting.Normalize(settings.Verbosity.Value));
+    }
+
+    internal void GroupLogSettings(CustomUIWindow window)
+    {
+        foreach (var category in _logCategories.Entries)
+        {
+            var (setting, verbosity, enabled) = _logSettings[category.Id];
+            try { LogSettingsRows.Group(window, setting, verbosity, enabled, Translate); }
+            catch { }
+        }
+    }
+
+    private string Translate(string key) => _text.Get(key);
+
 
     /// <summary>Gets whether clicked terminal slots write their full item identity and stacking splits to the log.</summary>
     internal bool GetItemIdentityLog() => _itemIdentityLog.Value;
