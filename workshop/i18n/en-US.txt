@@ -4,6 +4,11 @@ Put storage cells in drives, then use a terminal to search, store, and retrieve 
 
 The digital storage and network terminal design is inspired by [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] and redesigned around Probably Stolen's items, machines, and inventory rules.
 
+[h2]Getting started with Wild[/h2]
+Open the Digital Storage tab in Wild's network and unlock Digital Storage Basics. You'll get a controller with a battery, a drive, a terminal, and an empty 1k storage cell. The Data Scientist visits on the same day as the retired farmer to sell storage hardware. All trades with the Data Scientist are purchases.
+
+Advanced Data Management gives you a Cell Workbench, an Equal Distribution Module, a Stack Display Module, and a Type Limit Module. Once you have the upgrade, the Data Scientist rotates advanced stock weekly, and Dr. Jackson always brings storage modules and high-capacity storage components.
+
 [h2]Machines and setup[/h2]
 [list]
 [*]Controller: put a battery in its power slot to power connected machines. Each network needs exactly one controller.
@@ -34,8 +39,6 @@ Items go onto internal pages by size, and empty pages are removed automatically.
 
 Hover over a cell to see its capacity, partition, and modules. Before removing the component, empty the cell and remove all modules and rules. The housing returns to one empty page, keeping its partition mode and expansion level.
 
-Merchants can stock components and assembled cells. Higher tiers are rarer.
-
 [h2]Cell modules[/h2]
 Install and remove cell modules in the workbench's Modules panel. They occupy 2x2 squares and cannot be installed in a drive or terminal's native module bay.
 [list]
@@ -45,8 +48,6 @@ Install and remove cell modules in the workbench's Modules panel. They occupy 2x
 If removing a type limit module would exceed the remaining type or byte capacity, take some stored items out first.
 
 Native Module Bay Expansion Kits work on cells: 1k and 4k allow no expansion, 16k and 64k allow one level, and 256k allows two. Each level adds 100 to the item's value. An expanded housing cannot accept a component whose expansion limit is lower.
-
-Dr. Jackson and the Upper-Level Engineer may sell workbenches and both types of cell module. Jackson sells only Common Type Limit Modules; the engineer sells all three qualities. Prices depend on quality and bonuses.
 
 [h2]Partition rules[/h2]
 Partitions can only be edited at the workbench. Insert a cell, click Configure Partition, and drag a real inventory item onto the rule grid to create a rule using it as a sample. The item is not moved or consumed.
