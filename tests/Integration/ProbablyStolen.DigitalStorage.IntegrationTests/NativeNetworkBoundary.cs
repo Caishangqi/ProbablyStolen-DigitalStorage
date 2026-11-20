@@ -87,6 +87,8 @@ public class GameItem
     }
 
     internal string identifier;
+    public string shortDescription { get; set; } = string.Empty;
+    public string flavorText { get; set; } = string.Empty;
     internal GameItemState? state;
     internal TagSystem modifiedState = new();
     internal GameInventory? parentInventory;

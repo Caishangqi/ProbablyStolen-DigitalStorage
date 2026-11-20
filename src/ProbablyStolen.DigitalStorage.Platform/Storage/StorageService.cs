@@ -159,6 +159,15 @@ internal sealed class StorageService
     /// <summary>Drops the kept entry texts, so the next read builds them again in the current language.</summary>
     internal void ForgetEntryTexts() => _entryTexts = new Dictionary<ItemKey, TerminalEntry>();
 
+    /// <summary>Discards the disk and display entry that describe a changed stored item.</summary>
+    internal bool ForgetStoredLore(GameItem root, ItemKey oldKey)
+    {
+        if (CellPages.CellOfStored(root, out _) is not { } cell) return false;
+        CellInventoryCache.Forget(cell);
+        _entryTexts.Remove(oldKey);
+        return true;
+    }
+
     /// <summary>
     /// Finds an actual root of a type in the terminal's storage, used for native tooltips and item pictures. The root
     /// remains in its locked page; this method never creates a display clone. The last read's root is reused while it

@@ -980,7 +980,7 @@ internal sealed class StorageTerminalView : ITerminalView
 
         // Rebuild every frame like ItemTooltipHandler: GetTooltip fires ModHook.OnCreateTooltip*, and mods that add
         // side panels (for example a contents preview) keep them only while the tooltip keeps being created.
-        overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f), _hoverSample.GetTooltip(),
+        overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f), _services.RenderStoredTooltip(_hoverSample, entry.Key),
             NativeTooltipWidth(_hoverSample));
         _showingTooltip = true;
         ShowPanels(PanelsFor(slotIndex));

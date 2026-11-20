@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
+using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
@@ -28,6 +31,7 @@ internal sealed class TerminalItem
     private static readonly string[] ModuleTypes = { "MODULE_TYPE_UNIVERSAL", StackingModule.TerminalModuleType };
     private readonly ButtonIcons _icons;
     private readonly TransferDiagnostics _transfers;
+    private readonly CompatibilityDiagnostics _compatibility;
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
@@ -45,9 +49,10 @@ internal sealed class TerminalItem
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, ModLog log,
         NativeNetworkEvents events,
         TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
-        ButtonIcons icons, TransferDiagnostics transfers)
+        ButtonIcons icons, TransferDiagnostics transfers, CompatibilityDiagnostics compatibility)
     {
         _transfers = transfers;
+        _compatibility = compatibility;
         _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -61,6 +66,22 @@ internal sealed class TerminalItem
         _diagnosticsEnabled = diagnosticsEnabled;
         _identityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
         _log = log;
+    }
+
+    private RichText RenderStoredTooltip(GameItemElement root, ItemKey key)
+    {
+        if (root.parentInventory is not GameGridInventory { overrideLockInsert: true }) return root.GetTooltip();
+        return TerminalTooltipScope.Render(root, root.GetTooltip, () =>
+        {
+            try
+            {
+                if (_networkPower.Storage.ForgetStoredLore(root, key)) _events.Post(NetworkChangeReason.ContentsChanged);
+            }
+            catch (Exception error)
+            {
+                _compatibility.ReportLoreFailure(error.GetType().Name);
+            }
+        });
     }
 
     internal GameItem Create()
@@ -80,7 +101,7 @@ internal sealed class TerminalItem
                 (source, amount, diagnostic) => _networkPower.StoreSingle(item, source, amount, diagnostic),
                 (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
-                key => _networkPower.Storage.FindPreviewSample(item, key),
+                key => _networkPower.Storage.FindPreviewSample(item, key), RenderStoredTooltip,
                 _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),

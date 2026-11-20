@@ -166,6 +166,7 @@ debug_show_cell_pages_desc,调试用. 开启后双击存储元件可以看到其
 config_section_logs,分类日志
 log_category_storage,存储日志
 log_category_transfer,存取日志
+log_category_comp,兼容日志
 log_category_temp,临时日志
 log_category_enabled,启用
 log_level_error,错误
@@ -322,12 +323,18 @@ cell_storage_type_modules,种类上限模块: {0} 个
 cell_storage_equal_distribution,均分
 cell_storage_expansion,模块舱扩展 {0}/{1}
 integration_customerstocking_section,顾客上货助手
-integration_state_incompatible,未启用: 此版本的联动模组不兼容，原因见游戏日志。
+integration_state_incompatible,未启用。此版本的联动模组不兼容，原因见兼容日志 LogComp。
 integration_state_not_running,未启用: 联动模组未运行。
-integration_state_failed,未启用: 联动初始化失败，详细信息见游戏日志。
+integration_state_failed,未启用。联动初始化失败，原因见兼容日志 LogComp。
 integration_state_failed_label,失败
 integration_state_not_running_label,不可用
 integration_state_unverified,此版本的联动模组尚未与数字存储一起测试。此选项默认关闭，可手动开启尝试。
+integration_state_active,已启用。
+integration_state_active_unverified,已启用。当前版本待游戏内验证。
+integration_state_disabled,已关闭。
+integration_brewing_section,酿酒拓展
+integration_brewing_label,保护终端中的酿酒物品
+integration_brewing_tooltip,保留原生提示框和酿酒拓展的排版。提示框生成后恢复磁盘内物品的描述。
 integration_customerstocking_label,从数字网络取货
 integration_customerstocking_tooltip,一键上货时，也可从上货助手扫描范围内的在线数字网络取货，范围包括店铺、打烊后区域和飞船。离线网络和散放的元件不会用于取货。取出和放回都经过网络，与终端存取相同。驱动器属于机器，上货助手开启「跳过机器内物品」时，也会跳过网络中的货物。
 terminal_dock_title,功能

@@ -18,6 +18,9 @@ internal sealed class IntegrationHost : IDisposable
     internal const string StatusNotRunning = "integration_state_not_running";
     internal const string StatusFaulted = "integration_state_failed";
     internal const string StatusUnverified = "integration_state_unverified";
+    internal const string StatusActive = "integration_state_active";
+    internal const string StatusActiveUnverified = "integration_state_active_unverified";
+    internal const string StatusDisabled = "integration_state_disabled";
     internal const string StatusFailedLabel = "integration_state_failed_label";
     internal const string StatusNotRunningLabel = "integration_state_not_running_label";
 
@@ -26,8 +29,7 @@ internal sealed class IntegrationHost : IDisposable
     private readonly IIntegrationPatcher _patcher;
     private readonly IIntegrationSettings _settings;
     private readonly IDigitalStorageRuntime _runtime;
-    private readonly Action<string> _log;
-    private readonly HashSet<(string, IntegrationState)> _logged = new();
+    private readonly Action<IntegrationNotice> _log;
     private bool _initialized;
     private bool _enabled;
     private bool _registered;
@@ -35,7 +37,7 @@ internal sealed class IntegrationHost : IDisposable
     private bool _disposed;
 
     internal IntegrationHost(IEnumerable<IIntegrationPlugin> plugins, IIntegrationEnvironment environment,
-        IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime, Action<string> log)
+        IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime, Action<IntegrationNotice> log)
     {
         _entries = (plugins ?? throw new ArgumentNullException(nameof(plugins))).Select(plugin => new Entry(plugin)).ToList();
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -53,7 +55,7 @@ internal sealed class IntegrationHost : IDisposable
     /// The caller must pass <c>typeof(T).Assembly.GetTypes()</c> of the plugin assembly literally so the mod scanner
     /// recognizes reflection on the mod's own types.
     /// </remarks>
-    internal static IReadOnlyList<IIntegrationPlugin> Discover(IEnumerable<Type> types, Action<string> log)
+    internal static IReadOnlyList<IIntegrationPlugin> Discover(IEnumerable<Type> types, Action<IntegrationNotice> log)
     {
         if (types == null) throw new ArgumentNullException(nameof(types));
         if (log == null) throw new ArgumentNullException(nameof(log));
@@ -69,7 +71,8 @@ internal sealed class IntegrationHost : IDisposable
             }
             catch (Exception error)
             {
-                log($"Digital Storage: integration plugin {type.FullName} was skipped ({Describe(error)}).");
+                log(new IntegrationNotice(IntegrationSeverity.Error, type.FullName ?? type.Name, string.Empty,
+                    string.Empty, IntegrationState.Faulted, false, "discovery_failed", error.GetType().Name));
             }
         }
 
@@ -125,7 +128,7 @@ internal sealed class IntegrationHost : IDisposable
         foreach (var entry in _entries.Where(entry => entry.State == IntegrationState.Active))
         {
             if (entry.RuntimeAvailable) RuntimeUnavailable(entry);
-            RuntimeAvailable(entry);
+            if (entry.State == IntegrationState.Active) RuntimeAvailable(entry);
         }
 
         _gameLoaded = true;
@@ -147,7 +150,7 @@ internal sealed class IntegrationHost : IDisposable
             else if (!on && entry.State == IntegrationState.Active)
             {
                 Deactivate(entry, IntegrationState.Disabled);
-                Report(entry, "disabled in the settings");
+                if (entry.State == IntegrationState.Disabled) Report(entry, "disabled_in_settings");
             }
         }
     }
@@ -159,7 +162,11 @@ internal sealed class IntegrationHost : IDisposable
         _disposed = true;
         foreach (var entry in _entries)
         {
-            if (entry.State == IntegrationState.Active) Deactivate(entry, IntegrationState.Disabled);
+            if (entry.State == IntegrationState.Active)
+            {
+                Deactivate(entry, IntegrationState.Disabled);
+                if (entry.State == IntegrationState.Disabled) Report(entry, "host_stopped");
+            }
             else if (entry.Applied.Count > 0) RemovePatches(entry);
         }
     }
@@ -175,9 +182,15 @@ internal sealed class IntegrationHost : IDisposable
             {
                 entry.Version = _environment.ModVersion(entry.ModId) ?? string.Empty;
                 entry.Verified = entry.Plugin.VerifiedVersions?.Contains(entry.Version) == true;
-                entry.DefaultEnabled = entry.Verified || (entry.Plugin is IntegrationPlugin plugin &&
-                    _environment.IsModRunning(entry.ModId) && plugin.CanEnableByDefault());
-                var (enabled, config, setUiState) = _settings.Define(entry.Plugin, entry.Version, entry.Verified,
+                var policy = entry.Plugin as IIntegrationVersionPolicy;
+                entry.HasVersionPolicy = policy != null;
+                entry.Supported = policy?.SupportsVersion(entry.Version) ?? true;
+                entry.DefaultEnabled = policy != null
+                    ? entry.Supported && entry.Plugin.VerifiedVersions?.Count > 0
+                    : entry.Verified || (entry.Plugin is IntegrationPlugin plugin &&
+                        _environment.IsModRunning(entry.ModId) && plugin.CanEnableByDefault());
+                var sharedSwitch = policy != null ? entry.Supported : entry.Verified;
+                var (enabled, config, setUiState) = _settings.Define(entry.Plugin, entry.Version, sharedSwitch,
                     entry.DefaultEnabled, () => StatusOf(entry));
                 entry.Switch = enabled;
                 entry.SetUiState = setUiState;
@@ -189,9 +202,17 @@ internal sealed class IntegrationHost : IDisposable
                 continue;
             }
 
+            if (!entry.Supported)
+            {
+                entry.State = IntegrationState.Incompatible;
+                Report(entry, "unsupported_version", IntegrationSeverity.Warning);
+                continue;
+            }
+
+            if (entry.HasVersionPolicy && !CheckRunning(entry)) continue;
             if (!ReadSwitch(entry))
             {
-                Report(entry, entry.DefaultEnabled ? "disabled in the settings" : "disabled: version not verified");
+                Report(entry, entry.HasVersionPolicy || entry.DefaultEnabled ? "disabled_in_settings" : "unverified_version");
                 continue;
             }
 
@@ -199,22 +220,30 @@ internal sealed class IntegrationHost : IDisposable
         }
     }
 
+    private bool CheckRunning(Entry entry)
+    {
+        if (_environment.IsModRunning(entry.ModId)) return true;
+        entry.State = IntegrationState.NotRunning;
+        Report(entry, "dependency_not_running", IntegrationSeverity.Warning);
+        return false;
+    }
+
     private void TryRegister(Entry entry)
     {
-        if (!_environment.IsModRunning(entry.ModId))
-        {
-            entry.State = IntegrationState.NotRunning;
-            Report(entry, "the required mod is not running");
-            return;
-        }
+        if (!entry.Supported || !CheckRunning(entry)) return;
 
         var registration = new IntegrationRegistration(entry.Version, _runtime);
         if (!Call(entry, "register", () => entry.Plugin.Register(registration))) return;
         if (registration.Failure != null)
         {
             entry.State = IntegrationState.Incompatible;
-            entry.Reason = registration.Failure;
-            Report(entry, registration.Failure);
+            var reason = registration.Failure switch
+            {
+                "a patch target was not found" => "patch_target_missing",
+                _ when entry.HasVersionPolicy && IsReasonCode(registration.Failure) => registration.Failure,
+                _ => "registration_rejected"
+            };
+            Report(entry, reason, IntegrationSeverity.Warning);
             return;
         }
 
@@ -227,10 +256,12 @@ internal sealed class IntegrationHost : IDisposable
             }
             catch (Exception error)
             {
-                RemovePatches(entry);
-                entry.State = IntegrationState.Incompatible;
-                entry.Reason = $"patching {patch.Target.Name} failed ({Describe(error)})";
-                Report(entry, entry.Reason);
+                entry.Applied.Add(patch);
+                if (RemovePatches(entry))
+                {
+                    entry.State = IntegrationState.Faulted;
+                    Report(entry, "patch_apply_failed", IntegrationSeverity.Error, error);
+                }
                 return;
             }
         }
@@ -244,31 +275,35 @@ internal sealed class IntegrationHost : IDisposable
             }
             catch (Exception error)
             {
-                problem = $"a check threw ({Describe(error)})";
+                Fault(entry, "patch_check", error);
+                return;
             }
 
             if (problem == null) continue;
-            RemovePatches(entry);
-            entry.State = IntegrationState.Incompatible;
-            entry.Reason = problem;
-            Report(entry, problem);
+            if (RemovePatches(entry))
+            {
+                entry.State = IntegrationState.Incompatible;
+                Report(entry, "patch_check_rejected", IntegrationSeverity.Warning);
+            }
             return;
         }
 
         entry.State = IntegrationState.Active;
-        entry.Reason = null;
-        Report(entry, entry.Verified ? "active" : "active on an unverified version");
+        Report(entry, entry.Verified ? "enabled" : "enabled_unverified");
     }
+
+    private static bool IsReasonCode(string value) => value.Length is > 0 and <= 64 &&
+        value.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_');
 
     private void RuntimeAvailable(Entry entry)
     {
-        if (Call(entry, "runtime available", () => entry.Plugin.OnRuntimeAvailable(_runtime))) entry.RuntimeAvailable = true;
+        if (Call(entry, "runtime_attach", () => entry.Plugin.OnRuntimeAvailable(_runtime))) entry.RuntimeAvailable = true;
     }
 
     private void RuntimeUnavailable(Entry entry)
     {
         entry.RuntimeAvailable = false;
-        Call(entry, "runtime unavailable", entry.Plugin.OnRuntimeUnavailable);
+        Call(entry, "runtime_detach", entry.Plugin.OnRuntimeUnavailable);
     }
 
     private void Deactivate(Entry entry, IntegrationState state)
@@ -295,15 +330,15 @@ internal sealed class IntegrationHost : IDisposable
     private void Fault(Entry entry, string phase, Exception error)
     {
         entry.RuntimeAvailable = false;
-        RemovePatches(entry);
+        if (!RemovePatches(entry)) return;
         entry.State = IntegrationState.Faulted;
-        entry.Reason = $"{phase} failed ({Describe(error)})";
-        Report(entry, entry.Reason);
+        Report(entry, phase + "_failed", IntegrationSeverity.Error, error);
     }
 
-    // Patches whose removal failed stay recorded, so the plugin reports Faulted and Dispose tries again.
-    private void RemovePatches(Entry entry)
+    // A failed removal stays recorded so Dispose can retry it.
+    private bool RemovePatches(Entry entry)
     {
+        Exception? failure = null;
         for (var index = entry.Applied.Count - 1; index >= 0; index--)
         {
             try
@@ -313,16 +348,15 @@ internal sealed class IntegrationHost : IDisposable
             }
             catch (Exception error)
             {
-                _log($"Digital Storage: integration {entry.Uid} could not remove a patch of " +
-                    $"{entry.Applied[index].Target.Name} ({Describe(error)}).");
+                failure ??= error;
             }
         }
 
-        if (entry.Applied.Count == 0) return;
+        if (failure == null) return true;
         entry.RuntimeAvailable = false;
         entry.State = IntegrationState.Faulted;
-        entry.Reason = "a patch could not be removed";
-        Report(entry, entry.Reason);
+        Report(entry, "patch_remove_failed", IntegrationSeverity.Error, failure);
+        return false;
     }
 
     private bool ReadSwitch(Entry entry)
@@ -333,7 +367,7 @@ internal sealed class IntegrationHost : IDisposable
         }
         catch (Exception error)
         {
-            _log($"Digital Storage: integration {entry.Uid} setting could not be read ({Describe(error)}).");
+            Emit(entry, "setting_read_failed", IntegrationSeverity.Error, error);
             return false;
         }
     }
@@ -343,10 +377,13 @@ internal sealed class IntegrationHost : IDisposable
         IntegrationState.Incompatible => StatusIncompatible,
         IntegrationState.Faulted => StatusFaulted,
         IntegrationState.NotRunning => StatusNotRunning,
+        IntegrationState.Active when entry.HasVersionPolicy => entry.Verified ? StatusActive : StatusActiveUnverified,
+        IntegrationState.Disabled when entry.HasVersionPolicy => StatusDisabled,
         _ => entry.DefaultEnabled ? null : StatusUnverified
     };
 
-    private void Report(Entry entry, string message)
+    private void Report(Entry entry, string reason, IntegrationSeverity severity = IntegrationSeverity.Info,
+        Exception? error = null)
     {
         try
         {
@@ -355,17 +392,20 @@ internal sealed class IntegrationHost : IDisposable
                 : entry.State is IntegrationState.Incompatible or IntegrationState.Faulted ? StatusFailedLabel : null;
             entry.SetUiState?.Invoke(locked, labelState);
         }
-        catch (Exception error)
+        catch (Exception statusError)
         {
-            _log($"Digital Storage: integration {entry.Uid} settings state could not be updated ({Describe(error)}).");
+            Emit(entry, "setting_status_failed", IntegrationSeverity.Error, statusError);
         }
 
-        if (!_logged.Add((entry.Uid ?? "?", entry.State))) return;
-        var version = string.IsNullOrEmpty(entry.Version) ? "unknown version" : entry.Version;
-        _log($"Digital Storage: integration {entry.Uid} for {entry.ModId} {version}: {entry.State} ({message}).");
+        var status = (entry.State, reason);
+        if (entry.LastStatus == status) return;
+        entry.LastStatus = status;
+        Emit(entry, reason, severity, error);
     }
 
-    private static string Describe(Exception error) => $"{error.GetType().Name}: {error.Message}";
+    private void Emit(Entry entry, string reason, IntegrationSeverity severity, Exception? error) =>
+        _log(new IntegrationNotice(severity, entry.Uid ?? "unknown", entry.ModId, entry.Version,
+            entry.State, entry.Verified, reason, error?.GetType().Name));
 
     private sealed class Entry
     {
@@ -381,6 +421,10 @@ internal sealed class IntegrationHost : IDisposable
 
         internal bool Verified { get; set; }
 
+        internal bool HasVersionPolicy { get; set; }
+
+        internal bool Supported { get; set; }
+
         internal bool DefaultEnabled { get; set; }
 
         internal Func<bool>? Switch { get; set; }
@@ -389,7 +433,7 @@ internal sealed class IntegrationHost : IDisposable
 
         internal IntegrationState State { get; set; } = IntegrationState.Absent;
 
-        internal string? Reason { get; set; }
+        internal (IntegrationState State, string Reason)? LastStatus { get; set; }
 
         internal bool RuntimeAvailable { get; set; }
 

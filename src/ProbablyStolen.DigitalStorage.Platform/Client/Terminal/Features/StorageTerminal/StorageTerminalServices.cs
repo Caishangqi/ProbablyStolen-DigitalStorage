@@ -23,7 +23,8 @@ internal sealed class StorageTerminalServices
         Func<IReadOnlyList<GameItem>, TransferOperation, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, TransferOperation, TerminalInsertionResult> storeSingle,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
-        Func<ItemKey, GameItem?> findPreviewSample, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
+        Func<ItemKey, GameItem?> findPreviewSample, Func<GameItemElement, ItemKey, RichText> renderStoredTooltip,
+        Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
         Action<string> writeDiagnostic,
         Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers)
     {
@@ -39,6 +40,7 @@ internal sealed class StorageTerminalServices
         StoreRefusals = storeRefusals ?? throw new ArgumentNullException(nameof(storeRefusals));
         FindSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
         FindPreviewSample = findPreviewSample ?? throw new ArgumentNullException(nameof(findPreviewSample));
+        RenderStoredTooltip = renderStoredTooltip ?? throw new ArgumentNullException(nameof(renderStoredTooltip));
         DiagnosticsEnabled = diagnosticsEnabled ?? throw new ArgumentNullException(nameof(diagnosticsEnabled));
         IdentityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
         WriteDiagnostic = writeDiagnostic ?? throw new ArgumentNullException(nameof(writeDiagnostic));
@@ -65,6 +67,7 @@ internal sealed class StorageTerminalServices
     internal Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> StoreRefusals { get; }
     internal Func<ItemKey, GameItem?> FindSample { get; }
     internal Func<ItemKey, GameItem?> FindPreviewSample { get; }
+    internal Func<GameItemElement, ItemKey, RichText> RenderStoredTooltip { get; }
     internal Func<bool> DiagnosticsEnabled { get; }
 
     /// <summary>Gets whether clicked slots write their full item identity to the log.</summary>

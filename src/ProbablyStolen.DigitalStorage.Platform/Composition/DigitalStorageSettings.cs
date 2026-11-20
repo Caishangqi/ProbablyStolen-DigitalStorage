@@ -200,13 +200,11 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
     /// <summary>
     /// Defines an integration switch in the integrations section, after every other section. The integration host
-    /// calls this one frame after Init, once the other mod's version is known; <c>ModConfig</c> applies the saved value
-    /// whenever an entry is defined. Verified versions of
-    /// the other mod share one key, so a player's choice survives its updates. An unverified version gets its own
-    /// key so it never inherits an earlier choice for a different version.
+    /// calls this one frame after Init, once the other mod's version is known. <c>ModConfig</c> applies the saved value
+    /// whenever an entry is defined. The host chooses between a shared key and a version-specific key.
     /// </summary>
     public (Func<bool> Switch, IIntegrationConfig Config, Action<bool, string?> SetUiState) Define(
-        IIntegrationPlugin plugin, string modVersion, bool verified, bool defaultEnabled, Func<string?> status)
+        IIntegrationPlugin plugin, string modVersion, bool sharedSwitch, bool defaultEnabled, Func<string?> status)
     {
         if (plugin == null) throw new ArgumentNullException(nameof(plugin));
         if (status == null) throw new ArgumentNullException(nameof(status));
@@ -219,7 +217,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         var labelKey = plugin.SettingLabelKey;
         var tooltipKey = plugin.SettingTooltipKey;
         var uid = plugin.PluginUid;
-        var key = IntegrationKey(uid, verified ? null : modVersion);
+        var key = IntegrationKey(uid, sharedSwitch ? null : modVersion);
         var state = new IntegrationSwitchState();
         _integrationStates.Add(uid, state);
         var entry = _config.Define(key, defaultEnabled, section,

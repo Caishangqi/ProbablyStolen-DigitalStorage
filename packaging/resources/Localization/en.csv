@@ -166,6 +166,7 @@ debug_show_cell_pages_desc,For debugging. When on, double-clicking a storage cel
 config_section_logs,Logging
 log_category_storage,Storage log
 log_category_transfer,Transfer log
+log_category_comp,Compatibility log
 log_category_temp,Temporary log
 log_category_enabled,Enabled
 log_level_error,Error
@@ -322,12 +323,18 @@ cell_storage_type_modules,Type limit modules: {0}
 cell_storage_equal_distribution,Equal distribution
 cell_storage_expansion,Module bay expansion {0}/{1}
 integration_customerstocking_section,Customer Stocking
-integration_state_incompatible,Inactive: this version of the companion mod is incompatible. See the game log for the reason.
+integration_state_incompatible,Inactive. This version of the companion mod is incompatible. See LogComp for the reason.
 integration_state_not_running,Inactive: the companion mod is not running.
-integration_state_failed,Inactive: integration setup failed. See the game log for details.
+integration_state_failed,Inactive. Integration setup failed. See LogComp for the reason.
 integration_state_failed_label,Failed
 integration_state_not_running_label,Unavailable
 integration_state_unverified,This version of the companion mod has not been tested with Digital Storage. This option is off by default; turn it on to try it.
+integration_state_active,Enabled.
+integration_state_active_unverified,Enabled. This version is awaiting in-game verification.
+integration_state_disabled,Off.
+integration_brewing_section,Brewing Expansion
+integration_brewing_label,Protect brewing items in the terminal
+integration_brewing_tooltip,Keep native tooltips and Brewing Expansion formatting. Restore the stored item's description after building the tooltip.
 integration_customerstocking_label,Take goods from the digital network
 integration_customerstocking_tooltip,"One-click stocking can also take goods from online digital networks within Customer Stocking's scan range, including the store, after-hours area and ship. Offline networks and loose cells are skipped. Goods leave and return through the network as they do in terminal transfers. Drives count as machines, so enabling Skip machine contents in Customer Stocking also skips goods in the network."
 terminal_dock_title,Functions

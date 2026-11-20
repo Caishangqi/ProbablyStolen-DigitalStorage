@@ -21,7 +21,7 @@ public sealed class IntegrationHostTests
     private FakeEnvironment _environment = null!;
     private FakePatcher _patcher = null!;
     private FakeSettings _settings = null!;
-    private List<string> _log = null!;
+    private List<IntegrationNotice> _log = null!;
 
     [SetUp]
     public void SetUp()
@@ -29,7 +29,7 @@ public sealed class IntegrationHostTests
         _environment = new FakeEnvironment();
         _patcher = new FakePatcher();
         _settings = new FakeSettings();
-        _log = new List<string>();
+        _log = new List<IntegrationNotice>();
     }
 
     private IntegrationHost Host(params IIntegrationPlugin[] plugins) =>
@@ -112,7 +112,7 @@ public sealed class IntegrationHostTests
         Assert.That(_settings.UiLabelState[Uid], Is.Null);
         Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "register" }));
         Assert.That(_patcher.Applied.Select(p => p.Target), Is.EqualTo(new[] { Target }));
-        Assert.That(_log, Has.One.Contains("Active"));
+        Assert.That(_log.Select(line => line.State), Has.One.EqualTo(IntegrationState.Active));
     }
 
     [Test]
@@ -131,7 +131,7 @@ public sealed class IntegrationHostTests
         host.OnSettingsApplied();
 
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
-        Assert.That(_log, Has.Some.Contains("unverified"));
+        Assert.That(_log.Select(line => line.Reason), Does.Contain("enabled_unverified"));
     }
 
     [TestCase(true, true, null, true, true)]
@@ -163,6 +163,41 @@ public sealed class IntegrationHostTests
         Assert.That(_settings.Status[Uid](), Is.EqualTo(expectedDefault ? null : IntegrationHost.StatusUnverified));
         Assert.That(host.StateOf(Uid), Is.EqualTo(expectActive ? IntegrationState.Active : IntegrationState.Disabled));
         Assert.That(plugin.Calls.Contains("available"), Is.EqualTo(expectActive));
+    }
+
+    [TestCase("3.6.8.6")]
+    [TestCase("3.6.9.0")]
+    public void RangeVersion_SharesSwitchButStartsOffUntilVerified(string version)
+    {
+        _environment.Versions["other_mod"] = version;
+        var plugin = new RangePlugin();
+        using var host = Started(plugin);
+
+        Assert.That(_settings.Verified[Uid], Is.True, "The settings host is asked to use the shared switch.");
+        Assert.That(_settings.Defaults[Uid], Is.False);
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusDisabled));
+        Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings" }));
+
+        _settings.Values[Uid] = true;
+        host.OnSettingsApplied();
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusActiveUnverified));
+        Assert.That(_log.Last().Verified, Is.False);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void UnsupportedRangeVersion_ReportsIncompatibleEvenWithSavedSwitch(bool on)
+    {
+        _environment.Versions["other_mod"] = "3.7.0";
+        _settings.Values[Uid] = on;
+        var plugin = new RangePlugin { Patch = r => r.Patch(Target, Prefix) };
+        using var host = Started(plugin);
+
+        host.OnSettingsApplied();
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusIncompatible));
+        Assert.That(_settings.UiLocked[Uid], Is.True);
+        Assert.That(_patcher.Applied, Is.Empty);
+        Assert.That(_log.Single().Reason, Is.EqualTo("unsupported_version"));
     }
 
     [Test]
@@ -229,9 +264,11 @@ public sealed class IntegrationHostTests
 
         var host = Started(plugin);
 
-        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Faulted));
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusFaulted));
         Assert.That(_patcher.Applied, Is.Empty);
-        Assert.That(_patcher.Removed, Has.Count.EqualTo(1));
+        Assert.That(_patcher.Removed, Has.Count.EqualTo(2));
+        Assert.That(_log.Last().Severity, Is.EqualTo(IntegrationSeverity.Error));
     }
 
     [Test]
@@ -252,7 +289,8 @@ public sealed class IntegrationHostTests
         Assert.That(_settings.UiLocked[Uid], Is.True);
         Assert.That(_settings.UiLabelState[Uid], Is.EqualTo(IntegrationHost.StatusFailedLabel));
         Assert.That(_patcher.Applied, Is.Empty);
-        Assert.That(_log, Has.Some.Contains("not found"));
+        Assert.That(_log.Last().Reason, Is.EqualTo("patch_check_rejected"));
+        Assert.That(_log.Last().Severity, Is.EqualTo(IntegrationSeverity.Warning));
     }
 
     [Test]
@@ -270,7 +308,7 @@ public sealed class IntegrationHostTests
         Assert.That(_settings.UiLocked["digital_storage:broken"], Is.True);
         Assert.That(_settings.UiLabelState["digital_storage:broken"], Is.EqualTo(IntegrationHost.StatusFailedLabel));
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
-        Assert.That(_log, Has.Some.Contains("boom"));
+        Assert.That(_log.Single(line => line.PluginId == broken.Uid).ExceptionType, Is.EqualTo(nameof(InvalidOperationException)));
     }
 
     [Test]
@@ -301,6 +339,7 @@ public sealed class IntegrationHostTests
 
         _settings.Values[Uid] = true;
         host.OnSettingsApplied();
+        Assert.That(_log.Count(line => line.State == IntegrationState.Active), Is.EqualTo(2));
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
         Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "register", "available", "unavailable", "register", "available" }));
     }
@@ -355,18 +394,18 @@ public sealed class IntegrationHostTests
         host.OnSettingsApplied();
         host.OnSettingsApplied();
 
-        Assert.That(_log.Count(line => line.Contains("NotRunning")), Is.EqualTo(1));
+        Assert.That(_log.Count(line => line.State == IntegrationState.NotRunning), Is.EqualTo(1));
     }
 
     [Test]
     public void Discover_CreatesMarkedPlugins_AndSkipsBrokenOnes()
     {
-        var log = new List<string>();
+        var log = new List<IntegrationNotice>();
 
         var plugins = IntegrationHost.Discover(new[] { typeof(MarkedPlugin), typeof(UnmarkedPlugin), typeof(MarkedNotAPlugin) }, log.Add);
 
         Assert.That(plugins.Select(plugin => plugin.GetType()), Is.EqualTo(new[] { typeof(MarkedPlugin) }));
-        Assert.That(log, Has.One.Contains(nameof(MarkedNotAPlugin)));
+        Assert.That(log.Single().PluginId, Does.Contain(nameof(MarkedNotAPlugin)));
     }
 
     public static class PatchTargets
@@ -435,6 +474,14 @@ public sealed class IntegrationHostTests
         public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime) => Calls.Add("available");
 
         public override void OnRuntimeUnavailable() => Calls.Add("unavailable");
+    }
+
+    private sealed class RangePlugin : FakePlugin, IIntegrationVersionPolicy
+    {
+        public override IReadOnlyCollection<string> VerifiedVersions => Array.Empty<string>();
+
+        public bool SupportsVersion(string version) =>
+            ProbablyStolen.DigitalStorage.Compat.BrewingExpansion.BrewingExpansionVersions.Supports(version);
     }
 
     private sealed class FakeEnvironment : IIntegrationEnvironment

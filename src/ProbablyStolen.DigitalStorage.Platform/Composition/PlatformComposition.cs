@@ -52,6 +52,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly ItemTypeBackfill _typeBackfill;
     private readonly DigitalStorageContentService _contentApi;
     private readonly DigitalStorageRuntime _runtime;
+    private readonly CompatibilityDiagnostics _compatibility;
     private IntegrationHost? _integrations;
     private IDisposable? _moduleBayHooks;
     private bool _runtimeExposed;
@@ -69,8 +70,10 @@ public sealed class PlatformComposition : IDisposable
         DigitalStorageSettings settings, StorageVendors vendors, DigitalStorageNetwork network, NetworkSprites networkSprites,
         NativeCustomerCatalog customers,
         TerminalSearchComposition search, CellWorkbenchItem workbench,
-        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons)
+        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons,
+        CompatibilityDiagnostics compatibility)
     {
+        _compatibility = compatibility;
         _buttonIcons = buttonIcons;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _contentApi = contentApi ?? throw new ArgumentNullException(nameof(contentApi));
@@ -115,9 +118,9 @@ public sealed class PlatformComposition : IDisposable
     {
         ThrowIfDisposed();
         if (_integrations != null || _isEnabled) throw new InvalidOperationException("Attach integrations once, before enabling.");
-        var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _log.Warning);
+        var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _compatibility.Report);
         _integrations = new IntegrationHost(plugins, new NativeIntegrationEnvironment(),
-            new HarmonyIntegrationPatcher(_modId), _settings, _runtime, message => _log.Log(message));
+            new HarmonyIntegrationPatcher(_modId), _settings, _runtime, _compatibility.Report);
         _integrations.Initialize();
     }
 
@@ -164,6 +167,7 @@ public sealed class PlatformComposition : IDisposable
                 else if (level == LogVerbosity.Warning) log.Warning(message);
                 else log.Log(message);
             });
+        var compatibility = new CompatibilityDiagnostics(diagnosticLogger, categories.Comp);
         var diagnostics = new StorageDiagnostics(message => log.Error(message), () => false);
         var cellDiagnostics = new CellDiagnostics(diagnosticLogger, categories.Storage);
         var search = new TerminalSearchComposition(identity.Id, text,
@@ -215,7 +219,7 @@ public sealed class PlatformComposition : IDisposable
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,
-            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics);
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics, compatibility);
         var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
@@ -233,7 +237,7 @@ public sealed class PlatformComposition : IDisposable
             new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
-                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons);
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons, compatibility);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }

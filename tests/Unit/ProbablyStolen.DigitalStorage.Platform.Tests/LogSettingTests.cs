@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Composition;
@@ -12,9 +13,11 @@ internal sealed class LogSettingTests
     public void Register_BuiltinsHaveStableKeysDefaultsAndDeclarationOrder()
     {
         var categories = new BuiltinLogCategories();
-        Assert.That(categories.Registry.Entries, Is.EqualTo(new[] { categories.Storage, categories.Transfer, categories.Temp }));
-        Assert.That(new[] { categories.Storage.Name, categories.Transfer.Name, categories.Temp.Name },
-            Is.EqualTo(new[] { "LogStorage", "LogTransfer", "LogTemp" }));
+        Assert.That(categories.Registry.Entries, Is.EqualTo(new[] { categories.Storage, categories.Transfer, categories.Comp, categories.Temp }));
+        Assert.That(categories.Registry.Entries.Select(category => category.Name),
+            Is.EqualTo(new[] { "LogStorage", "LogTransfer", "LogComp", "LogTemp" }));
+        Assert.That(categories.Comp.DefaultEnabled, Is.True);
+        Assert.That(categories.Comp.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
         Assert.That(categories.Storage.DefaultEnabled && categories.Transfer.DefaultEnabled, Is.True);
         Assert.That(categories.Storage.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
         Assert.That(categories.Transfer.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));

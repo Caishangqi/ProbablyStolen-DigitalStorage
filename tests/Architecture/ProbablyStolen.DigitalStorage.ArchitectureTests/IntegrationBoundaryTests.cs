@@ -21,7 +21,8 @@ public sealed class IntegrationBoundaryTests
     private static readonly (string ModId, string Namespace, string Folder)[] IntegratedMods =
     {
         ("customerstocking", "CustomerStocking.", "CustomerStocking"),
-        ("item_details", "ItemDetails.", "ItemDetails")
+        ("item_details", "ItemDetails.", "ItemDetails"),
+        ("brewing_expansion", "BrewingExpansion.", "BrewingExpansion")
     };
 
     private static string RepositoryRoot => typeof(IntegrationBoundaryTests).Assembly
@@ -50,6 +51,7 @@ public sealed class IntegrationBoundaryTests
     }
 
     [TestCase("src/ProbablyStolen.DigitalStorage.Platform/Storage/Foo.cs", "var target = \"CustomerStocking.AutoStocker:Run\";")]
+    [TestCase("src/ProbablyStolen.DigitalStorage.Platform/Storage/Foo.cs", "var target = \"BrewingExpansion.Formal.ItemTooltipLayout:Tooltip\";")]
     [TestCase("src/ProbablyStolen.DigitalStorage.Common/Foo.cs", "const string Id = \"customerstocking\";")]
     [TestCase("src/ProbablyStolen.DigitalStorage.Compat/Shared/Foo.cs", "const string Id = \"CustomerStocking\";")]
     public void ForeignNameRule_FlagsNamesOutsideThePluginFolder(string path, string line)
