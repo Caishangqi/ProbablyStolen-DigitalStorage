@@ -493,6 +493,7 @@ def check_content(project: Path, output: Path) -> None:
         "network_digital_storage_advanced_title", "network_digital_storage_advanced_desc",
         "data_scientist_name", "data_scientist_greet_1", "data_scientist_greet_2",
         "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
+        "integration_state_failed", "integration_state_failed_label", "integration_state_not_running_label",
         "integration_itemdetails_section", "integration_itemdetails_label", "integration_itemdetails_tooltip", "tooltip_scroll_hint",
         "integration_state_unverified", "integration_customerstocking_label", "integration_customerstocking_tooltip",
         "terminal_button_stacking_tip",

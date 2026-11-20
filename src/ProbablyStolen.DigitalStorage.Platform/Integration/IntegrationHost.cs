@@ -16,7 +16,10 @@ internal sealed class IntegrationHost : IDisposable
 {
     internal const string StatusIncompatible = "integration_state_incompatible";
     internal const string StatusNotRunning = "integration_state_not_running";
+    internal const string StatusFaulted = "integration_state_failed";
     internal const string StatusUnverified = "integration_state_unverified";
+    internal const string StatusFailedLabel = "integration_state_failed_label";
+    internal const string StatusNotRunningLabel = "integration_state_not_running_label";
 
     private readonly List<Entry> _entries;
     private readonly IIntegrationEnvironment _environment;
@@ -174,9 +177,10 @@ internal sealed class IntegrationHost : IDisposable
                 entry.Verified = entry.Plugin.VerifiedVersions?.Contains(entry.Version) == true;
                 entry.DefaultEnabled = entry.Verified || (entry.Plugin is IntegrationPlugin plugin &&
                     _environment.IsModRunning(entry.ModId) && plugin.CanEnableByDefault());
-                var (enabled, config) = _settings.Define(entry.Plugin, entry.Version, entry.Verified,
+                var (enabled, config, setUiState) = _settings.Define(entry.Plugin, entry.Version, entry.Verified,
                     entry.DefaultEnabled, () => StatusOf(entry));
                 entry.Switch = enabled;
+                entry.SetUiState = setUiState;
                 entry.Plugin.RegisterSettings(config);
             }
             catch (Exception error)
@@ -336,13 +340,26 @@ internal sealed class IntegrationHost : IDisposable
 
     private static string? StatusOf(Entry entry) => entry.State switch
     {
-        IntegrationState.Incompatible or IntegrationState.Faulted => StatusIncompatible,
+        IntegrationState.Incompatible => StatusIncompatible,
+        IntegrationState.Faulted => StatusFaulted,
         IntegrationState.NotRunning => StatusNotRunning,
         _ => entry.DefaultEnabled ? null : StatusUnverified
     };
 
     private void Report(Entry entry, string message)
     {
+        try
+        {
+            var locked = entry.State is IntegrationState.NotRunning or IntegrationState.Incompatible or IntegrationState.Faulted;
+            var labelState = entry.State == IntegrationState.NotRunning ? StatusNotRunningLabel
+                : entry.State is IntegrationState.Incompatible or IntegrationState.Faulted ? StatusFailedLabel : null;
+            entry.SetUiState?.Invoke(locked, labelState);
+        }
+        catch (Exception error)
+        {
+            _log($"Digital Storage: integration {entry.Uid} settings state could not be updated ({Describe(error)}).");
+        }
+
         if (!_logged.Add((entry.Uid ?? "?", entry.State))) return;
         var version = string.IsNullOrEmpty(entry.Version) ? "unknown version" : entry.Version;
         _log($"Digital Storage: integration {entry.Uid} for {entry.ModId} {version}: {entry.State} ({message}).");
@@ -367,6 +384,8 @@ internal sealed class IntegrationHost : IDisposable
         internal bool DefaultEnabled { get; set; }
 
         internal Func<bool>? Switch { get; set; }
+
+        internal Action<bool, string?>? SetUiState { get; set; }
 
         internal IntegrationState State { get; set; } = IntegrationState.Absent;
 

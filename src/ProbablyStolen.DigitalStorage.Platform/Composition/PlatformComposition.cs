@@ -322,6 +322,7 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedInit -= _integrations.OnGameLoaded;
             _integrations.Dispose();
         }
+        _settings.ClearIntegrationUiStates();
 
         if (_runtimeExposed) ExposeRuntime(null);
         ExposeTooltipService(null);

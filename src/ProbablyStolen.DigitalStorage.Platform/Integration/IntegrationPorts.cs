@@ -61,8 +61,8 @@ internal interface IIntegrationSettings
     /// <param name="verified">Whether that version is verified, which controls the settings key.</param>
     /// <param name="defaultEnabled">The switch value if the player has no saved value for that key.</param>
     /// <param name="status">A localization key describing the plugin's state for the tooltip, or null.</param>
-    (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion, bool verified,
-        bool defaultEnabled, Func<string?> status);
+    (Func<bool> Switch, IIntegrationConfig Config, Action<bool, string?> SetUiState) Define(
+        IIntegrationPlugin plugin, string modVersion, bool verified, bool defaultEnabled, Func<string?> status);
 }
 
 /// <summary>One requested Harmony patch.</summary>

@@ -317,6 +317,9 @@ cell_storage_expansion,Module bay expansion {0}/{1}
 integration_customerstocking_section,Customer Stocking
 integration_state_incompatible,Inactive: this version of the companion mod is incompatible. See the game log for the reason.
 integration_state_not_running,Inactive: the companion mod is not running.
+integration_state_failed,Inactive: integration setup failed. See the game log for details.
+integration_state_failed_label,Failed
+integration_state_not_running_label,Unavailable
 integration_state_unverified,This version of the companion mod has not been tested with Digital Storage. This option is off by default; turn it on to try it.
 integration_customerstocking_label,Take goods from the digital network
 integration_customerstocking_tooltip,"One-click stocking can also take goods from online digital networks within Customer Stocking's scan range, including the store, after-hours area and ship. Offline networks and loose cells are skipped. Goods leave and return through the network as they do in terminal transfers. Drives count as machines, so enabling Skip machine contents in Customer Stocking also skips goods in the network."
@@ -386,5 +389,5 @@ stacking_field_feature,Feature: {0}
 stacking_field_feature_desc,The visible item feature {0}.
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,Keep Item Details clear of Digital Storage tooltips
-integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. Defaults to on when Item Details provides its tooltip interface.
+integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. This option defaults on when Item Details is running.
 tooltip_scroll_hint,Hold Alt and use the mouse wheel to scroll

@@ -49,6 +49,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoreAdmission.cs" Link="Storage\StoreAdmission.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IExternalAccess.cs" Link="Api\IExternalAccess.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationHost.cs" Link="Integration\IntegrationHost.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationSettingsView.cs" Link="Integration\IntegrationSettingsView.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationPorts.cs" Link="Integration\IntegrationPorts.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationRegistration.cs" Link="Integration\IntegrationRegistration.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Integration\IIntegrationPlugin.cs" Link="Api\IIntegrationPlugin.cs" />

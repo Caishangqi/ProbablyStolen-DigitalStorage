@@ -1,5 +1,6 @@
 using System;
 using ProbablyStolen.DigitalStorage.Compat;
+using ProbablyStolen.DigitalStorage.Mod.Patches;
 using ProbablyStolen.DigitalStorage.Platform.Composition;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Entry;
@@ -38,6 +39,7 @@ public sealed class DigitalStorageMod : IMod
     {
         var composition = _composition ?? throw new InvalidOperationException("The mod has not been initialized.");
         composition.Enable();
+        ModConfigWindowPatch.Attach();
     }
 
     /// <summary>Disposes the owned startup composition.</summary>
@@ -45,6 +47,7 @@ public sealed class DigitalStorageMod : IMod
     {
         var composition = _composition;
         _composition = null;
+        ModConfigWindowPatch.Detach();
         composition?.Dispose();
     }
 }

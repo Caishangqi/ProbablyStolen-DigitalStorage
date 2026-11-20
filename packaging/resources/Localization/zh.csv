@@ -317,6 +317,9 @@ cell_storage_expansion,模块舱扩展 {0}/{1}
 integration_customerstocking_section,顾客上货助手
 integration_state_incompatible,未启用: 此版本的联动模组不兼容，原因见游戏日志。
 integration_state_not_running,未启用: 联动模组未运行。
+integration_state_failed,未启用: 联动初始化失败，详细信息见游戏日志。
+integration_state_failed_label,失败
+integration_state_not_running_label,不可用
 integration_state_unverified,此版本的联动模组尚未与数字存储一起测试。此选项默认关闭，可手动开启尝试。
 integration_customerstocking_label,从数字网络取货
 integration_customerstocking_tooltip,一键上货时，也可从上货助手扫描范围内的在线数字网络取货，范围包括店铺、打烊后区域和飞船。离线网络和散放的元件不会用于取货。取出和放回都经过网络，与终端存取相同。驱动器属于机器，上货助手开启「跳过机器内物品」时，也会跳过网络中的货物。
@@ -386,5 +389,5 @@ stacking_field_feature,特征: {0}
 stacking_field_feature_desc,可见的物品特征 {0}.
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,为数字物流提示保留 Item Details 空间
-integration_itemdetails_tooltip,给可见的 Item Details 类型标签和内容面板留出空间。检测到 Item Details 的提示接口时默认开启。
+integration_itemdetails_tooltip,给可见的 Item Details 类型标签和内容面板留出空间。检测到 Item Details 正在运行时默认开启。
 tooltip_scroll_hint,按住 Alt 并滚动鼠标滚轮查看提示

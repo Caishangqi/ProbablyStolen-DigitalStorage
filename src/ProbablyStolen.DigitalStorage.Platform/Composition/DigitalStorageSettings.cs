@@ -38,6 +38,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
     private readonly ModText _text;
     private readonly ModConfig _config;
+    private readonly string _modId;
+    private readonly Dictionary<string, IntegrationSwitchState> _integrationStates = new(StringComparer.Ordinal);
     private readonly List<KeyValuePair<ConfigEntry, string>> _sections = new();
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
@@ -81,6 +83,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         }
 
         _text = text;
+        _modId = modId;
         var config = ModHelper.GetConfig(modId);
         _config = config;
         // The native panel shows the section string as the header, but Init runs before this mod's localization is
@@ -190,8 +193,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     /// the other mod share one key, so a player's choice survives its updates. An unverified version gets its own
     /// key so it never inherits an earlier choice for a different version.
     /// </summary>
-    public (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion, bool verified,
-        bool defaultEnabled, Func<string?> status)
+    public (Func<bool> Switch, IIntegrationConfig Config, Action<bool, string?> SetUiState) Define(
+        IIntegrationPlugin plugin, string modVersion, bool verified, bool defaultEnabled, Func<string?> status)
     {
         if (plugin == null) throw new ArgumentNullException(nameof(plugin));
         if (status == null) throw new ArgumentNullException(nameof(status));
@@ -203,10 +206,40 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             throw new InvalidOperationException($"The settings header {section} is not unique.");
         var labelKey = plugin.SettingLabelKey;
         var tooltipKey = plugin.SettingTooltipKey;
-        var entry = _config.Define(IntegrationKey(plugin.PluginUid, verified ? null : modVersion), defaultEnabled, section,
-            () => _text.Get(labelKey), tooltip: () => IntegrationTooltip(tooltipKey, status));
+        var uid = plugin.PluginUid;
+        var key = IntegrationKey(uid, verified ? null : modVersion);
+        var state = new IntegrationSwitchState();
+        _integrationStates.Add(uid, state);
+        var entry = _config.Define(key, defaultEnabled, section,
+            () => IntegrationLabel(labelKey, state), tooltip: () => IntegrationTooltip(tooltipKey, status));
         AddIntegrationEntry(entry, section!);
-        return (() => entry.Value, new PluginConfig(this, plugin.PluginUid, section!));
+        return (() => entry.Value, new PluginConfig(this, uid, section!),
+            (locked, labelStateKey) =>
+            {
+                state.Locked = locked;
+                state.LabelStateKey = labelStateKey;
+                IntegrationSettingsView.SetSwitchState(_modId, key, locked, labelStateKey);
+            });
+    }
+
+    internal void ClearIntegrationUiStates()
+    {
+        _integrationStates.Clear();
+        IntegrationSettingsView.ClearMod(_modId);
+    }
+
+    private string IntegrationLabel(string labelKey, IntegrationSwitchState state)
+    {
+        var label = _text.Get(labelKey);
+        return state.Locked && !string.IsNullOrEmpty(state.LabelStateKey)
+            ? $"{label} ({_text.Get(state.LabelStateKey!)})"
+            : label;
+    }
+
+    private sealed class IntegrationSwitchState
+    {
+        internal bool Locked { get; set; }
+        internal string? LabelStateKey { get; set; }
     }
 
     private static readonly System.Text.RegularExpressions.Regex PluginKey = new("^[a-z0-9_]+$");

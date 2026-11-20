@@ -79,9 +79,9 @@ public abstract class IntegrationPlugin : IIntegrationPlugin
     public abstract string SettingTooltipKey { get; }
 
     /// <summary>
-    /// Returns whether a supported public protocol warrants enabling the plugin by default on an unverified version.
-    /// The host calls this after all mods load and only if the required mod is running. This check must not change
-    /// runtime state. The host keeps saved settings and still runs the register phase checks.
+    /// Returns whether the plugin's own availability criteria warrant enabling it by default on an unverified version.
+    /// The host calls this after all mods load and only if the required mod is running. The check must not change
+    /// runtime state. Saved settings still take precedence, and register-phase checks still run.
     /// </summary>
     public virtual bool CanEnableByDefault() => false;
 

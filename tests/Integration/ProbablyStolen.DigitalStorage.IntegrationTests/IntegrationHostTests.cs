@@ -45,6 +45,38 @@ public sealed class IntegrationHostTests
     }
 
     [Test]
+    public void FailedIntegrationSwitchLocksOnlyItsEntryAndClearRemovesTheLock()
+    {
+        const string modId = "digital_storage";
+        const string firstKey = "integration_first_enabled_untested_1.0.0";
+        const string secondKey = "integration_second_enabled_untested_1.0.0";
+        var changes = new List<(string ModId, string Key, bool Locked, string? LabelState)>();
+        void OnChanged(string changedMod, string key, bool locked, string? labelState) =>
+            changes.Add((changedMod, key, locked, labelState));
+
+        IntegrationSettingsView.SwitchStateChanged += OnChanged;
+        IntegrationSettingsView.SetSwitchState(modId, firstKey, true, IntegrationHost.StatusFailedLabel);
+        try
+        {
+            Assert.That(IntegrationSettingsView.IsIntegrationSwitch(modId, firstKey), Is.True);
+            Assert.That(IntegrationSettingsView.IsSwitchLocked(modId, firstKey), Is.True);
+            Assert.That(IntegrationSettingsView.IsSwitchLocked(modId, secondKey), Is.False);
+            Assert.That(IntegrationSettingsView.IsSwitchLocked("other_mod", firstKey), Is.False);
+            Assert.That(changes, Is.EqualTo(new[] { (modId, firstKey, true, IntegrationHost.StatusFailedLabel) }));
+        }
+        finally
+        {
+            IntegrationSettingsView.ClearMod(modId);
+            IntegrationSettingsView.SwitchStateChanged -= OnChanged;
+        }
+
+        Assert.That(IntegrationSettingsView.IsSwitchLocked(modId, firstKey), Is.False);
+        Assert.That(changes, Has.Count.EqualTo(2));
+        Assert.That(changes[1].Locked, Is.False);
+        Assert.That(changes[1].LabelState, Is.Null);
+    }
+
+    [Test]
     public void AbsentMod_IsNeverCalledAndNotLogged()
     {
         _environment.Enabled.Clear();
@@ -76,6 +108,8 @@ public sealed class IntegrationHostTests
 
         Assert.That(_settings.Defaults[Uid], Is.True);
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
+        Assert.That(_settings.UiLocked[Uid], Is.False);
+        Assert.That(_settings.UiLabelState[Uid], Is.Null);
         Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "register" }));
         Assert.That(_patcher.Applied.Select(p => p.Target), Is.EqualTo(new[] { Target }));
         Assert.That(_log, Has.One.Contains("Active"));
@@ -141,6 +175,8 @@ public sealed class IntegrationHostTests
         host.OnGameLoaded();
 
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(_settings.UiLocked[Uid], Is.True);
+        Assert.That(_settings.UiLabelState[Uid], Is.EqualTo(IntegrationHost.StatusFailedLabel));
         Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "register" }));
     }
 
@@ -153,6 +189,8 @@ public sealed class IntegrationHostTests
         var host = Started(plugin);
 
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.NotRunning));
+        Assert.That(_settings.UiLocked[Uid], Is.True);
+        Assert.That(_settings.UiLabelState[Uid], Is.EqualTo(IntegrationHost.StatusNotRunningLabel));
         Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings" }), "Settings exist; the other mod is not running.");
         Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusNotRunning));
     }
@@ -211,6 +249,8 @@ public sealed class IntegrationHostTests
         var host = Started(plugin);
 
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(_settings.UiLocked[Uid], Is.True);
+        Assert.That(_settings.UiLabelState[Uid], Is.EqualTo(IntegrationHost.StatusFailedLabel));
         Assert.That(_patcher.Applied, Is.Empty);
         Assert.That(_log, Has.Some.Contains("not found"));
     }
@@ -227,6 +267,8 @@ public sealed class IntegrationHostTests
         host.OnModsLoaded();
 
         Assert.That(host.StateOf("digital_storage:broken"), Is.EqualTo(IntegrationState.Faulted));
+        Assert.That(_settings.UiLocked["digital_storage:broken"], Is.True);
+        Assert.That(_settings.UiLabelState["digital_storage:broken"], Is.EqualTo(IntegrationHost.StatusFailedLabel));
         Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
         Assert.That(_log, Has.Some.Contains("boom"));
     }
@@ -442,6 +484,10 @@ public sealed class IntegrationHostTests
 
         internal Dictionary<string, bool> Verified { get; } = new();
 
+        internal Dictionary<string, bool> UiLocked { get; } = new();
+
+        internal Dictionary<string, string?> UiLabelState { get; } = new();
+
         internal Dictionary<string, bool> Values { get; } = new();
 
         internal Dictionary<string, Func<string?>> Status { get; } = new();
@@ -450,8 +496,8 @@ public sealed class IntegrationHostTests
 
         internal List<string> Options { get; } = new();
 
-        public (Func<bool> Switch, IIntegrationConfig Config) Define(IIntegrationPlugin plugin, string modVersion,
-            bool verified, bool defaultEnabled, Func<string?> status)
+        public (Func<bool> Switch, IIntegrationConfig Config, Action<bool, string?> SetUiState) Define(
+            IIntegrationPlugin plugin, string modVersion, bool verified, bool defaultEnabled, Func<string?> status)
         {
             var uid = plugin.PluginUid;
             Defined.Add(uid);
@@ -459,7 +505,12 @@ public sealed class IntegrationHostTests
             Verified[uid] = verified;
             Values.TryAdd(uid, defaultEnabled);
             Status[uid] = status;
-            return (() => Values[uid], new FakeConfig(this, uid));
+            Action<bool, string?> setUiState = (locked, labelState) =>
+            {
+                UiLocked[uid] = locked;
+                UiLabelState[uid] = labelState;
+            };
+            return (() => Values[uid], new FakeConfig(this, uid), setUiState);
         }
 
         private sealed class FakeConfig : IIntegrationConfig

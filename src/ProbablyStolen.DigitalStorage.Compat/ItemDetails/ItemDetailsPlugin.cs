@@ -25,15 +25,7 @@ public sealed class ItemDetailsPlugin : IntegrationPlugin
     public override string SettingTooltipKey => "integration_itemdetails_tooltip";
 
     /// <inheritdoc />
-    public override bool CanEnableByDefault() => ItemDetailsTargets.IsProtocolAvailable();
-
-    /// <inheritdoc />
-    public override void Register(IIntegrationRegistration registration)
-    {
-        registration.Verify(() => ItemDetailsTargets.IsProtocolAvailable()
-            ? null
-            : "the public tooltip badge protocol is unavailable");
-    }
+    public override bool CanEnableByDefault() => true;
 
     /// <inheritdoc />
     public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime) => ItemDetailsTargets.Attach();
@@ -56,8 +48,6 @@ internal static class ItemDetailsTargets
     private static bool _warned;
     private static bool _disabled;
 
-    internal static bool IsProtocolAvailable() => AppDomain.CurrentDomain.GetData(BadgeSlot) is Func<UnityEngine.RectTransform?>;
-
     internal static void Attach()
     {
         Detach();
@@ -66,13 +56,14 @@ internal static class ItemDetailsTargets
         try
         {
             _service = ModHelper.Lookup<ITooltipService>(TooltipServiceKeys.ModId, TooltipServiceKeys.ServiceKey);
-            if (_service == null) return;
+            if (_service == null) throw new InvalidOperationException("the tooltip service is unavailable");
             _registration = _service.RegisterObstacle("item_details.badge", GetObstacles);
         }
         catch (Exception error)
         {
             WarnOnce(error);
             Detach();
+            throw;
         }
     }
 
