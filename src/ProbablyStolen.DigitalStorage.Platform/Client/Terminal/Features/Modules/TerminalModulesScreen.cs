@@ -62,7 +62,6 @@ internal sealed class TerminalModulesScreen : SubScreen
     private void RefreshAvailability()
     {
         if (_unavailableMessage == null) return;
-        // Querying the state also locks a bay whose layout does not match its recorded stage.
         var state = ModuleBayExpansionHooks.Api?.GetState(Window.Terminal);
         _unavailableMessage.root.SetActive(state?.Available != true);
     }

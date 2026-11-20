@@ -49,7 +49,6 @@ internal sealed partial class DigitalStorageContentService
         var maximum = binding.MaximumStage ?? definition.Stages.Count - 1;
         if (session.Transaction.IsLocked || session.Failure != null)
             return new ModuleBayState(false, stage, definition, session.Failure ?? "module bay locked", maximum);
-        // Resolved before any check so that every later failure can lock the bay it found.
         GameGridInventory? bay = null;
         try
         {
@@ -60,15 +59,12 @@ internal sealed partial class DigitalStorageContentService
             if (stage < 0 || stage > maximum)
                 return Unavailable(item, session, stage, definition, maximum, "invalid recorded stage", bay);
             var layout = definition.Stage(stage).Layout;
-            if (!Matches(bay, layout))
+            if (!Matches(bay, layout) && (SaveManager.IsDecoding || bay.childItems.Count == 0) && ChildrenFit(bay, layout))
             {
-                if (!SaveManager.IsDecoding && bay.childItems.Count > 0)
-                    return Unavailable(item, session, stage, definition, maximum, "existing module layout differs from recorded stage", bay);
-                if (!ChildrenFit(bay, layout))
-                    return Unavailable(item, session, stage, definition, maximum, "module coordinates do not fit recorded stage", bay);
                 bay.SetShape(string.Concat(layout.Rows), layout.Width);
                 item.contentWindow?.Validate();
             }
+            ReportLayoutMismatch(item, bay, session, stage, layout);
             _storageDiagnostics?.VerboseOnce(item, "module_bay_initialized", "Digital Storage: module bay initialized.",
                 () => NativeStorageDiagnosticContext.Item(item) + " " +
                     StorageDiagnostics.Field("stage", () => stage) + " " + StorageDiagnostics.Field("modules", () => bay?.childItems.Count));
@@ -81,8 +77,11 @@ internal sealed partial class DigitalStorageContentService
         }
     }
 
-    public ModuleBayState GetState(GameItem item)
+    public ModuleBayState GetState(GameItem item) => GetState(item, out _);
+
+    private ModuleBayState GetState(GameItem item, out GameGridInventory? inventory)
     {
+        inventory = null;
         EnsureAlive();
         if (!_thread.IsMain) return new ModuleBayState(false, 0, null, "main thread required");
         if (item == null) throw new ArgumentNullException(nameof(item));
@@ -105,8 +104,8 @@ internal sealed partial class DigitalStorageContentService
                     () => NativeStorageDiagnosticContext.Item(item) + $" stage={stage} reason=provider_or_inventory_unavailable");
                 return new ModuleBayState(false, stage, definition, refusal, maximum);
             }
-            if (!Matches(bay, definition.Stage(stage).Layout) || !ChildrenFit(bay, definition.Stage(stage).Layout))
-                return Unavailable(item, session, stage, definition, maximum, "actual module layout does not match recorded stage", bay);
+            ReportLayoutMismatch(item, bay, session, stage, definition.Stage(stage).Layout);
+            inventory = bay;
             return new ModuleBayState(true, stage, definition, null, maximum);
         }
         catch (Exception error)
@@ -116,13 +115,19 @@ internal sealed partial class DigitalStorageContentService
         }
     }
 
-    public ModuleBayChangeResult CanExpand(GameItem item)
+    public ModuleBayChangeResult CanExpand(GameItem item) => CanExpand(item, out _, out _);
+
+    private ModuleBayChangeResult CanExpand(GameItem item, out ModuleBayState state, out GameGridInventory? bay)
     {
-        var state = GetState(item);
+        state = GetState(item, out bay);
         if (!state.Available) return Failed(state, state.RefusalReason ?? "module bay unavailable");
         if (SaveManager.IsDecoding || !GeneralHelper.IsItemOwned(item)) return ModuleBayChangeResult.Refused(state.Stage, "decoding or item not owned");
-        return state.Stage >= state.MaximumStage ? ModuleBayChangeResult.Refused(state.Stage, "maximum stage")
-            : ModuleBayChangeResult.Changed(state.Stage + 1);
+        if (state.Stage >= state.MaximumStage) return ModuleBayChangeResult.Refused(state.Stage, "maximum stage");
+
+        var nextStage = state.Stage + 1;
+        if (!ChildrenFit(bay!, state.Definition!.Stage(nextStage).Layout))
+            return ModuleBayChangeResult.Refused(state.Stage, "installed modules do not fit the next stage layout");
+        return ModuleBayChangeResult.Changed(nextStage);
     }
 
     internal bool CanUseKit(GameItem machine, GameItem kit)
@@ -155,21 +160,16 @@ internal sealed partial class DigitalStorageContentService
 
     private ModuleBayChangeResult ExecuteExpansion(GameItem item, GameItem? kit)
     {
-        var check = CanExpand(item);
+        var check = CanExpand(item, out var state, out var bay);
         if (!check.Succeeded) return check;
-        var state = GetState(item);
-        if (!TryBinding(item, out var binding, out _) || !TryProvider(binding, item, out var provider, out _)
-            || !provider.TryGetInventory(item, out var bay)) return Failed(state, "module inventory unavailable");
-        if (!Matches(bay, state.Definition!.Stage(state.Stage).Layout) ||
-            !ChildrenFit(bay, state.Definition.Stage(check.Stage).Layout))
-            return Failed(state, "module coordinates or layout changed before expansion");
+        var nextLayout = state.Definition!.Stage(check.Stage).Layout;
         var session = _baySessions.GetOrCreateValue(item);
-        var port = new NativeModuleBayPort(item, bay, kit, () => Notify(item, GetState(item)));
-        var result = session.Transaction.Execute(port, state.Stage, state.MaximumStage, state.Definition!.Stage(check.Stage).Layout, kit != null);
+        var port = new NativeModuleBayPort(item, bay!, kit, () => Notify(item, GetState(item)));
+        var result = session.Transaction.Execute(port, state.Stage, state.MaximumStage, nextLayout, kit != null);
         if (session.Transaction.IsLocked)
         {
             session.Failure = result.Reason;
-            bay.LockInv();
+            bay!.LockInv();
         }
         if (!result.Succeeded) Report(item, result.Reason ?? "module bay change failed");
         else if (kit != null)
@@ -192,6 +192,20 @@ internal sealed partial class DigitalStorageContentService
         catch { }
         Report(item, reason);
         return new ModuleBayState(false, stage, definition, reason, maximum);
+    }
+
+    private void ReportLayoutMismatch(GameItem item, GameGridInventory bay, BaySession session, int stage, ModuleBayLayout layout)
+    {
+        if (Matches(bay, layout) && ChildrenFit(bay, layout)) return;
+
+        // The decoder assigns the saved UID and stage after the item factory runs.
+        var identity = (item.uniqueId, stage);
+        if (session.ReportedLayoutMismatch == identity) return;
+        session.ReportedLayoutMismatch = identity;
+        StorageDiagnostics.Report(_diagnostic, "module_bay_layout_mismatch", "Digital Storage: module bay layout or module placement differs from the recorded stage.",
+            context: () => NativeStorageDiagnosticContext.Item(item) + $" stage={stage} " +
+                StorageDiagnostics.Field("actual", () => $"{bay.inventoryShape.width}x{bay.inventoryShape.height}") +
+                $" expected={layout.Width}x{layout.Height} " + StorageDiagnostics.Field("modules", () => bay.childItems.Count));
     }
 
     private void Report(GameItem item, string reason)
@@ -247,6 +261,7 @@ internal sealed partial class DigitalStorageContentService
         public BaySession() { }
         internal readonly ModuleBayTransaction Transaction = new();
         internal string? Failure;
+        internal (int Uid, int Stage)? ReportedLayoutMismatch;
     }
 
     private sealed class KitSession
@@ -262,22 +277,25 @@ internal sealed partial class DigitalStorageContentService
         private readonly GameGridInventory _bay;
         private readonly GameItem? _kit;
         private readonly Action _notify;
-        private string _shape = "";
-        private int _width;
+        private GridShape _originalShape = null!;
+        private (GameItem Item, GridShape Shape)[] _originalModules = Array.Empty<(GameItem, GridShape)>();
+        private bool _originalDynamicBackground;
         private TagState? _stage;
         private long _value;
 
         internal NativeModuleBayPort(GameItem item, GameGridInventory bay, GameItem? kit, Action notify)
-        { _item = item; _bay = bay; _kit = kit; _notify = notify; }
+        {
+            _item = item;
+            _bay = bay;
+            _kit = kit;
+            _notify = notify;
+        }
 
         public void Capture()
         {
-            var shape = _bay.inventoryShape;
-            _width = shape.width;
-            var digits = new char[checked(shape.width * shape.height)];
-            for (var y = 0; y < shape.height; y++)
-            for (var x = 0; x < shape.width; x++) digits[y * shape.width + x] = (char)('0' + shape.GetLocal(x, y));
-            _shape = new string(digits);
+            _originalShape = new GridShapeBuilder(_bay.inventoryShape);
+            _originalModules = _bay.childItems.Select(child => (child, (GridShape)new GridShapeBuilder(child.modifiedShape))).ToArray();
+            _originalDynamicBackground = _bay.renderDynamicBackground;
             _stage = _item.state.dict.TryGetValue(StageTag, out var stage) ? stage.Clone() : null;
             _value = _item.unitValue;
         }
@@ -290,6 +308,8 @@ internal sealed partial class DigitalStorageContentService
         {
             _item.ValidateShapeState();
             _item.contentWindow?.Validate();
+            if (!MatchesOriginalModules() || !InstalledModulesFit())
+                throw new InvalidOperationException("Module positions changed or no longer fit the applied module bay.");
         }
         public void AddValue() => _item.unitValue = checked(_item.unitValue + 100);
         public void Restore()
@@ -298,9 +318,69 @@ internal sealed partial class DigitalStorageContentService
             else _item.state.dict[StageTag] = _stage.Clone();
             _item.unitValue = _value;
             _item.ValidateShapeState();
-            _bay.SetShape(_shape, _width);
+            if (!MatchesOriginalShape()) RestoreShape();
+            _bay.Validate();
             _item.contentWindow?.Validate();
+            if (!MatchesOriginalShape() || !MatchesOriginalModules())
+                throw new InvalidOperationException("Module bay did not return to its original layout and placement.");
         }
+
+        private bool InstalledModulesFit() => _bay.childItems.All(child =>
+            child.modifiedShape.FullyIntersects(_bay.inventoryShape, static (itemCell, bayCell) => itemCell != 1 || bayCell == 0));
+
+        private bool MatchesOriginalShape() => _bay.renderDynamicBackground == _originalDynamicBackground &&
+            ShapesEqual(_bay.inventoryShape, _originalShape);
+
+        private bool MatchesOriginalModules()
+        {
+            var children = _bay.childItems;
+            if (children.Count != _originalModules.Length) return false;
+            for (var i = 0; i < children.Count; i++)
+            {
+                var (item, shape) = _originalModules[i];
+                if (!ReferenceEquals(children[i], item) || !ShapesEqual(item.modifiedShape, shape)) return false;
+            }
+            return true;
+        }
+
+        private static bool ShapesEqual(GridShape shape, GridShape original)
+        {
+            if (shape.width != original.width || shape.height != original.height ||
+                shape.minX != original.minX || shape.minY != original.minY ||
+                shape.orientation != original.orientation || shape.flipped != original.flipped ||
+                shape.GetOutsideBounds() != original.GetOutsideBounds()) return false;
+            for (var y = 0; y < shape.height; y++)
+            for (var x = 0; x < shape.width; x++)
+                if (shape.GetLocal(x, y) != original.GetLocal(x, y)) return false;
+            return true;
+        }
+
+        private void RestoreShape()
+        {
+            var width = _originalShape.width;
+            var height = _originalShape.height;
+            var digits = new char[checked(width * height)];
+            var rectangle = !_originalDynamicBackground;
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var cell = _originalShape.GetLocal(x, y);
+                digits[y * width + x] = (char)('0' + cell);
+                rectangle &= cell == 0;
+            }
+
+            _bay.renderDynamicBackground = _originalDynamicBackground;
+            if (rectangle) _bay.SetShape(width, height);
+            else _bay.SetShape(new string(digits), width);
+            // SetShape rebuilds an untransformed grid with the default outside-cell value.
+            if (_bay.inventoryShape is GridShapeBuilder restored)
+                restored.SetTransform(_originalShape.minX, _originalShape.minY, _originalShape.flipped, _originalShape.orientation)
+                    .SetDataOutside(_originalShape.GetOutsideBounds());
+            _bay.renderDynamicBackground = _originalDynamicBackground;
+            if (_originalDynamicBackground && _originalShape.GetOutsideBounds() != 1)
+                _bay.ForceRecomputeDynamicBackground();
+        }
+
         public void Consume() => StartingPerkContent.ConsumeUpgradeMaterial(_kit!);
         public void Notify() => _notify();
     }

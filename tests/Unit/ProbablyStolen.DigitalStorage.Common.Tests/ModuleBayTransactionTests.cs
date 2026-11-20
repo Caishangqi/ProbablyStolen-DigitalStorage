@@ -21,6 +21,18 @@ public sealed class ModuleBayTransactionTests
         Assert.That((port.Stage, port.Value, port.Consumptions), Is.EqualTo((10, 1000L, 10)));
     }
 
+    [Test]
+    public void Execute_AppliedShapeMayDifferWhenThePortAcceptsIt()
+    {
+        var port = new MemoryPort();
+        port.OnApply = () => port.Shape = "0000";
+
+        var result = new ModuleBayTransaction().Execute(port, 0, 10, Layout, true);
+
+        Assert.That(result.Succeeded, Is.True);
+        Assert.That((port.Stage, port.Shape, port.Consumptions), Is.EqualTo((1, "0000", 1)));
+    }
+
     [TestCase("apply")]
     [TestCase("validate")]
     [TestCase("value")]
