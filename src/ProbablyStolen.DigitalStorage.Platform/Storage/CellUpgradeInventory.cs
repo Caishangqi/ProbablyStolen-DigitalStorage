@@ -1,9 +1,10 @@
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -84,6 +85,10 @@ internal static class CellUpgradeInventory
     internal static GameGridInventory? Bay(GameItem cell) =>
         BayHolder(cell)?.content is GameGridInventory { identifier: BayId } bay ? bay : null;
 
+    internal static (GameItem Cell, GameGridInventory Bay)? FindModuleBay(GameItem moduleItem) =>
+        moduleItem.parentInventory is GameGridInventory { identifier: BayId } bay &&
+        bay.GetParentItem() is { } cell && ReferenceEquals(Bay(cell), bay) ? (cell, bay) : null;
+
     /// <summary>Gets the module an item stands for, or null for any other item.</summary>
     internal static InstalledModule? Module(GameItem item) => item.identifier switch
     {
@@ -118,28 +123,79 @@ internal static class CellUpgradeInventory
     /// <summary>Gets whether a cell sits in a cell workbench.</summary>
     internal static bool InWorkbench(GameItem cell) => cell.parentInventory?.identifier == WorkbenchSlotId;
 
-    /// <summary>Builds what a module change check reads; stored usage is read only when a removal needs it.</summary>
-    internal static CellModuleState State(GameItem cell, bool withUsage)
+    internal static CellModuleState InstallationState(GameItem cell)
     {
         var tier = StorageCellTier.FromCellId(cell.identifier);
-        var available = tier != null && !CellHealth.IsUnavailable(cell) && CellPages.IsComplete(cell);
-        var types = 0;
-        long area = 0;
-        if (withUsage && available)
+        var restoring = SaveManager.IsDecoding;
+        return new CellModuleState(tier, Read(cell), InWorkbench(cell),
+            !restoring && tier != null && HasCompleteLayout(cell), restoring, 0, 0);
+    }
+
+    internal static bool TryReadModuleIndex(GameGridInventory bay, GameItem item, out IUpgradeInventory modules, out int index)
+    {
+        index = -1;
+        var installed = new List<InstalledModule>();
+        foreach (var child in bay.childItems)
         {
-            try
+            if (Module(child) is not { } module) continue;
+            if (ReferenceEquals(child, item) && ReferenceEquals(item.parentInventory, bay)) index = installed.Count;
+            installed.Add(module);
+        }
+
+        modules = new UpgradeInventory(installed);
+        return index >= 0;
+    }
+
+    internal static bool NeedsUsage(InstalledModule module) => module.Kind == CellModuleKind.TypeLimit && module.IsValid;
+
+    // The actual bay callback makes its own decision even when the workbench has a ready preview.
+    internal static bool CanRemove(GameItem cell, GameGridInventory bay, GameItem item)
+    {
+        if (item.identifier != TypeLimitId && item.identifier != EqualDistributionId) return true;
+        if (!TryReadModuleIndex(bay, item, out var modules, out var index)) return false;
+        var tier = StorageCellTier.FromCellId(cell.identifier);
+        var inWorkbench = InWorkbench(cell);
+        var restoring = SaveManager.IsDecoding;
+        var available = false;
+        var usage = default(CellModuleUsage);
+        if (!restoring && inWorkbench && tier != null)
+        {
+            if (NeedsUsage(modules.Modules[index]))
             {
-                var view = CellPages.Read(cell, StorageService.Identify, CellWriteState.Writable);
-                types = view.TypeCount;
-                area = view.Usage.AreaUnits;
+                usage = ReadUsage(cell, ReadLive);
+                available = usage.Status == CellModuleUsage.ReadStatus.Ready;
             }
-            catch (Exception)
+            else
             {
-                // Unreadable contents make the cell unavailable for module changes rather than assumed empty.
-                available = false;
+                available = HasCompleteLayout(cell);
             }
         }
 
-        return new CellModuleState(tier, Read(cell), InWorkbench(cell), available, SaveManager.IsDecoding, types, area);
+        var state = new CellModuleState(tier, modules, inWorkbench, available, restoring, usage.StoredTypes, usage.AreaUnits);
+        return CellUpgradeCallbacks.CanRemove(state, index).IsAllowed;
     }
+
+    internal static CellModuleUsage ReadUsage(GameItem cell, Func<GameItem, CellView> read, Action<Exception>? reportError = null)
+    {
+        var layoutAvailable = false;
+        try
+        {
+            if (!HasCompleteLayout(cell)) return CellModuleUsage.Unavailable(layoutUnavailable: true);
+            layoutAvailable = true;
+            var view = read(cell);
+            return view.Pages.Any(page => page.IsProtected)
+                ? CellModuleUsage.Unavailable(layoutUnavailable: false)
+                : CellModuleUsage.Ready(view.TypeCount, view.Usage.AreaUnits);
+        }
+        catch (Exception error)
+        {
+            // A partial or failed read cannot authorize a capacity reduction.
+            reportError?.Invoke(error);
+            return CellModuleUsage.Unavailable(layoutUnavailable: !layoutAvailable);
+        }
+    }
+
+    private static bool HasCompleteLayout(GameItem cell) => !CellHealth.IsUnavailable(cell) && CellPages.IsComplete(cell);
+
+    private static CellView ReadLive(GameItem cell) => CellPages.Read(cell, StorageService.Identify, CellWriteState.Writable);
 }

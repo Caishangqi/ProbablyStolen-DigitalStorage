@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -44,13 +43,5 @@ namespace ProbablyStolen.DigitalStorage.IntegrationTests
 
             Assert.That(StoredItemPresence.ShouldUpdateLiquid(bottle), Is.True);
         }
-    }
-}
-
-namespace ProbablyStolen.DigitalStorage.Platform.Storage
-{
-    internal static class CellPages
-    {
-        internal static IReadOnlyList<GameGridInventory> Pages(GameItem cell) => cell.StoragePages;
     }
 }

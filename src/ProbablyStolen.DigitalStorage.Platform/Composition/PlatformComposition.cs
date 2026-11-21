@@ -196,7 +196,6 @@ public sealed class PlatformComposition : IDisposable
         {
             if (change.Reason == NetworkChangeReason.ConfigChanged) networkPower.Storage.ForgetEntryTexts();
         });
-        var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, message => log.Error(message));
         var contentApi = new DigitalStorageContentService(message => log.Warning(message), diagnostics);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
@@ -224,6 +223,8 @@ public sealed class PlatformComposition : IDisposable
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
             message => log.Log(message));
+        var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, workbench.FindUsage,
+            message => log.Error(message));
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
         itemContent.SetModulePresenter(modules.Present);
         var goods = new StorageGoods(modules);

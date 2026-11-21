@@ -92,15 +92,18 @@ public class GameItem
     internal GameItemState? state;
     internal TagSystem modifiedState = new();
     internal GameInventory? parentInventory;
+    internal PixelWindow? contentWindow;
     internal readonly List<GameSlotInventory> Slots = new();
     internal int unitCount = 1;
     internal GameItemShape shape = new() { width = 1, height = 2 };
     internal bool Stuck = false;
-    internal bool TooltipRefusal = false;
     internal bool ThrowTooltip = false;
     internal bool ReceivingModuleBonus = false;
     internal bool ContainerTooltip = false;
     internal bool Owned = true;
+    internal Func<bool>? RemovalProbe;
+    public bool MayRemove() => RemovalProbe?.Invoke() ?? throw new InvalidOperationException("unexpected removal probe");
+    public int MaxNumRemove() => throw new InvalidOperationException("unexpected native removal count");
     internal readonly List<GameItem> Children = new();
     internal readonly List<GameGridInventory> StoragePages = new();
 
@@ -126,7 +129,14 @@ public class GameInventory : GraphNodeStorage
 {
     internal string identifier = string.Empty;
     internal GameItem? Owner;
+    internal GraphNodeStorage? parent;
     internal readonly List<GameItem> childItems = new();
+    internal GameItem? GetParentItem() => Owner ?? (parent switch
+    {
+        MachineryPanelRow row => (row.parent as PixelWindow)?.parentItems.FirstOrDefault(),
+        PixelWindow window => window.parentItems.FirstOrDefault(),
+        _ => null
+    });
 
     internal void Place(GameItem item)
     {
@@ -139,6 +149,8 @@ public class GameInventory : GraphNodeStorage
 public sealed class GameGridInventory : GameInventory
 {
     internal bool overrideLockInsert;
+    internal Action<GameItem, GameInventory, object?>? onSlotAddItemEndFunc;
+    internal Action<GameItem, GameInventory, object?>? onSlotRemoveItemEndFunc;
     private readonly List<(GameItem First, GameItem Second)> _contacts = new();
 
     internal void Touch(GameItem first, GameItem second) => _contacts.Add((first, second));
@@ -162,9 +174,8 @@ public sealed class GameGridInventory : GameInventory
     }
 }
 
-internal sealed class GameSlotInventory
+internal sealed class GameSlotInventory : GameInventory
 {
-    internal string? identifier;
     internal GameItem? childItem;
 }
 

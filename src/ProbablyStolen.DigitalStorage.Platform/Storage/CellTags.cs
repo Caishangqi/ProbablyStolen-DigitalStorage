@@ -51,6 +51,7 @@ internal static class CellTags
         var text = layout.Format();
         cell.ModifyTag(LayoutTag, state => state.Enable().SetString(text));
         cell.ModifyTag(PageCountTag, state => state.Enable().SetInt(CellRecord.DowngradeGuardPageCount));
+        CellPages.NotifyLayoutWritten(cell);
     }
 
     /// <summary>Gets whether the recorded layout equals <paramref name="layout"/>.</summary>

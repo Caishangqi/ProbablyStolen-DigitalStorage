@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
@@ -27,8 +26,8 @@ internal sealed class CellWorkbenchItem
     private readonly Action<GameItem> _openPartition;
     private readonly Action<GameItem> _cellLeft;
     private readonly Action<string> _log;
+    private readonly WorkbenchUsage _usage;
     private bool _summaryFailureLogged;
-    private readonly ConditionalWeakTable<GameSlotInventory, Action> _summaries = new();
 
     internal CellWorkbenchItem(ModText text, ItemAppearance appearance,
         Action<GameItem> openPartition, Action<GameItem> cellLeft, Action<string> log)
@@ -38,23 +37,24 @@ internal sealed class CellWorkbenchItem
         _appearance = appearance ?? throw new ArgumentNullException(nameof(appearance));
         _openPartition = openPartition ?? throw new ArgumentNullException(nameof(openPartition));
         _cellLeft = cellLeft ?? throw new ArgumentNullException(nameof(cellLeft));
-        CellUpgradeInventory.ModulesChanged += RefreshSummary;
-        CellPartitionTags.Committed += RefreshSummary;
+        _usage = new WorkbenchUsage(error => ReportSummaryFailure("count the cell's stored types", error));
+        CellPages.UsageChanged += _usage.InvalidateContents;
+        CellUpgradeInventory.ModulesChanged += _usage.RefreshSummary;
+        CellPartitionTags.Committed += _usage.RefreshSummary;
     }
 
     internal void Detach()
     {
-        CellUpgradeInventory.ModulesChanged -= RefreshSummary;
-        CellPartitionTags.Committed -= RefreshSummary;
+        CellPages.UsageChanged -= _usage.InvalidateContents;
+        CellUpgradeInventory.ModulesChanged -= _usage.RefreshSummary;
+        CellPartitionTags.Committed -= _usage.RefreshSummary;
+        _usage.Detach();
     }
 
-    private void RefreshSummary(GameItem cell)
-    {
-        if (cell.parentInventory is GameSlotInventory slot && _summaries.TryGetValue(slot, out var refresh)) refresh();
-    }
+    internal CellModuleUsage? FindUsage(GameItem cell) => _usage.Find(cell);
 
     // Native slot and module callbacks must survive an unreadable cell; keep its name or notice visible.
-    private string Summary(GameItem? cell, string? notice, string storedTypes)
+    private string Summary(GameItem? cell, string? notice)
     {
         if (cell == null) return notice ?? _text.Get("workbench_status_empty");
         var first = notice ?? cell.GetDisplayName(preferCustomName: true);
@@ -63,6 +63,9 @@ internal sealed class CellWorkbenchItem
             var config = new CellPartitionTags(cell).Capture().Interpret().Config;
             var limit = CellTypeLimitSource.EffectiveOrBase(cell);
             var mode = _text.Get(config.Mode == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist");
+            var storedTypes = FindUsage(cell) is { Status: CellModuleUsage.ReadStatus.Ready } usage
+                ? usage.StoredTypes.ToString()
+                : "?";
             return string.Join("\n", new List<string>
             {
                 first,
@@ -73,11 +76,7 @@ internal sealed class CellWorkbenchItem
         }
         catch (Exception error)
         {
-            if (!_summaryFailureLogged)
-            {
-                _summaryFailureLogged = true;
-                _log($"Digital Storage: workbench cannot summarize its cell ({error.GetType().Name}).");
-            }
+            ReportSummaryFailure("summarize its cell", error);
             return first;
         }
     }
@@ -85,23 +84,11 @@ internal sealed class CellWorkbenchItem
     private string Line(string labelKey, string value) =>
         _text.Get(labelKey) + ": <color=#" + ColorUtility.ToHtmlStringRGB(MachineryStyle.VALUE_TEXT) + ">" + value + "</color>";
 
-    private string StoredTypes(GameItem cell)
+    private void ReportSummaryFailure(string operation, Exception error)
     {
-        try
-        {
-            if (SaveManager.IsDecoding || !CellPages.IsComplete(cell)) return "?";
-            return CellPages.Read(cell, StorageService.Identify, CellWriteState.ExtractOnly).TypeCount.ToString();
-        }
-        catch (Exception error)
-        {
-            // Runs inside native slot callbacks and module or partition events, which must not see an exception.
-            if (!_summaryFailureLogged)
-            {
-                _summaryFailureLogged = true;
-                _log($"Digital Storage: workbench cannot count the cell's stored types ({error.GetType().Name}).");
-            }
-            return "?";
-        }
+        if (_summaryFailureLogged) return;
+        _summaryFailureLogged = true;
+        _log($"Digital Storage: workbench cannot {operation} ({error.GetType().Name}).");
     }
 
     internal static string? Refusal(GameItem candidate)
@@ -124,14 +111,18 @@ internal sealed class CellWorkbenchItem
             _appearance.Apply(item, SpriteKey, Width, Height);
             var slot = new GameSlotInventory(1, 2) { identifier = CellUpgradeInventory.WorkbenchSlotId };
             var info = new MachineryText(string.Empty, alignment: TMPro.HorizontalAlignmentOptions.Left, uppercase: false);
-            // Counting stored types reads every page; a notice during a drag reuses the last count.
-            var storedTypes = "?";
-            void Refresh()
+            string? notice = null;
+            void Render() => info.SetText(Summary(slot.childItem, notice));
+            void RefreshSummary()
             {
-                storedTypes = slot.childItem is { } cell ? StoredTypes(cell) : "?";
-                info.SetText(Summary(slot.childItem, null, storedTypes));
+                notice = null;
+                Render();
             }
-            void ShowNotice(string notice) => info.SetText(Summary(slot.childItem, notice, storedTypes));
+            void ShowNotice(string message)
+            {
+                notice = message;
+                Render();
+            }
             slot.mayInventoryAddItemFunc = (cell, _) =>
             {
                 if (SaveManager.IsDecoding) return true;
@@ -155,7 +146,7 @@ internal sealed class CellWorkbenchItem
             void Sync()
             {
                 var cell = slot.childItem;
-                Refresh();
+                RefreshSummary();
                 if (cell == null) configure.Disable();
                 else configure.Enable();
                 if (cell != null && CellUpgradeInventory.Bay(cell) is { } bay && CellUpgradeInventory.BayHolder(cell) is { } home)
@@ -164,13 +155,6 @@ internal sealed class CellWorkbenchItem
                     bayView.Clear();
             }
 
-            _summaries.Add(slot, Refresh);
-            slot.onSlotAddItemEndFunc += (_, _, _) => Sync();
-            slot.onSlotRemoveItemEndFunc += (cell, _, _) =>
-            {
-                _cellLeft(cell);
-                Sync();
-            };
             var window = MachineHelper.CreateMachineryWindow(true,
                 MachineHelper.Panel(_text.Get("workbench_cell_panel"), slot, "workbench_cell"),
                 MachineHelper.Panel(_text.Get("modules_panel"), bayView, "workbench_modules"),
@@ -178,7 +162,23 @@ internal sealed class CellWorkbenchItem
                     MachineryStack.Vertical(new MachineryIntake(info, vents: false, styleInventories: false), configure),
                     "workbench_actions"));
             item.SetContentWindow(window);
-            window.openCallback += Sync;
+            var usage = _usage.Register(slot, item, window,
+                () => window.handler != null && window.handler.gameObject.activeInHierarchy, RefreshSummary);
+            window.handler.gameObject.AddComponent<WorkbenchUsageRefresh>().Bind(usage, Render);
+            void InvalidateAndSync()
+            {
+                usage.Invalidate();
+                Sync();
+            }
+
+            slot.onSlotAddItemEndFunc += (_, _, _) => InvalidateAndSync();
+            slot.onSlotRemoveItemEndFunc += (cell, _, _) =>
+            {
+                usage.Invalidate();
+                _cellLeft(cell);
+                Sync();
+            };
+            window.openCallback += InvalidateAndSync;
             window.openCallback += () => window.SetTitle(item.GetDisplayName(preferCustomName: true));
             // Classified like vanilla machines: no nesting in containers.
             item.SetGameItemType("MACHINE");

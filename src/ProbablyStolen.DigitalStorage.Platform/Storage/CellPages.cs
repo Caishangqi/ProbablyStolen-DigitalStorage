@@ -19,7 +19,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 /// <c>modifiedShape</c>, then UncheckedAccept, as in <c>ItemMultiSelectHandler.CommitPrecisePlacement</c>); those calls
 /// bypass the page locks.
 /// </summary>
-internal static class CellPages
+internal static partial class CellPages
 {
     /// <summary>
     /// The pages panel role. It must not be <c>"storage"</c>: the native <c>StorageExpansionHelper.InitTabNames</c>
@@ -430,6 +430,7 @@ internal static class CellPages
         page.maxSlotRemoveItemFunc = (item, _, _) => ExternalAccessScope.AllowsRemoval(item) ? item.unitCount : 0;
         page.mayActivateSlotItemFunc = (_, _, _) => false;
         page.canActivateSlotItemFunc = (_, _, _) => false;
+        ObserveRootChanges(page);
         beforeAttach?.Invoke(page);
         tabs.AddTab((tabs.count + 1).ToString(), MachineHelper.WrapInIntake(page));
         return page;

@@ -29,7 +29,7 @@ internal sealed class TooltipComposition : IDisposable
     private bool _disposed;
 
     internal TooltipComposition(NativeNetworkScanner scanner, GridNetworkPowerCoordinator power,
-        ModText text, BasicCellHandler cells, Action<string> reportError)
+        ModText text, BasicCellHandler cells, Func<GameItem, CellModuleUsage?> findWorkbenchUsage, Action<string> reportError)
     {
         _scanner = scanner;
         _reportError = reportError;
@@ -45,7 +45,7 @@ internal sealed class TooltipComposition : IDisposable
         details.Register("drive", () => new DriveTooltipDetail(text));
         var contributors = DeferredRegister<INativeTooltipContributor>.Create(_registries, contributorsId);
         contributors.Register("cell", () => new CellTooltipContributor(cells));
-        contributors.Register("module", () => new ModuleTooltipContributor(text));
+        contributors.Register("module", () => new ModuleTooltipContributor(text, findWorkbenchUsage));
         contributors.Register("network", () => _networkPresenter = new GridNetworkTooltipPresenter(
             power, text, Array.Empty<INetworkTooltipDetail>(), ReportFailure));
     }

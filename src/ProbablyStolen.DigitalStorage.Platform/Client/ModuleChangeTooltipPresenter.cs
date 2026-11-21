@@ -1,5 +1,6 @@
+using System;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -16,22 +17,19 @@ internal static class ModuleChangeTooltipPresenter
         _ => text.Get("module_refusal_" + check.Failure.ToString().ToLowerInvariant())
     };
 
-    internal static void AppendRemovalRefusal(RichTextBuilder builder, GameItem moduleItem, ModText text)
+    internal static void AppendRemovalRefusal(RichTextBuilder builder, GameItem moduleItem, ModText text,
+        Func<GameItem, CellModuleUsage?> findUsage)
     {
-        if (moduleItem.parentInventory?.identifier != CellUpgradeInventory.BayId ||
-            moduleItem.parentInventory.GetParentItem() is not { } cell ||
-            CellUpgradeInventory.Module(moduleItem) is not { } module)
-            return;
+        if (CellUpgradeInventory.FindModuleBay(moduleItem) is not { } location ||
+            !CellUpgradeInventory.TryReadModuleIndex(location.Bay, moduleItem, out var modules, out var index)) return;
+        var cell = location.Cell;
+        if (findUsage(cell) is not { } usage) return;
 
-        var index = 0;
-        foreach (var child in CellUpgradeInventory.Bay(cell)?.childItems ?? new System.Collections.Generic.List<GameItem>())
-        {
-            if (ReferenceEquals(child, moduleItem)) break;
-            if (CellUpgradeInventory.Module(child) != null) index++;
-        }
-
-        var state = CellUpgradeInventory.State(cell, withUsage: module.Kind == CellModuleKind.TypeLimit);
-        if (index >= state.Modules.Modules.Count) return;
+        var needsUsage = CellUpgradeInventory.NeedsUsage(modules.Modules[index]);
+        if (needsUsage && usage.Status == CellModuleUsage.ReadStatus.Pending) return;
+        var available = needsUsage ? usage.Status == CellModuleUsage.ReadStatus.Ready : !usage.LayoutUnavailable;
+        var state = new CellModuleState(StorageCellTier.FromCellId(cell.identifier), modules, inWorkbench: true,
+            available, restoring: false, usage.StoredTypes, usage.AreaUnits);
         var check = CellUpgradeCallbacks.CanRemove(state, index);
         if (check.IsAllowed) return;
         builder.AddLine(RefusalText(check, text), ignoreEmpty: true, RenderHandler.ColorPalette.LightRed);

@@ -21,12 +21,19 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\INetworkTooltipDetail.cs" Link="Client\INetworkTooltipDetail.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\CellTooltipContributor.cs" Link="Client\CellTooltipContributor.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ModuleTooltipContributor.cs" Link="Client\ModuleTooltipContributor.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ModuleChangeTooltipPresenter.cs" Link="Client\ModuleChangeTooltipPresenter.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\WorkbenchUsage.cs" Link="Client\WorkbenchUsage.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellModuleUsage.cs" Link="Storage\CellModuleUsage.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPages.Usage.cs" Link="Storage\CellPages.Usage.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellUpgradeInventory.cs" Link="Storage\CellUpgradeInventory.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\GridNetworkTooltipPresenter.cs" Link="Client\GridNetworkTooltipPresenter.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ControllerTooltipDetail.cs" Link="Client\ControllerTooltipDetail.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\DriveTooltipDetail.cs" Link="Client\DriveTooltipDetail.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\TooltipComposition.cs" Link="Composition\TooltipComposition.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\NetworkPowerTooltipBridge.cs" Link="Client\NetworkPowerTooltipBridge.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\NetworkPowerTooltipPatch.cs" Link="Client\NetworkPowerTooltipPatch.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\WorkbenchModuleHighlightPatch.cs" Link="Client\WorkbenchModuleHighlightPatch.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\WorkbenchModuleHighlight.cs" Link="Client\WorkbenchModuleHighlight.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentCoordinator.cs" Link="Content\ItemContentCoordinator.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\StorageDiagnostics.cs" Link="Diagnostics\StorageDiagnostics.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\ItemContentPriceRules.cs" Link="Content\ItemContentPriceRules.cs" />

@@ -69,8 +69,8 @@ public sealed class NativeTooltipDispatcherTests
         Assert.That(component.Lines, Is.Empty);
 
         var module = new RichTextBuilder();
-        ModHook.RaiseTooltip(module, new GameItem("digital_storage.module_type_limit") { TooltipRefusal = true });
-        Assert.That(module.Lines, Is.EqualTo(new[] { "module_refusal" }));
+        ModHook.RaiseTooltip(module, new GameItem(CellUpgradeInventory.TypeLimitId));
+        Assert.That(module.Lines, Is.Empty);
 
         var unrelated = new RichTextBuilder();
         ModHook.RaiseTooltip(unrelated, new GameItem("unrelated"));
@@ -280,7 +280,8 @@ public sealed class NativeTooltipDispatcherTests
 
     private static TooltipComposition Create(Settings settings, GridNetworkPowerCoordinator power, List<string> errors,
         BasicCellHandler? cells = null) =>
-        new(new NativeNetworkScanner(settings), power, new ModText(), cells ?? new BasicCellHandler(new ModText()), errors.Add);
+        new(new NativeNetworkScanner(settings), power, new ModText(), cells ?? new BasicCellHandler(new ModText()),
+            _ => null, errors.Add);
 
     private sealed class TestContributor : INativeTooltipContributor
     {

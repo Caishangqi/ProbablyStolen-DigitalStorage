@@ -27,6 +27,7 @@ internal static class RenderHandler
     {
         internal static readonly object LightCyan = new();
         internal static readonly object LightBlue = new();
+        internal static readonly object LightRed = new();
     }
 }
 
@@ -39,8 +40,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Localization
 {
     internal sealed class ModText
     {
-        internal string Get(string key, params object[] args) => key == "network_tooltip_device_power" ||
-            key == "network_tooltip_total_power" ? $"{key}:{args[0]}" : key;
+        internal string Get(string key, params object[] args) => key is "network_tooltip_device_power" or
+            "network_tooltip_total_power" or "module_refusal_typesexceedlimit" or "module_refusal_bytesexceedcapacity"
+            ? $"{key}:{args[0]}" : key;
     }
 }
 
@@ -74,18 +76,6 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage
                 if (isActive?.Invoke() == false) break;
                 builder.AddLine(index == 0 ? "cell" : "cell_" + (index + 1), true, RenderHandler.ColorPalette.LightBlue);
             }
-        }
-    }
-}
-
-namespace ProbablyStolen.DigitalStorage.Platform.Client
-{
-    internal static class ModuleChangeTooltipPresenter
-    {
-        internal static void AppendRemovalRefusal(RichTextBuilder builder, GameItem item,
-            Localization.ModText text)
-        {
-            if (item.TooltipRefusal) builder.Lines.Add("module_refusal");
         }
     }
 }

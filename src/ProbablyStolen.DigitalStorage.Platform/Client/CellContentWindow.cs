@@ -113,7 +113,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         // Delegates on one inventory combine with OR. Replacing the native filter lets this check reject modules
         // that the type filter alone would accept.
         bay.mayInventoryAddItemFunc = (item, _) => CanInstall(bay, item);
-        bay.mayInventoryRemoveItemFunc = (item, _) => CanRemoveModule(bay, item);
+        bay.mayInventoryRemoveItemFunc = (item, _) => CellUpgradeInventory.CanRemove(_host, bay, item);
         bay.onSlotAddItemEndFunc += (_, _, _) =>
         {
             CellUpgradeInventory.RaiseModulesChanged(_host);
@@ -132,24 +132,9 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         var module = CellUpgradeInventory.Module(item);
         if (module == null) return false;
         if (ReferenceEquals(item.parentInventory, bay)) return true;
-        var check = CellUpgradeCallbacks.CanInstall(CellUpgradeInventory.State(_host, withUsage: false), module.Kind);
+        var check = CellUpgradeCallbacks.CanInstall(CellUpgradeInventory.InstallationState(_host), module.Kind);
         if (!check.IsAllowed && !SaveManager.IsDecoding) CellUpgradeInventory.ReportRefusal(_host, check);
         return check.IsAllowed;
-    }
-
-    private bool CanRemoveModule(GameGridInventory bay, GameItem item)
-    {
-        var module = CellUpgradeInventory.Module(item);
-        if (module == null) return true;
-        var index = 0;
-        foreach (var child in bay.childItems)
-        {
-            if (ReferenceEquals(child, item)) break;
-            if (CellUpgradeInventory.Module(child) != null) index++;
-        }
-
-        var state = CellUpgradeInventory.State(_host, withUsage: module.Kind == CellModuleKind.TypeLimit);
-        return index < state.Modules.Modules.Count && CellUpgradeCallbacks.CanRemove(state, index).IsAllowed;
     }
 
     void ICellAssemblyPort.FixComponent()
