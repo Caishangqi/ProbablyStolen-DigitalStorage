@@ -333,8 +333,8 @@ integration_state_active,Enabled.
 integration_state_active_unverified,Enabled. This version is awaiting in-game verification.
 integration_state_disabled,Off.
 integration_brewing_section,Brewing Expansion
-integration_brewing_label,Protect brewing items in the terminal
-integration_brewing_tooltip,Keep native tooltips and Brewing Expansion formatting. Restore the stored item's description after building the tooltip.
+integration_brewing_label,Keep Brewing Expansion tooltips in the terminal
+integration_brewing_tooltip,Show Brewing Expansion formatting and quality labels without changing stored item descriptions. This option defaults on when a compatible version of Brewing Expansion is running.
 integration_customerstocking_label,Take goods from the digital network
 integration_customerstocking_tooltip,"One-click stocking can also take goods from online digital networks within Customer Stocking's scan range, including the store, after-hours area and ship. Offline networks and loose cells are skipped. Goods leave and return through the network as they do in terminal transfers. Drives count as machines, so enabling Skip machine contents in Customer Stocking also skips goods in the network."
 terminal_dock_title,Functions

@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Api.Integration;
 using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Storage;
+using ProbablyStolen.DigitalStorage.Compat.BrewingExpansion;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
@@ -35,7 +36,7 @@ public sealed class IntegrationHostTests
     private IntegrationHost Host(params IIntegrationPlugin[] plugins) =>
         new(plugins, _environment, _patcher, _settings, new FakeRuntime(), _log.Add);
 
-    private IntegrationHost Started(FakePlugin plugin)
+    private IntegrationHost Started(IIntegrationPlugin plugin)
     {
         var host = Host(plugin);
         host.Initialize();
@@ -165,23 +166,80 @@ public sealed class IntegrationHostTests
         Assert.That(plugin.Calls.Contains("available"), Is.EqualTo(expectActive));
     }
 
-    [TestCase("3.6.8.6")]
-    [TestCase("3.6.9.0")]
-    public void RangeVersion_SharesSwitchButStartsOffUntilVerified(string version)
+    [Test]
+    public void BrewingExpansion_DefaultsOnButHonorsSavedOff()
+    {
+        var plugin = new BrewingExpansionPlugin();
+        _environment.Enabled.Add(plugin.RequiredModId);
+        _environment.Running.Add(plugin.RequiredModId);
+        _environment.Versions[plugin.RequiredModId] = "3.6.8.6";
+        _settings.Values[plugin.PluginUid] = false;
+
+        using var host = Started(plugin);
+
+        Assert.That(_settings.Defaults[plugin.PluginUid], Is.True);
+        Assert.That(host.StateOf(plugin.PluginUid), Is.EqualTo(IntegrationState.Disabled));
+        Assert.That(_patcher.Applied, Is.Empty);
+    }
+
+    [TestCase("3.6.8.6", null, true)]
+    [TestCase("3.6.9.0", null, true)]
+    [TestCase("3.6.9.0", false, false)]
+    public void RunningRangeVersion_DefaultsOnAndRespectsTheSavedSwitch(string version, bool? savedSwitch, bool active)
     {
         _environment.Versions["other_mod"] = version;
-        var plugin = new RangePlugin();
+        if (savedSwitch.HasValue) _settings.Values[Uid] = savedSwitch.Value;
+        var plugin = new RangePlugin { DefaultProbe = () => true, Patch = r => r.Patch(Target, Prefix) };
         using var host = Started(plugin);
 
         Assert.That(_settings.Verified[Uid], Is.True, "The settings host is asked to use the shared switch.");
+        Assert.That(_settings.Defaults[Uid], Is.True);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(active ? IntegrationState.Active : IntegrationState.Disabled));
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(active ? IntegrationHost.StatusActiveUnverified : IntegrationHost.StatusDisabled));
+        Assert.That(_patcher.Applied, Has.Count.EqualTo(active ? 1 : 0));
+        Assert.That(_log.Last().Verified, Is.False);
+    }
+
+    [Test]
+    public void RangeVersionWithoutDefaultOptIn_StartsOffButCanBeTurnedOn()
+    {
+        _environment.Versions["other_mod"] = "3.6.8.6";
+        using var host = Started(new RangePlugin());
+
         Assert.That(_settings.Defaults[Uid], Is.False);
-        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusDisabled));
-        Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings" }));
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Disabled));
 
         _settings.Values[Uid] = true;
         host.OnSettingsApplied();
-        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusActiveUnverified));
-        Assert.That(_log.Last().Verified, Is.False);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
+    }
+
+    [Test]
+    public void RangeVersionWithoutRunningMod_StaysOffWithoutProbing()
+    {
+        _environment.Versions["other_mod"] = "3.6.8.6";
+        _environment.Running.Clear();
+        var plugin = new RangePlugin { DefaultProbe = () => throw new InvalidOperationException() };
+        using var host = Started(plugin);
+
+        Assert.That(_settings.Defaults[Uid], Is.False);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.NotRunning));
+        Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings" }));
+    }
+
+    [Test]
+    public void DefaultOnRangeVersion_WithMissingTarget_RemainsInactive()
+    {
+        _environment.Versions["other_mod"] = "3.6.8.6";
+        var plugin = new RangePlugin { DefaultProbe = () => true, Patch = r => r.Fail("tooltip_target_signature") };
+        using var host = Started(plugin);
+
+        Assert.That(_settings.Defaults[Uid], Is.True);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusIncompatible));
+        Assert.That(_settings.UiLocked[Uid], Is.True);
+        Assert.That(_patcher.Applied, Is.Empty);
+        Assert.That(_log.Single().Reason, Is.EqualTo("tooltip_target_signature"));
     }
 
     [TestCase(false)]
@@ -190,10 +248,15 @@ public sealed class IntegrationHostTests
     {
         _environment.Versions["other_mod"] = "3.7.0";
         _settings.Values[Uid] = on;
-        var plugin = new RangePlugin { Patch = r => r.Patch(Target, Prefix) };
+        var plugin = new RangePlugin
+        {
+            DefaultProbe = () => throw new InvalidOperationException(),
+            Patch = r => r.Patch(Target, Prefix)
+        };
         using var host = Started(plugin);
 
         host.OnSettingsApplied();
+        Assert.That(_settings.Defaults[Uid], Is.False);
         Assert.That(_settings.Status[Uid](), Is.EqualTo(IntegrationHost.StatusIncompatible));
         Assert.That(_settings.UiLocked[Uid], Is.True);
         Assert.That(_patcher.Applied, Is.Empty);
@@ -480,8 +543,7 @@ public sealed class IntegrationHostTests
     {
         public override IReadOnlyCollection<string> VerifiedVersions => Array.Empty<string>();
 
-        public bool SupportsVersion(string version) =>
-            ProbablyStolen.DigitalStorage.Compat.BrewingExpansion.BrewingExpansionVersions.Supports(version);
+        public bool SupportsVersion(string version) => BrewingExpansionVersions.Supports(version);
     }
 
     private sealed class FakeEnvironment : IIntegrationEnvironment

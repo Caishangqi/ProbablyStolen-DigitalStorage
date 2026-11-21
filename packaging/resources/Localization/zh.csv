@@ -333,8 +333,8 @@ integration_state_active,已启用。
 integration_state_active_unverified,已启用。当前版本待游戏内验证。
 integration_state_disabled,已关闭。
 integration_brewing_section,酿酒拓展
-integration_brewing_label,保护终端中的酿酒物品
-integration_brewing_tooltip,保留原生提示框和酿酒拓展的排版。提示框生成后恢复磁盘内物品的描述。
+integration_brewing_label,在终端保留酿酒拓展提示
+integration_brewing_tooltip,保留酿酒拓展的排版和品质提示，悬停时不改写磁盘内的物品描述。检测到酿酒拓展正在运行且版本符合要求时默认开启。
 integration_customerstocking_label,从数字网络取货
 integration_customerstocking_tooltip,一键上货时，也可从上货助手扫描范围内的在线数字网络取货，范围包括店铺、打烊后区域和飞船。离线网络和散放的元件不会用于取货。取出和放回都经过网络，与终端存取相同。驱动器属于机器，上货助手开启「跳过机器内物品」时，也会跳过网络中的货物。
 terminal_dock_title,功能

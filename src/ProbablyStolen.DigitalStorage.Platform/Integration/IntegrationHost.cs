@@ -181,14 +181,15 @@ internal sealed class IntegrationHost : IDisposable
             try
             {
                 entry.Version = _environment.ModVersion(entry.ModId) ?? string.Empty;
-                entry.Verified = entry.Plugin.VerifiedVersions?.Contains(entry.Version) == true;
+                var verifiedVersions = entry.Plugin.VerifiedVersions;
+                entry.Verified = verifiedVersions?.Contains(entry.Version) == true;
                 var policy = entry.Plugin as IIntegrationVersionPolicy;
                 entry.HasVersionPolicy = policy != null;
                 entry.Supported = policy?.SupportsVersion(entry.Version) ?? true;
-                entry.DefaultEnabled = policy != null
-                    ? entry.Supported && entry.Plugin.VerifiedVersions?.Count > 0
-                    : entry.Verified || (entry.Plugin is IntegrationPlugin plugin &&
-                        _environment.IsModRunning(entry.ModId) && plugin.CanEnableByDefault());
+                entry.DefaultEnabled = (policy == null && entry.Verified) ||
+                    (entry.Supported && _environment.IsModRunning(entry.ModId) &&
+                        ((policy != null && verifiedVersions?.Count > 0) ||
+                            (entry.Plugin is IntegrationPlugin plugin && plugin.CanEnableByDefault())));
                 var sharedSwitch = policy != null ? entry.Supported : entry.Verified;
                 var (enabled, config, setUiState) = _settings.Define(entry.Plugin, entry.Version, sharedSwitch,
                     entry.DefaultEnabled, () => StatusOf(entry));

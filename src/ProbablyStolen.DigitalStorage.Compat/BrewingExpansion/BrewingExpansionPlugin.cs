@@ -31,6 +31,9 @@ public sealed class BrewingExpansionPlugin : IntegrationPlugin, IIntegrationVers
     bool IIntegrationVersionPolicy.SupportsVersion(string version) => BrewingExpansionVersions.Supports(version);
 
     /// <inheritdoc />
+    public override bool CanEnableByDefault() => true;
+
+    /// <inheritdoc />
     public override void Register(IIntegrationRegistration registration)
     {
         var arguments = new[] { typeof(RichTextBuilder), typeof(GameItem) };

@@ -52,6 +52,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationNotice.cs" Link="Integration\IntegrationNotice.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Integration\IIntegrationVersionPolicy.cs" Link="Api\IIntegrationVersionPolicy.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Client\Tooltips\TerminalTooltipScope.cs" Link="Api\TerminalTooltipScope.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingExpansionPlugin.cs" Link="Compat\BrewingExpansionPlugin.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingExpansionVersions.cs" Link="Compat\BrewingExpansionVersions.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingTooltipTarget.cs" Link="Compat\BrewingTooltipTarget.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationSettingsView.cs" Link="Integration\IntegrationSettingsView.cs" />
