@@ -1,7 +1,6 @@
-0.6.2
+0.6.3
 
-The Brewing Expansion integration is now on by default.
+Optimized the checks and verifications when dragging items from game containers into the terminal.
 
-- Brewing Expansion tooltips now preserve the original flavor text of stored items.
-- You can now search the terminal's stacking rules and see how items are grouped.
-- With the Stack Display Module installed, select multiple items with the same ID in the terminal to see which tags keep them from stacking.
+- Now, dragging multiple items into the terminal will no longer simulate storage; it will only perform a single storage action when the item is released.
+- Fixed a bug where subsequent operations would reload the inventory after detecting a change in item ownership.
