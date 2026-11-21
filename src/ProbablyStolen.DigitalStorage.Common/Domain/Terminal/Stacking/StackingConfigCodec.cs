@@ -13,6 +13,9 @@ public enum StackingConfigStatus
     /// <summary>The terminal has no tag; the default configuration applies.</summary>
     Missing,
 
+    /// <summary>Valid settings from a retired version. The terminal starts with defaults.</summary>
+    Reset,
+
     /// <summary>The text cannot be read; it is kept as it is and grouping stays off.</summary>
     Unreadable
 }
@@ -31,7 +34,7 @@ public sealed class StackingConfigReadResult
     /// <summary>Gets the status.</summary>
     public StackingConfigStatus Status { get; }
 
-    /// <summary>Gets the configuration: the read one, or the default when missing; null when unreadable.</summary>
+    /// <summary>Gets the current configuration or defaults for missing or retired settings. Null when unreadable.</summary>
     public StackingConfig? Config { get; }
 
     /// <summary>Gets the unreadable text, kept so it is never overwritten by accident.</summary>
@@ -44,24 +47,23 @@ public sealed class StackingConfigReadResult
 
     internal static StackingConfigReadResult Missing() => new(StackingConfigStatus.Missing, StackingConfig.Default, null, null);
 
+    internal static StackingConfigReadResult Reset() => new(StackingConfigStatus.Reset, StackingConfig.Default, null, null);
+
     internal static StackingConfigReadResult Unreadable(string raw, string reason) =>
         new(StackingConfigStatus.Unreadable, null, raw, reason);
 }
 
 /// <summary>
-/// Encodes a stacking configuration as versioned text for one terminal tag. The first line is <c>v2</c>, the second
-/// <c>enabled TAB 0|1</c>, the third <c>marker TAB #RRGGBB</c>, then one <c>rule TAB field TAB match|ignore</c> line per
-/// row; the field is Base64 of UTF-8. <c>v1</c> text has no marker line and reads with the default marker.
-/// Decoding never skips what it cannot read: any malformed line rejects the whole text, so damaged settings can never
-/// merge more than the player chose.
+/// Encodes v3 terminal settings as a switch, marker color and Base64-encoded rule rows.
+/// Valid v1 and v2 settings start from defaults because v3 retires the built-in tag mappings.
+/// Malformed or unknown settings remain unreadable.
 /// </summary>
 public static class StackingConfigCodec
 {
     /// <summary>The longest text accepted.</summary>
     public const int MaxLength = 16384;
 
-    private const string Version = "v2";
-    private const string LegacyVersion = "v1";
+    private const string Version = "v3";
     private const string MarkerPrefix = "marker\t";
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
@@ -89,8 +91,9 @@ public static class StackingConfigCodec
         if (string.IsNullOrEmpty(text)) return StackingConfigReadResult.Missing();
         if (text!.Length > MaxLength) return StackingConfigReadResult.Unreadable(text, "too_long");
         var lines = text.Split('\n');
-        var legacy = lines[0] == LegacyVersion;
-        if (!legacy && lines[0] != Version) return StackingConfigReadResult.Unreadable(text, "unknown_version");
+        var hasMarker = lines[0] != "v1";
+        var reset = lines[0] is "v1" or "v2";
+        if (!reset && lines[0] != Version) return StackingConfigReadResult.Unreadable(text, "unknown_version");
         if (lines.Length < 2) return StackingConfigReadResult.Unreadable(text, "missing_switch");
         bool enabled;
         switch (lines[1])
@@ -102,7 +105,7 @@ public static class StackingConfigCodec
 
         var marker = StackingMarker.Default;
         var first = 2;
-        if (!legacy)
+        if (hasMarker)
         {
             if (lines.Length < 3 || !lines[2].StartsWith(MarkerPrefix, StringComparison.Ordinal) ||
                 !TryReadMarker(lines[2].Substring(MarkerPrefix.Length), out marker))
@@ -132,7 +135,7 @@ public static class StackingConfigCodec
             rules.Add(new StackingRule(fieldId, mode));
         }
 
-        return StackingConfigReadResult.Ok(new StackingConfig(enabled, rules, marker));
+        return reset ? StackingConfigReadResult.Reset() : StackingConfigReadResult.Ok(new StackingConfig(enabled, rules, marker));
     }
 
     /// <summary>Saved markers are always the upper case six-digit form; anything else is damage.</summary>

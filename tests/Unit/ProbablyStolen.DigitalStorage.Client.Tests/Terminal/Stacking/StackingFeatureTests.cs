@@ -115,7 +115,7 @@ public sealed class StackingFeatureTests
     public void InfoTooltip_ListsCountAndAppliedIgnoreRulesForMixedGroupsOnly()
     {
         var data = new MemoryData();
-        Save(data, Ignore(StackingFieldCatalog.ContainerContent, StackingFieldCatalog.MetalPurity, StackingFieldCatalog.AppraisedValue));
+        Save(data, Ignore(StackingFieldCatalog.ContainerContent, "tag:INGOT_PURITY_TAG", StackingFieldCatalog.AppraisedValue));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
             new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var mixed = new DisplayEntry("g", new[] { Bottle(1, 1), Bottle(2, 1), Bottle(3, 1) });
@@ -128,18 +128,157 @@ public sealed class StackingFeatureTests
         Assert.That(panel.Lines.Select(line => (line.Role, line.TextKey)), Is.EqualTo(new[]
         {
             (TooltipRole.Title, StackingInfoTooltip.TitleKey), (TooltipRole.Label, StackingInfoTooltip.KindsKey),
-            (TooltipRole.Label, StackingInfoTooltip.RulesKey), (TooltipRole.Body, StackingInfoTooltip.RuleKey),
-            (TooltipRole.Body, StackingInfoTooltip.RuleKey)
+            (TooltipRole.Label, StackingInfoTooltip.RulesKey), (TooltipRole.Body, StackingInfoTooltip.RuleKey)
         }));
         Assert.That(panel.Lines[1].Args.Single(), Is.EqualTo(3));
-        var names = panel.Lines.Skip(3).Select(line => ((LocalizedText)line.Args.Single()).TextKey);
-        Assert.That(names, Is.EqualTo(new[]
-        {
-            StackingFieldCatalog.Find(StackingFieldCatalog.ContainerContent)!.NameKey,
-            StackingFieldCatalog.Find(StackingFieldCatalog.AppraisedValue)!.NameKey
-        }));
+        var name = (LocalizedText)panel.Lines[3].Args.Single();
+        Assert.That(name.TextKey, Is.EqualTo(StackingFieldCatalog.Find(StackingFieldCatalog.ContainerContent)!.NameKey));
         Assert.That(pipeline.Tooltip(DisplayEntry.Single(Bottle(1, 1)), Context(data, Installed)), Is.Empty);
         Assert.That(pipeline.Tooltip(mixed, Context(data, Array.Empty<string>())), Is.Empty);
+    }
+
+    [Test]
+    public void InfoTooltip_OmitsUnrelatedAndIdenticalRulesAndUsesCapturedAppraisal()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore("tag:VARIETY", "tag:CHEMISTRY", "tag:METALS", StackingFieldCatalog.AppraisedValue));
+        var pipeline = new StoragePresentationPipeline(new[] { new StackingProjector(_ => { }, () => false) },
+            Array.Empty<ISlotDecorator>(), new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var context = Context(data, Installed);
+        var chemistry = new CanonicalIdentityTag("CHEMISTRY", enabled: true, valueString: "same");
+        var first = Tagged("fruit", chemistry, new CanonicalIdentityTag("VARIETY", enabled: true, valueInt: 1));
+        var second = Tagged("fruit", chemistry, new CanonicalIdentityTag("VARIETY", enabled: true, valueInt: 2));
+        EntryAttributes CapturedValues(long secondValue) => new(new Dictionary<ItemKey, IReadOnlyDictionary<string, long>>
+        {
+            [first.Key] = new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = 10 },
+            [second.Key] = new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = secondValue }
+        });
+        var attributes = CapturedValues(20);
+        var group = pipeline.Project(new[] { first, second }, context, attributes).Single();
+        var entry = new DisplayEntry(group.Id, group.Members);
+
+        var panel = pipeline.Tooltip(entry, context, attributes).Single();
+        var names = panel.Lines.Where(line => line.TextKey == StackingInfoTooltip.RuleKey)
+            .Select(line => line.Args.Single()).ToArray();
+        var refreshedPanel = pipeline.Tooltip(entry, context, CapturedValues(10)).Single();
+        var refreshedNames = refreshedPanel.Lines.Where(line => line.TextKey == StackingInfoTooltip.RuleKey)
+            .Select(line => line.Args.Single());
+
+        Assert.That(panel.Definition.ExpandToContent, Is.True);
+        Assert.That(TooltipPanelDefinition.Hint.ExpandToContent, Is.False);
+        Assert.That(names[0], Is.EqualTo("VARIETY"));
+        Assert.That(((LocalizedText)names[1]).TextKey, Is.EqualTo("stacking_field_appraised_value"));
+        Assert.That(refreshedNames, Is.EqualTo(new object[] { "VARIETY" }));
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_ListsAllSameIdentifierDifferencesWithoutValues()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue));
+        var first = Tagged("scrap_metal", new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "first"));
+        var second = Tagged("scrap_metal", new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "second"));
+        var third = Tagged("scrap_metal", new CanonicalIdentityTag("A&B_<br>", enabled: true, valueInt: 3));
+        var other = Tagged("other_item", new CanonicalIdentityTag("OTHER_ID_TAG", enabled: true, valueInt: 9));
+        var groups = new[] { first, second, third, other }.Select(DisplayEntry.Single).ToArray();
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+
+        var panel = pipeline.TooltipForSelection(groups[0], Context(data, Installed), groups, EntryAttributes.Empty).Single();
+        var differences = panel.Lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
+            .Select(line => line.Args.Single()).ToArray();
+
+        Assert.That(panel.Lines.Single(line => line.TextKey == StackingInfoTooltip.SelectionKey).Args.Single(), Is.EqualTo(3));
+        Assert.That(differences, Is.EqualTo(new object[] { "A&B_<noparse><</noparse>br>", "AGRI_PERFUME_RECORDED" }));
+        Assert.That(panel.Lines.SelectMany(line => line.Args).OfType<string>(),
+            Does.Not.Contain("first").And.Not.Contain("second"));
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_PreservesKnownDifferencesWhenAnotherGroupIsUnreadable()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition));
+        var first = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("COLOR", enabled: true, valueString: "red")));
+        var second = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("COLOR", enabled: true, valueString: "green")));
+        var third = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("COLOR", enabled: true, valueString: "blue")));
+        var attributes = new EntryAttributes(new Dictionary<ItemKey, IReadOnlyDictionary<string, long>>
+        {
+            [second.Representative.Key] = new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = 10 },
+            [third.Representative.Key] = new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = 20 }
+        });
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var forward = new[] { first, second, third };
+        var reverse = new[] { third, second, first };
+
+        var forwardPanel = pipeline.TooltipForSelection(first, Context(data, Installed), forward, attributes).Single();
+        var reversePanel = pipeline.TooltipForSelection(third, Context(data, Installed), reverse, attributes).Single();
+        var forwardTags = forwardPanel.Lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
+            .Select(line => line.Args.Single()).OfType<string>().ToArray();
+        var reverseTags = reversePanel.Lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
+            .Select(line => line.Args.Single()).OfType<string>().ToArray();
+
+        Assert.That(forwardTags, Is.EqualTo(new object[] { "COLOR" }));
+        Assert.That(reverseTags, Is.EqualTo(forwardTags));
+        Assert.That(forwardPanel.Lines.SelectMany(line => line.Args).OfType<LocalizedText>()
+            .Any(name => name.TextKey == StackingInfoTooltip.SelectionUnknownKey), Is.True);
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_ReportsExposedFeatureDifferenceAcrossHiddenGroupRegardlessOfOrder()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue));
+        var hidden = DisplayEntry.Single(Featured("scrap_metal",
+            new CanonicalIdentityFeature("glow", "", valueModifier: 0, publicDisplay: "Hidden")));
+        var visibleLow = DisplayEntry.Single(Featured("scrap_metal",
+            new CanonicalIdentityFeature("glow", "", valueModifier: 1, publicDisplay: "Glow", isFeatureExposed: true, isFeatureDiscovered: true)));
+        var visibleHigh = DisplayEntry.Single(Featured("scrap_metal",
+            new CanonicalIdentityFeature("glow", "", valueModifier: 9, publicDisplay: "Glow", isFeatureExposed: true, isFeatureDiscovered: true)));
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var forward = new[] { hidden, visibleLow, visibleHigh };
+        var reverse = new[] { visibleHigh, visibleLow, hidden };
+
+        var forwardPanel = pipeline.TooltipForSelection(hidden, Context(data, Installed), forward, EntryAttributes.Empty).Single();
+        var reversePanel = pipeline.TooltipForSelection(visibleHigh, Context(data, Installed), reverse, EntryAttributes.Empty).Single();
+        var forwardFeatures = DifferenceNames(forwardPanel, "stacking_field_feature");
+        var reverseFeatures = DifferenceNames(reversePanel, "stacking_field_feature");
+
+        Assert.That(forwardFeatures, Is.EqualTo(new object[] { "glow" }));
+        Assert.That(reverseFeatures, Is.EqualTo(forwardFeatures));
+        Assert.That(forwardPanel.Lines.SelectMany(line => line.Args).OfType<LocalizedText>()
+            .Any(name => name.TextKey == StackingInfoTooltip.SelectionUnknownKey), Is.True);
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_ReportsUnreadableSettingsWithoutIdentityDetails()
+    {
+        var data = new MemoryData();
+        data.Values[StackingModule.ConfigTag] = "broken";
+        var first = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("TAG_A", enabled: true, valueString: "private")));
+        var second = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("TAG_B", enabled: true, valueString: "secret")));
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+
+        var panel = pipeline.TooltipForSelection(first, Context(data, Installed), new[] { first, second }, EntryAttributes.Empty).Single();
+
+        Assert.That(panel.Lines.Select(line => line.TextKey), Does.Contain(StackingInfoTooltip.SelectionUnavailableKey));
+        Assert.That(panel.Lines.SelectMany(line => line.Args), Does.Not.Contain("TAG_A").And.Not.Contain("private"));
+    }
+
+    [Test]
+    public void Editor_MenuOptionsIncludesStoredRawTags()
+    {
+        var editor = new StackingRulesEditor(new StackingConfigStore(new MemoryData()), () => { });
+        var key = Tagged("scrap_metal", new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "private"));
+
+        var option = editor.MenuOptions(new[] { key.Key }).Single(item => item.Field.Id == "tag:AGRI_PERFUME_RECORDED");
+
+        Assert.That(option.Field.TagKey, Is.EqualTo("AGRI_PERFUME_RECORDED"));
+        Assert.That(option.Field.NameKey, Is.Empty);
+        Assert.That(option.Field.DescriptionKey, Is.Empty);
     }
 
     [Test]
@@ -184,15 +323,69 @@ public sealed class StackingFeatureTests
         Assert.That(store.Read().Status, Is.EqualTo(StackingConfigStatus.Missing));
         Assert.That(data.Values, Is.Empty, "Reading never creates the tag.");
 
-        Assert.That(store.TryCommit(Ignore(StackingFieldCatalog.Stolen)), Is.True);
+        Assert.That(store.TryCommit(Ignore("tag:STOLEN_TAG")), Is.True);
         data.RefuseWrites = true;
         Assert.That(store.TryCommit(StackingConfig.Default), Is.False);
-        Assert.That(store.Effective(), Is.EqualTo(Ignore(StackingFieldCatalog.Stolen)));
+        Assert.That(store.Effective(), Is.EqualTo(Ignore("tag:STOLEN_TAG")));
 
         data.RefuseWrites = false;
         data.Values[StackingModule.ConfigTag] = "v9";
         Assert.That(store.TryCommit(StackingConfig.Default), Is.False, "Unreadable text is never overwritten.");
         Assert.That(data.Values[StackingModule.ConfigTag], Is.EqualTo("v9"));
+    }
+
+    [Test]
+    public void Editor_ClearsRetiredSettingsInMemoryUntilExplicitEdit()
+    {
+        const string legacy = "v2\nenabled\t0\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore";
+        var data = new MemoryData();
+        data.Values[StackingModule.ConfigTag] = legacy;
+        var editor = new StackingRulesEditor(new StackingConfigStore(data), () => { });
+
+        Assert.That(editor.WasReset, Is.True);
+        Assert.That(editor.Config, Is.EqualTo(StackingConfig.Default));
+        Assert.That(data.Values[StackingModule.ConfigTag], Is.EqualTo(legacy));
+        Assert.That(editor.AddOrLocate("tag:STOLEN_TAG"), Is.EqualTo(0));
+        Assert.That(data.Values[StackingModule.ConfigTag], Does.StartWith("v3\n"));
+        Assert.That(editor.WasReset, Is.False);
+        Assert.That(editor.Config, Is.EqualTo(Ignore("tag:STOLEN_TAG")));
+    }
+
+    [Test]
+    public void Editor_FilteredRowsKeepTheirOriginalIndicesForRemoval()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore("tag:OTHER", "tag:STOLEN_TAG", StackingFieldCatalog.AppraisedValue, "tag:STOLEN_VALUE_INT", "tag:A&B_<br>"));
+        var editor = new StackingRulesEditor(new StackingConfigStore(data), () => { });
+        string Name(string id) => id == StackingFieldCatalog.AppraisedValue ? "估价" : id;
+        bool Matches(string value, string query) => value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+        var rows = StackingRulesEditor.FindRows(editor.Config, " stolen ", Name, Matches);
+        Assert.That(rows, Is.EqualTo(new[] { 1, 3 }));
+        Assert.That(StackingRulesEditor.FindRows(editor.Config, "估价", Name, Matches), Is.EqualTo(new[] { 2 }));
+        Assert.That(StackingRulesEditor.FindRows(editor.Config, "a&b_<br>", Name, Matches), Is.EqualTo(new[] { 4 }));
+        Assert.That(editor.Remove(rows[0]), Is.True);
+        Assert.That(editor.Config.Rules.Select(rule => rule.FieldId),
+            Is.EqualTo(new[] { "tag:OTHER", StackingFieldCatalog.AppraisedValue, "tag:STOLEN_VALUE_INT", "tag:A&B_<br>" }));
+    }
+
+    [Test]
+    public void Editor_RevealsAddedAndLocatedRowsWithoutLosingSearchMatches()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore("tag:Q_ONE", "tag:OTHER", "tag:Q_TWO"));
+        var editor = new StackingRulesEditor(new StackingConfigStore(data), () => { });
+        const string query = "q_";
+        bool Matches(string value, string search) => value.Contains(search, StringComparison.OrdinalIgnoreCase);
+        IReadOnlyList<int> RowsFor(int selection) => StackingRulesEditor.FindRows(editor.Config, query, id => id, Matches,
+            editor.Config.Rules[selection].FieldId);
+
+        var added = editor.AddOrLocate(StackingFieldCatalog.ContainerContent);
+        Assert.That(RowsFor(added), Is.EqualTo(new[] { 0, 2, 3 }));
+        var existing = editor.ReplaceField(added, "tag:OTHER");
+        Assert.That(RowsFor(existing), Is.EqualTo(new[] { 0, 1, 2 }));
+        Assert.That(RowsFor(editor.AddOrLocate("tag:Q_TWO")), Is.EqualTo(new[] { 0, 2 }));
+        Assert.That(StackingRulesEditor.FindRows(editor.Config, query, id => id, Matches), Is.EqualTo(new[] { 0, 2 }));
     }
 
     [Test]
@@ -204,11 +397,11 @@ public sealed class StackingFeatureTests
 
         Assert.That(editor.AddOrLocate(StackingFieldCatalog.PriceComposition), Is.EqualTo(0));
         Assert.That(editor.Config.ModeOf(StackingFieldCatalog.PriceComposition), Is.EqualTo(StackingMode.Ignore));
-        Assert.That(editor.AddOrLocate(StackingFieldCatalog.MetalPurity), Is.EqualTo(1));
+        Assert.That(editor.AddOrLocate("tag:INGOT_PURITY_TAG"), Is.EqualTo(1));
         Assert.That(editor.AddOrLocate(StackingFieldCatalog.PriceComposition), Is.EqualTo(0));
         Assert.That(editor.ReplaceField(1, StackingFieldCatalog.PriceComposition), Is.EqualTo(0), "Locates, never merges.");
         Assert.That(editor.Config.Rules.Select(rule => rule.FieldId),
-            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition, StackingFieldCatalog.MetalPurity }));
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition, "tag:INGOT_PURITY_TAG" }));
         Assert.That(editor.SetMode(1, StackingMode.Match), Is.True);
         Assert.That(editor.SetEnabled(false), Is.True);
         Assert.That(editor.Config.Rules, Has.Count.EqualTo(2), "Switching off keeps the rows.");
@@ -218,7 +411,7 @@ public sealed class StackingFeatureTests
         Assert.That(saves, Is.EqualTo(6));
 
         data.RefuseWrites = true;
-        Assert.That(editor.AddOrLocate(StackingFieldCatalog.Heat), Is.EqualTo(-1));
+        Assert.That(editor.AddOrLocate("tag:STOLEN_VALUE_INT"), Is.EqualTo(-1));
         Assert.That(editor.LastError, Is.EqualTo(StackingRulesEditor.SaveFailedKey));
         Assert.That(editor.Config.Rules, Is.Empty);
     }
@@ -235,23 +428,19 @@ public sealed class StackingFeatureTests
     }
 
     [Test]
-    public void Summary_DescribesTheRulesAndRowNotes()
+    public void RowNotes_ExplainTheEffectOfIndividualRules()
     {
-        Assert.That(StackingRuleSummary.Describe(StackingConfig.Default).Key, Is.EqualTo(StackingRuleSummary.ExactKey));
-        Assert.That(StackingRuleSummary.Describe(StackingConfig.Default.WithEnabled(false)).Key,
-            Is.EqualTo(StackingRuleSummary.DisabledKey));
         var config = new StackingConfig(true, new[]
         {
             new StackingRule(StackingFieldCatalog.AppraisedValue, StackingMode.Match),
             new StackingRule(StackingFieldCatalog.ContainerContent, StackingMode.Ignore)
         });
-        Assert.That(StackingRuleSummary.Describe(config).IgnoredFields, Is.EqualTo(new[] { StackingFieldCatalog.ContainerContent }));
         Assert.That(StackingRuleSummary.RowNotes(config, 0), Is.Empty, "Match is useful next to an ignored raw field.");
         Assert.That(StackingRuleSummary.RowNotes(config, 1), Is.EqualTo(new[]
         {
             StackingRuleSummary.ValueStillComparedKey, StackingRuleSummary.ContainerFirstOnlyKey
         }));
-        var alone = new StackingConfig(true, new[] { new StackingRule(StackingFieldCatalog.Heat, StackingMode.Match) });
+        var alone = new StackingConfig(true, new[] { new StackingRule("tag:STOLEN_VALUE_INT", StackingMode.Match) });
         Assert.That(StackingRuleSummary.RowNotes(alone, 0), Is.EqualTo(new[] { StackingRuleSummary.MatchAloneKey }));
         var valueOnly = Ignore(StackingFieldCatalog.AppraisedValue);
         Assert.That(StackingRuleSummary.RowNotes(valueOnly, 0), Is.EqualTo(new[] { StackingRuleSummary.DerivedAloneKey }));
@@ -265,6 +454,25 @@ public sealed class StackingFeatureTests
 
     private static TerminalContext Context(ITerminalFeatureData data, IReadOnlyCollection<string> modules) =>
         new(modules, false, TerminalRegistry.StorageTerminalName, new NoCommands(), new object(), data);
+
+    private static IReadOnlyList<object> DifferenceNames(TooltipPanel panel, string textKey) =>
+        panel.Lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
+            .Select(line => line.Args.Single()).OfType<LocalizedText>().Where(name => name.TextKey == textKey)
+            .Select(name => name.Args.Single()).ToArray();
+
+    private static TerminalEntry Tagged(string identifier, params CanonicalIdentityTag[] tags)
+    {
+        var key = CanonicalIdentityEncoder.Encode(new CanonicalIdentityInput(identifier, Array.Empty<string>(), tags,
+            Array.Empty<CanonicalIdentityFeature>(), unitValue: 10));
+        return new TerminalEntry(key, 1, identifier, "sprite");
+    }
+
+    private static TerminalEntry Featured(string identifier, CanonicalIdentityFeature feature)
+    {
+        var key = CanonicalIdentityEncoder.Encode(new CanonicalIdentityInput(identifier, Array.Empty<string>(),
+            Array.Empty<CanonicalIdentityTag>(), new[] { feature }, unitValue: 10));
+        return new TerminalEntry(key, 1, identifier, "sprite");
+    }
 
     private static TerminalEntry Bottle(int tablets, long pieces)
     {

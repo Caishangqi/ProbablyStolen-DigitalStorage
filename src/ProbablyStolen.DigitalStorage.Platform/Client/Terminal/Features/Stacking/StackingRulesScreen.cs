@@ -4,6 +4,7 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Client.Tooltips;
 using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
@@ -20,18 +21,25 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Stacki
 internal sealed class StackingRulesScreen : SubScreen
 {
     private const float Gap = 4f;
-    private const float FieldWidth = 180f;
+    private const float FieldWidth = 224f;
     private const float FieldPickerWidth = 320f;
     private const float ModeWidth = 96f;
     private const float ColorInputWidth = 84f;
     private const float CountWidth = 110f;
     private const int CardsBeforeScroll = 4;
+    private const float CardHeight = RuleCardWidgets.ControlHeight + 2 * RuleCardWidgets.CardPadding;
+    private static readonly Color LocatedCardFill = new(1f, 1f, 1f, 0.16f);
     private static readonly StackingMode[] Modes = { StackingMode.Match, StackingMode.Ignore };
 
     private readonly StackingRulesEditor _editor;
     private readonly StorageTerminalServices _storage;
     private PopupDropdown? _dropdown;
     private TerminalInventoryRefreshHandler? _frame;
+    private RectTransform? _cardHost;
+    private ScrollRect? _ruleScroll;
+    private int? _revealedPosition;
+    private string? _revealedFieldId;
+    private string _ruleQuery = string.Empty;
 
     internal StackingRulesScreen(TerminalWindowHost window, StorageTerminalServices storage) : base(window)
     {
@@ -42,7 +50,7 @@ internal sealed class StackingRulesScreen : SubScreen
 
     internal override bool FitsContent => true;
 
-    private static float BodyWidth => TerminalWindowMetrics.GridWidth;
+    private static float BodyWidth => TerminalWindowMetrics.GridWidth + 36f;
 
     protected override bool BuildContent(CustomUIBuilder builder)
     {
@@ -54,6 +62,8 @@ internal sealed class StackingRulesScreen : SubScreen
             _frame.Initialize(() => _dropdown?.CloseOnOutsidePress(EventCamera()));
         }
 
+        _cardHost = null;
+        _ruleScroll = null;
         var config = _editor.Config;
         builder.AddToggle(text.Get("stacking_enable"), config.Enabled, enabled => Edit(() => _editor.SetEnabled(enabled)));
         builder.AddLabel(text.Get("stacking_scope_hint"));
@@ -64,11 +74,22 @@ internal sealed class StackingRulesScreen : SubScreen
             return true;
         }
 
+        if (_editor.WasReset) builder.AddWarning(text.Get("stacking_rules_reset"));
         BuildMarker(builder, config);
         BuildListHeader(builder, config);
-        BuildCards(builder, config);
+        builder.AddInput(text.Get("stacking_rule_search"), _ruleQuery, onTyping: typed =>
+        {
+            _ruleQuery = typed ?? string.Empty;
+            _revealedFieldId = null;
+            RebuildCards();
+            Window.FitSubScreenContent(this);
+        });
+        RuleCardWidgets.SetSize(builder.Last, BodyWidth, RuleCardWidgets.ControlHeight);
+        builder.BeginColumn(Gap);
+        _cardHost = builder.CurrentContainer;
+        RebuildCards();
+        builder.End();
         BuildButtons(builder, config);
-        BuildSummary(builder, config);
         builder.AddLabel(text.Get(_editor.LastError ?? "stacking_saved_immediately"));
         Muted(builder.Last);
         return true;
@@ -85,6 +106,8 @@ internal sealed class StackingRulesScreen : SubScreen
     {
         _dropdown?.Close();
         _dropdown = null;
+        _cardHost = null;
+        _ruleScroll = null;
         if (_frame != null) UnityEngine.Object.Destroy(_frame);
         _frame = null;
         base.Dispose();
@@ -146,36 +169,59 @@ internal sealed class StackingRulesScreen : SubScreen
         builder.End();
     }
 
-    /// <summary>The rule cards inside a light box that stays visible, one card tall, while there are no rules.</summary>
-    private void BuildCards(CustomUIBuilder builder, StackingConfig config)
+    private void RebuildCards()
     {
-        RuleCardWidgets.BeginListBox(builder, Gap, BodyWidth);
+        if (_cardHost == null) return;
+        _dropdown?.Close();
+        CustomUIBuilder.ClearContainer(_cardHost);
+        _ruleScroll = null;
+        _revealedPosition = null;
+        var config = _editor.Config;
+        var rows = StackingRulesEditor.FindRows(config, _ruleQuery, FieldName, _storage.Search.MatchesText, _revealedFieldId);
+        var builder = new CustomUIBuilder(CustomUIManager.Instance, Window.CustomWindow, _cardHost);
+        RuleCardWidgets.BeginListBox(builder, Gap, BodyWidth, RuleCardWidgets.CardFill);
         var inner = BodyWidth - 2 * RuleCardWidgets.ListPadding;
         var cardWidth = inner;
-        if (config.Rules.Count > CardsBeforeScroll)
+        if (rows.Count > CardsBeforeScroll)
         {
             var parent = builder.CurrentContainer;
-            var cardHeight = RuleCardWidgets.ControlHeight + 2 * RuleCardWidgets.CardPadding;
-            builder.BeginScroll(CardsBeforeScroll * (cardHeight + Gap) - Gap);
+            builder.BeginScroll(CardsBeforeScroll * (CardHeight + Gap) - Gap);
             var view = parent.GetChild(parent.childCount - 1).gameObject;
-            RuleCardWidgets.FixWidth(view, inner);
-            cardWidth = inner - RuleCardWidgets.ScrollbarSpace(view);
+            cardWidth = RuleCardWidgets.ConfigureListScroll(view, inner, Gap);
+            _ruleScroll = view.GetComponentInChildren<ScrollRect>(true);
         }
         else builder.BeginColumn(Gap);
 
-        for (var row = 0; row < config.Rules.Count; row++) BuildCard(builder, config, row, cardWidth);
+        for (var position = 0; position < rows.Count; position++)
+        {
+            var row = rows[position];
+            var located = config.Rules[row].FieldId == _revealedFieldId;
+            if (located) _revealedPosition = position;
+            BuildCard(builder, config, row, cardWidth, located);
+        }
+        if (rows.Count == 0 && _ruleQuery.Trim().Length != 0)
+        {
+            builder.AddLabel(Window.Text.Get("stacking_rule_search_empty"));
+            Muted(builder.Last);
+        }
         builder.End();
         builder.End();
     }
 
-    private void BuildCard(CustomUIBuilder builder, StackingConfig config, int row, float width)
+    private void BuildCard(CustomUIBuilder builder, StackingConfig config, int row, float width, bool located)
     {
         var text = Window.Text;
         var rule = config.Rules[row];
         RuleCardWidgets.BeginCard(builder, Gap, width);
+        if (located) RuleCardWidgets.Fill(builder.CurrentContainer.gameObject, LocatedCardFill);
+        var fieldName = TooltipLiteralText.ForRichText(FieldName(rule.FieldId));
         CustomUIElement? field = null;
-        field = PopupDropdown.AddField(builder, FieldName(rule.FieldId), FieldWidth, () => OpenFieldPicker(field!, row));
-        TerminalTooltipPresenter.SetButtonText(field, FieldName(rule.FieldId));
+        field = PopupDropdown.AddField(builder, fieldName, FieldWidth, () => OpenFieldPicker(field!, row));
+        var description = StackingFieldCatalog.Find(rule.FieldId) is { } attribute ? DescriptionOf(attribute) : string.Empty;
+        var lore = new[] { fieldName, TooltipLiteralText.ForRichText(description) }
+            .Concat(StackingRuleSummary.RowNotes(config, row).Select(note => text.Get(note)))
+            .Where(line => !string.IsNullOrEmpty(line));
+        TerminalTooltipPresenter.SetButtonText(field, string.Join("\n", lore));
         var modeLabels = Modes.Select(mode => new DropdownOption(text.Get(ModeKey(mode)))).ToList();
         var current = Array.IndexOf(Modes, rule.Mode);
         CustomUIElement? mode = null;
@@ -186,12 +232,6 @@ internal sealed class StackingRulesScreen : SubScreen
             () => Edit(() => _editor.Remove(row)), RuleCardWidgets.ControlHeight);
         TerminalTooltipPresenter.SetButtonText(delete, text.Get("stacking_remove_rule_tip"));
         builder.End();
-        foreach (var note in StackingRuleSummary.RowNotes(config, row))
-        {
-            builder.AddLabel(text.Get(note));
-            Muted(builder.Last);
-            RuleCardWidgets.FixWidth(builder.Last.root, width);
-        }
     }
 
     private void BuildButtons(CustomUIBuilder builder, StackingConfig config)
@@ -211,23 +251,6 @@ internal sealed class StackingRulesScreen : SubScreen
         builder.End();
     }
 
-    /// <summary>The final meaning of the rules in the same framed box the partition page uses.</summary>
-    private void BuildSummary(CustomUIBuilder builder, StackingConfig config)
-    {
-        var (key, ignored) = StackingRuleSummary.Describe(config);
-        var names = string.Join(Window.Text.Get("stacking_summary_separator"), ignored.Select(FieldName));
-        RuleCardWidgets.BeginSpecBox(builder);
-        builder.AddLabel(Window.Text.Get(key, names));
-        if (builder.Last.text != null)
-        {
-            builder.Last.text.enableWordWrapping = true;
-            builder.Last.text.color = MachineryStyle.VALUE_TEXT;
-        }
-
-        RuleCardWidgets.FixWidth(builder.Last.root, BodyWidth - 20f);
-        builder.End();
-    }
-
     /// <summary>Opens the attribute menu for a row, or for a new row when <paramref name="row"/> is -1.</summary>
     private void OpenFieldPicker(CustomUIElement anchor, int row)
     {
@@ -240,16 +263,24 @@ internal sealed class StackingRulesScreen : SubScreen
 
         var options = _editor.MenuOptions(StoredKeys());
         var absence = Window.Text.Get("stacking_field_absent");
-        var details = options.Select(option => (Title: FieldName(option.Field.Id),
-            Description: DescriptionOf(option.Field), Absence: option.AbsentFromInventory ? absence : null)).ToArray();
-        // The leading title uses the row's width first. The muted summary takes the remaining space before ellipsis.
-        var labels = details.Select(detail => new DropdownOption(detail.Title, detail.Absence ?? detail.Description)).ToArray();
+        var names = options.Select(option => FieldName(option.Field.Id)).ToArray();
+        var details = options.Select((option, index) => (Title: TooltipLiteralText.ForRichText(names[index]),
+            Description: TooltipLiteralText.ForRichText(DescriptionOf(option.Field)),
+            Absence: option.AbsentFromInventory ? absence : null)).ToArray();
+        var labels = details.Select((detail, index) =>
+            new DropdownOption(detail.Title, detail.Absence ?? detail.Description, names[index])).ToArray();
         var config = _editor.Config;
         var current = row < 0 ? -1 : options.ToList().FindIndex(option => option.Field.Id == config.Rules[row].FieldId);
         _dropdown.Open(anchor, labels, current, choice =>
         {
             var id = options[choice].Field.Id;
-            Edit(() => (row < 0 ? _editor.AddOrLocate(id) : _editor.ReplaceField(row, id)) >= 0);
+            Edit(() =>
+            {
+                var selected = row < 0 ? _editor.AddOrLocate(id) : _editor.ReplaceField(row, id);
+                if (selected < 0) return false;
+                _revealedFieldId = _editor.Config.Rules[selected].FieldId;
+                return true;
+            }, reveal: true);
         }, Window.Text.Get("stacking_search"), preferredWidth: FieldPickerWidth, hover: new StackingFieldTooltip(details));
     }
 
@@ -260,13 +291,32 @@ internal sealed class StackingRulesScreen : SubScreen
         else _dropdown.Open(field, options, selected, choose);
     }
 
-    private void Edit(Func<bool> edit)
+    private void Edit(Func<bool> edit, bool reveal = false)
     {
         _dropdown?.Close();
-        edit();
+        var offset = _ruleScroll?.content?.anchoredPosition.y ?? 0f;
+        var changed = edit();
         RefreshContent();
-        // Rows, notes and the summary change the page height, so the window is measured again.
         Window.FitSubScreenContent(this);
+        RestoreRuleScroll(offset, reveal && changed);
+    }
+
+    private void RestoreRuleScroll(float offset, bool reveal)
+    {
+        if (_ruleScroll == null || _ruleScroll.content == null || _ruleScroll.viewport == null) return;
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_ruleScroll.transform);
+        _ruleScroll.StopMovement();
+        var viewportHeight = _ruleScroll.viewport.rect.height;
+        var maxOffset = Mathf.Max(0f, _ruleScroll.content.rect.height - viewportHeight);
+        if (reveal && _revealedPosition is { } position)
+        {
+            var rowTop = position * (CardHeight + Gap);
+            var rowBottom = rowTop + CardHeight;
+            if (offset > rowTop) offset = rowTop;
+            else if (offset + viewportHeight < rowBottom) offset = rowBottom - viewportHeight;
+        }
+
+        _ruleScroll.verticalNormalizedPosition = maxOffset <= 0f ? 1f : 1f - Mathf.Clamp(offset, 0f, maxOffset) / maxOffset;
     }
 
     private IEnumerable<ItemKey> StoredKeys()
@@ -286,11 +336,18 @@ internal sealed class StackingRulesScreen : SubScreen
     {
         var field = StackingFieldCatalog.Find(fieldId);
         if (field == null) return fieldId;
-        return field.FeatureId != null ? Window.Text.Get(field.NameKey, field.FeatureId) : Window.Text.Get(field.NameKey);
+        if (field.TagKey != null) return field.TagKey;
+        if (field.FeatureId != null) return Window.Text.Get(field.NameKey, field.FeatureId);
+        return Window.Text.Get(field.NameKey);
     }
 
-    private string DescriptionOf(StackingField field) =>
-        field.FeatureId != null ? Window.Text.Get(field.DescriptionKey, field.FeatureId) : Window.Text.Get(field.DescriptionKey);
+    private string DescriptionOf(StackingField field)
+    {
+        if (field.TagKey != null) return string.Empty;
+        return field.FeatureId != null
+            ? Window.Text.Get(field.DescriptionKey, field.FeatureId)
+            : Window.Text.Get(field.DescriptionKey);
+    }
 
     private static string ModeKey(StackingMode mode) => mode == StackingMode.Ignore ? "stacking_mode_ignore" : "stacking_mode_match";
 

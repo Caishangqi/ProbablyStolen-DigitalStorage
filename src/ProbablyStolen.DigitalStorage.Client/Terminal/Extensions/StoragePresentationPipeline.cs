@@ -100,13 +100,26 @@ public sealed class StoragePresentationPipeline
         return decorations ?? (IReadOnlyList<SlotDecoration>)Array.Empty<SlotDecoration>();
     }
 
-    /// <summary>
-    /// Collects the tooltip panels of one slot that received lines, by panel order. Lines for a panel nobody registered
-    /// are dropped.
-    /// </summary>
-    public IReadOnlyList<TooltipPanel> Tooltip(DisplayEntry entry, TerminalContext? context)
+    /// <summary>Collects tooltip lines for one slot.</summary>
+    public IReadOnlyList<TooltipPanel> Tooltip(DisplayEntry entry, TerminalContext? context, EntryAttributes? attributes = null)
     {
         if (entry == null) throw new ArgumentNullException(nameof(entry));
+        return BuildTooltip(entry, context, null, attributes ?? EntryAttributes.Empty);
+    }
+
+    /// <summary>Collects tooltip lines for one slot and its current retained selection.</summary>
+    public IReadOnlyList<TooltipPanel> TooltipForSelection(DisplayEntry entry, TerminalContext? context,
+        IReadOnlyList<DisplayEntry> selection, EntryAttributes attributes)
+    {
+        if (entry == null) throw new ArgumentNullException(nameof(entry));
+        if (selection == null) throw new ArgumentNullException(nameof(selection));
+        if (attributes == null) throw new ArgumentNullException(nameof(attributes));
+        return BuildTooltip(entry, context, selection, attributes);
+    }
+
+    private IReadOnlyList<TooltipPanel> BuildTooltip(DisplayEntry entry, TerminalContext? context,
+        IReadOnlyList<DisplayEntry>? selection, EntryAttributes attributes)
+    {
         if (context == null || _contributors.Count == 0) return Array.Empty<TooltipPanel>();
         var lines = new Dictionary<string, List<TooltipLine>>(StringComparer.Ordinal);
         foreach (var contributor in _contributors)
@@ -115,26 +128,46 @@ public sealed class StoragePresentationPipeline
             var ran = Guard(contributor.Id, "tooltip", () =>
             {
                 if (!contributor.IsActive(context)) return false;
-                contributor.Contribute(entry, context, sink);
+                contributor.Contribute(entry, context, attributes, sink);
                 return true;
             }, false);
-            if (!ran) continue;
-            foreach (var line in sink.Lines)
-            {
-                if (!_panels.ContainsKey(line.PanelId))
-                {
-                    _diagnostic($"storage_pipeline skipped=tooltip id={contributor.Id} panel={line.PanelId} reason=unknown_panel");
-                    continue;
-                }
+            if (ran) AddTooltipLines(contributor.Id, sink, lines);
+        }
 
-                if (!lines.TryGetValue(line.PanelId, out var list)) lines.Add(line.PanelId, list = new List<TooltipLine>());
-                list.Add(line);
+        if (selection is { Count: > 1 })
+        {
+            foreach (var contributor in _contributors.OfType<ISelectionTooltipContributor>())
+            {
+                var sink = new EntryTooltipSink();
+                var ran = Guard(contributor.Id, "selection_tooltip", () =>
+                {
+                    if (!contributor.IsActive(context)) return false;
+                    contributor.ContributeSelection(entry, selection, context, attributes, sink);
+                    return true;
+                }, false);
+                if (ran) AddTooltipLines(contributor.Id, sink, lines);
             }
         }
 
         return lines.Select(pair => new TooltipPanel(_panels[pair.Key], pair.Value))
             .OrderBy(panel => panel.Definition.Order).ThenBy(panel => panel.Definition.Id, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private void AddTooltipLines(string contributorId, EntryTooltipSink sink,
+        Dictionary<string, List<TooltipLine>> lines)
+    {
+        foreach (var line in sink.Lines)
+        {
+            if (!_panels.ContainsKey(line.PanelId))
+            {
+                _diagnostic($"storage_pipeline skipped=tooltip id={contributorId} panel={line.PanelId} reason=unknown_panel");
+                continue;
+            }
+
+            if (!lines.TryGetValue(line.PanelId, out var list)) lines.Add(line.PanelId, list = new List<TooltipLine>());
+            list.Add(line);
+        }
     }
 
     private static bool IsPartition(IReadOnlyList<TerminalEntry> entries, IReadOnlyList<ProjectedGroup> groups)

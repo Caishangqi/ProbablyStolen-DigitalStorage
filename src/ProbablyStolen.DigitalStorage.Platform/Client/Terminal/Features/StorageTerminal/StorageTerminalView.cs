@@ -49,6 +49,7 @@ internal sealed class StorageTerminalView : ITerminalView
     private long _pipelineRevision = -1;
     private DisplayEntry? _hoverHintGroup;
     private long _hoverHintRevision = -1;
+    private IReadOnlyList<string>? _hoverSelectionIds;
     private IReadOnlyList<PanelText>? _hoverPanels;
     private IReadOnlyList<PanelText>? _hintPanels;
     private ITooltip? _hoverTooltip;
@@ -783,13 +784,13 @@ internal sealed class StorageTerminalView : ITerminalView
             Refresh();
         }
         if (_pipelineRevision != _host.Pipeline.Revision) Regroup();
-        UpdateHoverTooltip();
         ApplyWheel();
         var viewChanged = _menu.SetPaused(IsShiftHeld());
         var reason = _inventoryMonitor.BeginRefresh(Time.unscaledTime, Window.IsVisible, _services.DiagnosticsEnabled());
         if (reason == TerminalRefreshReason.None)
         {
             if (viewChanged) ApplyMenuView(preserveView: true);
+            UpdateHoverTooltip();
             return;
         }
 
@@ -797,6 +798,7 @@ internal sealed class StorageTerminalView : ITerminalView
         if (!_inventoryMonitor.HasChanged(snapshot))
         {
             if (viewChanged) ApplyMenuView(preserveView: true);
+            UpdateHoverTooltip();
             return;
         }
         // An audit runs only with no pending event, so a change seen here came from an unsignalled source.
@@ -839,8 +841,9 @@ internal sealed class StorageTerminalView : ITerminalView
         var observedSnapshot = snapshot;
         _inventoryMonitor.ApplySnapshot(observedSnapshot, () =>
         {
-            // Stored items changed, so values read for grouping (an estimated value, for example) are read again.
+            // A refresh can keep the same display group while its captured appraisals change.
             _attributes.Clear();
+            _hoverPanels = null;
             var entries = snapshot.Entries.Select(entry => new TerminalEntry(entry.Key, entry.Amount, entry.DisplayName,
                 entry.SpriteKey, entry.SpriteWidth, entry.SpriteHeight, entry.Serial,
                 Prepared(entry.Document), entry.TotalUnits)).ToArray();
@@ -850,6 +853,8 @@ internal sealed class StorageTerminalView : ITerminalView
             _storageUnavailable = snapshot.StorageUnavailable;
             ApplyMenuView(preserveView, refresh: false);
             Refresh();
+            if (_host.IsCurrentSession()) UpdateHoverTooltip();
+            else HideHoverTooltip();
         });
     }
 
@@ -938,6 +943,7 @@ internal sealed class StorageTerminalView : ITerminalView
         CancelDrag();
         _pipelineRevision = _host.Pipeline.Revision;
         _attributes.Clear();
+        _hoverPanels = null;
         _menu.SetProjection(Project);
         _screen.InvalidatePage();
         ApplyMenuView(preserveView: true);
@@ -1032,6 +1038,7 @@ internal sealed class StorageTerminalView : ITerminalView
             foreach (var panel in panels)
             {
                 var target = _hoverTooltip.AddPanel(panel.Id, panel.Order);
+                if (target is NativeTooltipService.TooltipPanel native) native.SetExpandToContent(panel.ExpandToContent);
                 target.SetRichText(panel.Builder);
                 target.SetStyle(panel.Style);
             }
@@ -1047,17 +1054,45 @@ internal sealed class StorageTerminalView : ITerminalView
         var group = slotIndex >= 0 && slotIndex < page.Slots.Count ? page.Slots[slotIndex].Group : null;
         if (group == null)
             return _hintPanels ??= new[] { new PanelText(TooltipPanelDefinition.HintId, 0, BuildHint(null), _host.Pipeline.HintPanel.BorderRgb) };
-        if (_hoverPanels != null && ReferenceEquals(_hoverHintGroup, group) && _hoverHintRevision == _host.Pipeline.Revision)
+
+        var selection = SelectedGroupsFor(group, page);
+        var selectionIds = selection?.Select(selected => selected.Id).ToArray() ?? Array.Empty<string>();
+        if (_hoverPanels != null && ReferenceEquals(_hoverHintGroup, group) &&
+            _hoverHintRevision == _host.Pipeline.Revision && _hoverSelectionIds!.SequenceEqual(selectionIds))
             return _hoverPanels;
+
         _hoverHintGroup = group;
         _hoverHintRevision = _host.Pipeline.Revision;
-        _hoverPanels = BuildPanels(group);
+        _hoverSelectionIds = selectionIds;
+        var attributes = EntryAttributes.Empty;
+        if ((selection != null || group.IsMixed) && _host.Pipeline.ActiveProjector(_host.Context) is { } projector)
+        {
+            var members = selection == null ? group.Members : selection.SelectMany(selected => selected.Members);
+            attributes = _attributes.Read(members, projector.RequiredAttributes);
+        }
+        _hoverPanels = BuildPanels(group, selection, attributes);
         return _hoverPanels;
     }
 
-    private IReadOnlyList<PanelText> BuildPanels(DisplayEntry group)
+    private IReadOnlyList<DisplayEntry>? SelectedGroupsFor(DisplayEntry hovered, StorageScreenPage page)
     {
-        var panels = _host.Pipeline.Tooltip(group, _host.Context);
+        var controller = _dragController;
+        if (controller?.Phase != TerminalDragPhase.Selected || controller.SelectedIds.Count < 2 ||
+            !controller.SelectedIds.Contains(hovered.Id, StringComparer.Ordinal)) return null;
+        var selected = new HashSet<string>(controller.SelectedIds, StringComparer.Ordinal);
+        var groups = page.Slots.Select(slot => slot.Group)
+            .Where(group => group != null && selected.Contains(group.Id) &&
+                            group.Representative.Key.Identifier == hovered.Representative.Key.Identifier)
+            .Select(group => group!).ToArray();
+        return groups.Length > 1 ? groups : null;
+    }
+
+    private IReadOnlyList<PanelText> BuildPanels(DisplayEntry group, IReadOnlyList<DisplayEntry>? selection,
+        EntryAttributes attributes)
+    {
+        var panels = selection == null
+            ? _host.Pipeline.Tooltip(group, _host.Context, attributes)
+            : _host.Pipeline.TooltipForSelection(group, _host.Context, selection, attributes);
         var result = new List<PanelText>
         {
             new(TooltipPanelDefinition.HintId, 0,
@@ -1068,7 +1103,7 @@ internal sealed class StorageTerminalView : ITerminalView
         {
             if (panel.Definition.Id == TooltipPanelDefinition.HintId) continue;
             result.Add(new PanelText(panel.Definition.Id, panel.Definition.Order,
-                AddLines(new RichTextBuilder(60), panel), panel.Definition.BorderRgb));
+                AddLines(new RichTextBuilder(), panel), panel.Definition.BorderRgb, panel.Definition.ExpandToContent));
         }
 
         return result;
@@ -1103,11 +1138,12 @@ internal sealed class StorageTerminalView : ITerminalView
 
     private sealed class PanelText
     {
-        internal PanelText(string id, int order, RichTextBuilder builder, int? borderRgb)
+        internal PanelText(string id, int order, RichTextBuilder builder, int? borderRgb, bool expandToContent = false)
         {
             Id = id;
             Order = order;
             Builder = builder;
+            ExpandToContent = expandToContent;
             Style = borderRgb.HasValue
                 ? new TooltipStyle(TooltipStyleKind.Rgb, borderRgb, null, null)
                 : TooltipStyle.Native;
@@ -1117,6 +1153,7 @@ internal sealed class StorageTerminalView : ITerminalView
         internal int Order { get; }
         internal RichTextBuilder Builder { get; }
         internal TooltipStyle Style { get; }
+        internal bool ExpandToContent { get; }
     }
 
     private void HideHoverTooltip()

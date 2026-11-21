@@ -25,7 +25,7 @@ public sealed class StackingField
 
     internal StackingField(string id, StackingFieldKind kind, string nameKey, string descriptionKey,
         StackingOwnedPaths ownedPaths, Func<CanonicalIdentityInput, bool> applies,
-        Func<CanonicalIdentityInput, bool>? visible = null, string? featureId = null)
+        Func<CanonicalIdentityInput, bool>? visible = null, string? featureId = null, string? tagKey = null)
     {
         Id = string.IsNullOrEmpty(id) ? throw new ArgumentException("A field id is required.", nameof(id)) : id;
         Kind = kind;
@@ -35,6 +35,7 @@ public sealed class StackingField
         _applies = applies ?? throw new ArgumentNullException(nameof(applies));
         _visible = visible ?? (_ => true);
         FeatureId = featureId;
+        TagKey = tagKey;
     }
 
     /// <summary>Gets the stable identifier saved in rules.</summary>
@@ -43,10 +44,10 @@ public sealed class StackingField
     /// <summary>Gets how the field takes part in the key.</summary>
     public StackingFieldKind Kind { get; }
 
-    /// <summary>Gets the localization key of the name; feature fields format it with the feature id.</summary>
+    /// <summary>Gets the localization key of the name, or an empty string for a raw tag.</summary>
     public string NameKey { get; }
 
-    /// <summary>Gets the localization key of the short description.</summary>
+    /// <summary>Gets the localization key of the short description, or an empty string for a raw tag.</summary>
     public string DescriptionKey { get; }
 
     /// <summary>Gets the raw data the field owns.</summary>
@@ -54,6 +55,9 @@ public sealed class StackingField
 
     /// <summary>Gets the feature identifier of a feature field, or null.</summary>
     public string? FeatureId { get; }
+
+    /// <summary>Gets the tag key of a tag field, or null.</summary>
+    public string? TagKey { get; }
 
     /// <summary>Whether the field describes this item at all.</summary>
     internal bool Applies(CanonicalIdentityInput item) => _applies(item);
@@ -63,6 +67,10 @@ public sealed class StackingField
     /// grouping reveals nothing the item tooltip would not.
     /// </summary>
     internal bool IsVisible(CanonicalIdentityInput item) => _visible(item);
+
+    internal static StackingField ForTag(string tagKey) =>
+        new(StackingFieldCatalog.TagFieldId(tagKey), StackingFieldKind.Raw, string.Empty,
+            string.Empty, new StackingOwnedPaths(tagKeys: new[] { tagKey }), _ => true, tagKey: tagKey);
 
     internal static StackingField ForFeature(string featureId) =>
         new(StackingFieldCatalog.FeaturePrefix + featureId, StackingFieldKind.Feature, "stacking_field_feature",

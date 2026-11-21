@@ -22,38 +22,28 @@ public sealed class StackingFieldOption
 }
 
 /// <summary>
-/// The stacking fields: fixed fields whose raw data ownership is known for the target build, plus one field per item
-/// feature players can see. The game has no catalogue of features (they are created on demand), so feature fields
-/// come from the items the terminal stores and from saved rules.
+/// The stacking fields: fixed semantic fields, keys of root tags recorded in stored item identities, and visible item
+/// features. The game has no catalogue of features, so tag and feature fields come from stored items and saved rules.
 /// </summary>
 public static class StackingFieldCatalog
 {
     /// <summary>The prefix of feature field identifiers; the feature identifier follows it.</summary>
     public const string FeaturePrefix = "feature:";
 
+    /// <summary>The prefix of raw tag field identifiers; the tag key follows it.</summary>
+    public const string TagPrefix = "tag:";
+
+    /// <summary>Creates the field identifier for one raw tag key.</summary>
+    public static string TagFieldId(string tagKey) => TagPrefix + (tagKey ?? throw new ArgumentNullException(nameof(tagKey)));
+
     /// <summary>The estimated value shown in item tooltips.</summary>
     public const string AppraisedValue = "appraised_value";
 
-    /// <summary>Stored value fields, the price paid when bought, and purely economic modifiers.</summary>
+    /// <summary>Stored value fields and purely economic modifiers.</summary>
     public const string PriceComposition = "price_composition";
-
-    /// <summary>Metal purity of ingots.</summary>
-    public const string MetalPurity = "metal_purity";
 
     /// <summary>The items inside a container's content window.</summary>
     public const string ContainerContent = "container_content";
-
-    /// <summary>Contraband level.</summary>
-    public const string Legality = "legality";
-
-    /// <summary>Stolen status, heat included.</summary>
-    public const string Stolen = "stolen";
-
-    /// <summary>Stolen heat only.</summary>
-    public const string Heat = "heat";
-
-    private const string PurityTag = "INGOT_PURITY_TAG";
-    private const string StolenValueTag = "STOLEN_VALUE_INT";
 
     // Features ItemFeatureList creates only to change prices; gameplay states such as counterfeit or second hand stay.
     private static readonly string[] EconomicFeatures =
@@ -71,32 +61,14 @@ public static class StackingFieldCatalog
         "addictionBuyPenalty", "addictionSellPenalty", "awfulNegotiatorBuyPenalty", "awfulNegotiatorSellPenalty"
     };
 
-    private static readonly string[] LegalityFeatures =
-    {
-        "contrabandLowMarkUp", "contrabandMidMarkUp", "contrabandHighMarkUp", "contrabandCriticalMarkUp",
-        "restrictedLowMarkUp", "restrictedMidMarkUp", "restrictedHighMarkUp"
-    };
-
     private static readonly StackingField[] Fixed =
     {
         new(AppraisedValue, StackingFieldKind.Derived, Name(AppraisedValue), Description(AppraisedValue),
             StackingOwnedPaths.None, _ => true),
         new(PriceComposition, StackingFieldKind.Raw, Name(PriceComposition), Description(PriceComposition),
-            new StackingOwnedPaths(valueFields: true, tagKeys: new[] { "BOUGHT_PRICE_TAG" }, featureIds: EconomicFeatures), _ => true),
-        new(MetalPurity, StackingFieldKind.Raw, Name(MetalPurity), Description(MetalPurity),
-            new StackingOwnedPaths(tagKeys: new[] { PurityTag, "INGOT_PURITY_FAKE_TAG" },
-                featureIds: new[] { PurityTag, "INGOT_PURITY_INCONCLUSIVE" }),
-            item => item.Tags.Any(tag => tag.Key == PurityTag),
-            item => item.Features.Any(feature => feature.Identifier == PurityTag && feature.IsFeatureDiscovered)),
+            new StackingOwnedPaths(valueFields: true, featureIds: EconomicFeatures), _ => true),
         new(ContainerContent, StackingFieldKind.Raw, Name(ContainerContent), Description(ContainerContent),
-            new StackingOwnedPaths(contentWindow: true), item => item.ContentWindow != null),
-        new(Legality, StackingFieldKind.Raw, Name(Legality), Description(Legality),
-            new StackingOwnedPaths(tagKeys: new[] { "CONTRABAND_ITEM_TAG", "CONTRABAND_LEVEL" },
-                featureIds: LegalityFeatures), _ => true),
-        new(Stolen, StackingFieldKind.Raw, Name(Stolen), Description(Stolen),
-            new StackingOwnedPaths(tagKeys: new[] { "STOLEN_TAG", StolenValueTag }), _ => true),
-        new(Heat, StackingFieldKind.Raw, Name(Heat), Description(Heat),
-            new StackingOwnedPaths(tagKeys: new[] { StolenValueTag }), _ => true)
+            new StackingOwnedPaths(contentWindow: true), item => item.ContentWindow != null)
     };
 
     private static readonly HashSet<string> FixedFeatureIds =
@@ -106,22 +78,28 @@ public static class StackingFieldCatalog
     public static IReadOnlyList<StackingField> FixedFields => Fixed;
 
     /// <summary>
-    /// Gets a field by identifier. A feature identifier builds its feature field unless a fixed field owns that
-    /// feature; an unknown identifier returns null.
+    /// Gets a field by identifier. Feature and tag identifiers build their field unless a fixed field owns that feature;
+    /// an unknown or invalid identifier returns null.
     /// </summary>
     public static StackingField? Find(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
         var fixedField = Fixed.FirstOrDefault(field => field.Id == id);
         if (fixedField != null) return fixedField;
+        if (id!.StartsWith(TagPrefix, StringComparison.Ordinal))
+        {
+            var tagKey = id.Substring(TagPrefix.Length);
+            return tagKey.Length > 0 && StackingRule.IsValidFieldId(id) ? StackingField.ForTag(tagKey) : null;
+        }
+
         if (!id!.StartsWith(FeaturePrefix, StringComparison.Ordinal)) return null;
         var featureId = id.Substring(FeaturePrefix.Length);
         return featureId.Length == 0 || FixedFeatureIds.Contains(featureId) ? null : StackingField.ForFeature(featureId);
     }
 
     /// <summary>
-    /// Lists the menu: the fixed fields, every exposed and enabled feature of the stored items that no fixed field owns,
-    /// and every field a saved rule names that is neither, marked as absent from the inventory.
+    /// Lists the menu: fixed fields, recorded root tag keys, exposed and enabled features not owned by a fixed field,
+    /// and saved rules that no current item has, marked as absent from the inventory.
     /// </summary>
     public static IReadOnlyList<StackingFieldOption> Discover(IEnumerable<ItemKey> storedKeys, IEnumerable<string> savedFieldIds)
     {
@@ -129,16 +107,29 @@ public static class StackingFieldCatalog
         if (savedFieldIds == null) throw new ArgumentNullException(nameof(savedFieldIds));
         var options = Fixed.Select(field => new StackingFieldOption(field, false)).ToList();
         var seen = new HashSet<string>(Fixed.Select(field => field.Id), StringComparer.Ordinal);
+        var tags = new SortedSet<string>(StringComparer.Ordinal);
         var features = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var key in storedKeys)
         {
             var summary = key?.ReadSummary();
             if (summary == null) continue;
+            foreach (var tagKey in summary.Tags.Keys)
+            {
+                var fieldId = TagFieldId(tagKey);
+                if (tagKey.Length > 0 && StackingRule.IsValidFieldId(fieldId)) tags.Add(tagKey);
+            }
+
             foreach (var feature in summary.Features)
             {
                 if (feature.Exposed && !feature.Disabled && !FixedFeatureIds.Contains(feature.Identifier))
                     features.Add(feature.Identifier);
             }
+        }
+
+        foreach (var tagKey in tags)
+        {
+            var field = StackingField.ForTag(tagKey);
+            if (seen.Add(field.Id)) options.Add(new StackingFieldOption(field, false));
         }
 
         foreach (var featureId in features)

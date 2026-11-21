@@ -33,6 +33,22 @@ public sealed class TooltipContentCacheTests
         Assert.That(initialBuilds, Is.EqualTo(expectedCharacters == 60 ? 1 : 2));
     }
 
+    [Test]
+    public void ExpandToContent_MeasuresLongLinesAndOnlyReflowsWhenViewportIsTooNarrow()
+    {
+        var cache = new TooltipContentCache<string>(width => width.ToString(), StringComparer.Ordinal);
+        cache.SetExpandToContent(true);
+        Assert.That(cache.RefreshNatural(), Is.True);
+        cache.RecordNaturalWidth(812);
+        Assert.That(cache.Natural, Is.EqualTo(TooltipContentCache<string>.UnwrappedCharacters.ToString()));
+        Assert.That(cache.FitContent(900, 20), Is.EqualTo(792));
+        Assert.That(cache.FitContent(600.5, 20), Is.EqualTo(580));
+
+        cache.SetExpandToContent(false);
+        Assert.That(cache.RefreshNatural(), Is.True);
+        Assert.That(cache.Natural, Is.EqualTo("60"));
+    }
+
     [TestCase(60)]
     [TestCase(20)]
     public void Submit_UnchangedMutableBuilder_DoesNotRequireMeasurementOrNativeApply(int characters)

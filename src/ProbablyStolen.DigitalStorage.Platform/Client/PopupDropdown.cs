@@ -9,15 +9,18 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// <summary>One choice of a <see cref="PopupDropdown"/>; the detail is shown after the label in a muted color.</summary>
 internal readonly struct DropdownOption
 {
-    internal DropdownOption(string label, string? detail = null)
+    internal DropdownOption(string label, string? detail = null, string? searchLabel = null)
     {
         Label = label;
         Detail = detail;
+        SearchLabel = searchLabel ?? label;
     }
 
     internal string Label { get; }
 
     internal string? Detail { get; }
+
+    internal string SearchLabel { get; }
 }
 
 // CustomUIMachineryStyle.Reskin replaces every native dropdown image, including its arrow, with the same plate.
@@ -209,17 +212,18 @@ internal sealed class PopupDropdown
         if (_list == null || !_window.IsAlive) return;
         CustomUIBuilder.ClearContainer(_list);
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _list);
+        var query = _search.Trim();
         for (var index = 0; index < _options.Count; index++)
         {
             var option = _options[index];
-            if (_search.Trim().Length > 0 && !_matches(option.Label, _search.Trim())) continue;
+            if (query.Length > 0 && !_matches(option.SearchLabel, query)) continue;
             var chosen = index;
             var label = option.Detail is { Length: > 0 } detail
                 ? option.Label + "  <color=" + MutedColor + ">" + detail + "</color>"
                 : option.Label;
             builder.AddPointerButton(label, () => Choose(chosen));
             StyleRow(builder.Last, index == _selected);
-            if (_hover != null && !string.IsNullOrWhiteSpace(option.Detail)) _hover.Bind(builder.Last.root, index);
+            _hover?.Bind(builder.Last.root, index);
         }
     }
 

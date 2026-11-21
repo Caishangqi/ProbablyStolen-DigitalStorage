@@ -48,6 +48,17 @@ internal static class CanonicalMask
         }
     }
 
+    /// <summary>Encodes only the owned paths for an exact comparison between members of one group.</summary>
+    internal static byte[]? EncodeOwned(CanonicalIdentityInput input, StackingOwnedPaths paths) =>
+        Encode(new CanonicalIdentityInput(input.Identifier, Array.Empty<string>(),
+            input.Tags.Where(tag => paths.TagKeys.Contains(tag.Key)).ToArray(),
+            input.Features.Where(feature => paths.FeatureIds.Contains(feature.Identifier)).ToArray(),
+            unitBaseValue: paths.ValueFields ? input.UnitBaseValue : 0,
+            unitValue: paths.ValueFields ? input.UnitValue : 0,
+            lateUnitValue: paths.ValueFields ? input.LateUnitValue : 0,
+            backupUnitValue: paths.ValueFields ? input.BackupUnitValue : 0,
+            contentWindow: paths.ContentWindow ? input.ContentWindow : null));
+
     /// <summary>Returns the encoded identity without the owned paths, or null when it cannot be encoded again.</summary>
     internal static byte[]? Apply(CanonicalIdentityInput input, StackingOwnedPaths paths) => Encode(Strip(input, paths));
 }

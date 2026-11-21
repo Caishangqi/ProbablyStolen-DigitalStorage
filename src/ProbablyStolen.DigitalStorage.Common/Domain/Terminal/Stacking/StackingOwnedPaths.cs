@@ -50,6 +50,25 @@ public sealed class StackingOwnedPaths
             FeatureIds.Concat(other.FeatureIds), ContentWindow || other.ContentWindow);
     }
 
+    /// <summary>Gets the paths shared by two fields.</summary>
+    public StackingOwnedPaths Intersect(StackingOwnedPaths other)
+    {
+        if (other == null) throw new ArgumentNullException(nameof(other));
+        return new StackingOwnedPaths(ValueFields && other.ValueFields,
+            TagKeys.Intersect(other.TagKeys, StringComparer.Ordinal),
+            FeatureIds.Intersect(other.FeatureIds, StringComparer.Ordinal),
+            ContentWindow && other.ContentWindow);
+    }
+
+    /// <summary>Removes paths that another field explicitly requires to remain compared.</summary>
+    public StackingOwnedPaths Without(StackingOwnedPaths other)
+    {
+        if (other == null) throw new ArgumentNullException(nameof(other));
+        return new StackingOwnedPaths(ValueFields && !other.ValueFields,
+            TagKeys.Except(other.TagKeys, StringComparer.Ordinal), FeatureIds.Except(other.FeatureIds, StringComparer.Ordinal),
+            ContentWindow && !other.ContentWindow);
+    }
+
     private static IReadOnlyCollection<string> Freeze(IEnumerable<string>? values)
     {
         if (values == null) return Array.Empty<string>();

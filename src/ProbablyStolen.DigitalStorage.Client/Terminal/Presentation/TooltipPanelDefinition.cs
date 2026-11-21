@@ -13,7 +13,8 @@ public sealed class TooltipPanelDefinition
     public const string HintId = "hint";
 
     /// <summary>Creates a panel definition; colors are 0xRRGGBB. Without a border color the game's own border is used.</summary>
-    public TooltipPanelDefinition(string id, int order, int titleRgb, int labelRgb, int bodyRgb, int? borderRgb = null)
+    public TooltipPanelDefinition(string id, int order, int titleRgb, int labelRgb, int bodyRgb, int? borderRgb = null,
+        bool expandToContent = false)
     {
         Id = string.IsNullOrEmpty(id) ? throw new ArgumentException("A panel id is required.", nameof(id)) : id;
         Order = order;
@@ -21,6 +22,7 @@ public sealed class TooltipPanelDefinition
         LabelRgb = Rgb(labelRgb, nameof(labelRgb));
         BodyRgb = Rgb(bodyRgb, nameof(bodyRgb));
         BorderRgb = borderRgb.HasValue ? Rgb(borderRgb.Value, nameof(borderRgb)) : null;
+        ExpandToContent = expandToContent;
     }
 
     /// <summary>
@@ -46,6 +48,9 @@ public sealed class TooltipPanelDefinition
 
     /// <summary>Gets the border tint, or null for the game's own border.</summary>
     public int? BorderRgb { get; }
+
+    /// <summary>Gets whether to fit the longest line up to the available viewport width.</summary>
+    public bool ExpandToContent { get; }
 
     /// <summary>Gets the color of a line role.</summary>
     public int ColorOf(TooltipRole role) => role switch

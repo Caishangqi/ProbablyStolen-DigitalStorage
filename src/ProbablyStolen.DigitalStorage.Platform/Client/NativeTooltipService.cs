@@ -510,17 +510,18 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
 
             if (nativeRect.HasValue) _obstacles.Add(nativeRect.Value);
             if (_preferPopupAnchor) _obstacles.Add(anchor);
-            var naturalWidth = 1d;
+            var fixedPanelWidth = 1d;
             foreach (var panel in _activePanels)
             {
                 if (!panel.PrepareNatural()) { Hide(); return; }
-                naturalWidth = Math.Max(naturalWidth, panel.NaturalWidth);
+                if (!panel.ExpandsToContent) fixedPanelWidth = Math.Max(fixedPanelWidth, panel.NaturalWidth);
             }
-            var characters = ClientLayout.TooltipContentCache<RichText>.FitCharacters(naturalWidth, Math.Max(1, viewport.Width - 8));
+            var availableWidth = Math.Max(1, viewport.Width - 2 * ClientLayout.TooltipLayoutEngine.DefaultMargin);
+            var defaultCharacters = ClientLayout.TooltipContentCache<RichText>.FitCharacters(fixedPanelWidth, availableWidth);
             _measures.Clear();
             foreach (var panel in _activePanels)
             {
-                if (!panel.Reflow(characters)) { Hide(); return; }
+                if (!panel.ReflowTo(availableWidth, defaultCharacters)) { Hide(); return; }
                 _measures.Add(panel.Measure());
             }
             var result = ClientLayout.TooltipLayoutEngine.Arrange(anchor, viewport, _measures, _obstacles, _direction,
@@ -690,6 +691,8 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
 
     internal sealed class TooltipPanel : ITooltipPanel, IDisposable
     {
+        private const int HorizontalPadding = 16;
+        private const int VerticalPadding = 16;
         private readonly TooltipGroup _group;
         private readonly string _id;
         private string? _text;
@@ -712,6 +715,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         }
         internal int Order { get; }
         internal bool Active { get; set; } = true;
+        internal bool ExpandsToContent { get; private set; }
         internal double NaturalWidth => _cache.NaturalWidth;
         internal string Id => _id;
         internal PixelWindow? Window { get; private set; }
@@ -724,7 +728,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             Window.handler.name = "Digital Storage Tooltip Panel";
             Window.handler.rectTransform.SetParent(parent, false);
             Element = new RichTextElement(canResize: false, -1, -1, hasRaycast: false);
-            Element.SetPadding(8, 8, 8, 8);
+            Element.SetPadding(HorizontalPadding / 2, HorizontalPadding / 2, VerticalPadding / 2, VerticalPadding / 2);
             Window.Attach(Element);
             CaptureNativeStyle();
             _cache.InvalidateMetrics();
@@ -734,6 +738,8 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
 
         internal ClientLayout.TooltipPanelMeasure Measure() =>
             new(_id, Order, Math.Max(1, Window?.widthPixels ?? 1), Math.Max(1, Window?.heightPixels ?? 1));
+
+        private int HorizontalChrome => HorizontalPadding + 2 * (Window?.xPadding ?? 0);
 
         internal bool PrepareNatural()
         {
@@ -748,19 +754,43 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
                     settings?.fontHeight ?? 1, text.fontSize);
                 if (_cache.RefreshNatural())
                 {
-                    ApplyContent(_cache.Natural, ClientLayout.TooltipContentCache<RichText>.NaturalCharacters);
-                    _cache.RecordNaturalWidth(Math.Max(1, Window.widthPixels));
+                    if (ExpandsToContent)
+                    {
+                        var width = text.GetPreferredValues(_cache.Natural.richTextForeground).x;
+                        _cache.RecordNaturalWidth(Math.Ceiling(width) + HorizontalChrome);
+                    }
+                    else
+                    {
+                        ApplyContent(_cache.Natural, _cache.NaturalCharacters);
+                        _cache.RecordNaturalWidth(Math.Max(1, Window.widthPixels));
+                    }
                 }
                 return true;
             }
             catch (Exception error) { LogContentError(error); return false; }
         }
 
-        internal bool Reflow(int characters)
+        internal bool ReflowTo(double availableWidth, int defaultCharacters)
         {
             if (Element == null || Window == null) return false;
-            try { ApplyContent(_cache.Fitted(characters), characters); return true; }
+            try
+            {
+                if (ExpandsToContent)
+                    ApplyExpandedContent(_cache.Natural, _cache.FitContent(availableWidth, HorizontalChrome));
+                else
+                    ApplyContent(_cache.Fitted(defaultCharacters), defaultCharacters);
+                return true;
+            }
             catch (Exception error) { LogContentError(error); return false; }
+        }
+
+        internal void SetExpandToContent(bool expand)
+        {
+            ThrowIfDisposed();
+            if (ExpandsToContent == expand) return;
+            ExpandsToContent = expand;
+            _cache.SetExpandToContent(expand);
+            _group.InvalidateLayout();
         }
 
         internal void ShowAt(ClientLayout.TooltipRect viewport, ClientLayout.TooltipRect bounds)
@@ -843,14 +873,34 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             ? new RichTextBuilder(charWidth).AddLine(_text ?? string.Empty, ignoreEmpty: false).Build()
             : new RichTextBuilder(charWidth).Add(_builder).Build();
 
+        private void ApplyExpandedContent(RichText rich, int textWidth)
+        {
+            if (Element == null || Window == null || !_cache.NeedsApply(rich, textWidth)) return;
+            RestoreNativeStyle();
+            Element.SetRichText(rich, _cache.NaturalCharacters);
+            var text = Element.GetText().text;
+            text.enableWordWrapping = true;
+            var textHeight = Mathf.CeilToInt(text.GetPreferredValues(textWidth, 32767).y);
+            Element.SetFixedSize(textWidth + HorizontalPadding, textHeight + VerticalPadding);
+            Window.Validate();
+            // Native validation sizes the text to the full element, including padding. TMP wraps inside the text area.
+            text.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, textWidth);
+            RecordContent(rich, textWidth);
+        }
+
         private void ApplyContent(RichText rich, int charWidth)
         {
-            if (Element == null || Window == null) return;
-            if (!_cache.NeedsApply(rich, charWidth)) return;
+            if (Element == null || Window == null || !_cache.NeedsApply(rich, charWidth)) return;
             RestoreNativeStyle();
+            if (Element.fixedWidth >= 0) Element.SetFixedSize(-1, -1);
             Element.SetRichText(rich, charWidth);
             Window.Validate();
-            _cache.RecordApplied(rich, charWidth);
+            RecordContent(rich, charWidth);
+        }
+
+        private void RecordContent(RichText rich, int width)
+        {
+            _cache.RecordApplied(rich, width);
             // Validate resets some native image colors. Capture only after restoring the untinted baseline.
             CaptureNativeStyle();
             _styleDirty = true;

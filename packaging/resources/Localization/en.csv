@@ -363,6 +363,11 @@ stacking_info_title,Stack Display Module
 stacking_info_kinds,Merged item types: {0}
 stacking_info_rules,Active stack rules:
 stacking_info_rule,"    {0}"
+stacking_info_selection,Selected groups of this item: {0}
+stacking_info_selection_unavailable,Cannot read the stack settings, so the remaining differences cannot be determined.
+stacking_info_selection_unknown,Some differences could not be safely matched to a configurable attribute.
+stacking_info_difference,"    {0}"
+stacking_info_tag_unavailable,Tag {0} cannot be added as a rule.
 stacking_conditions,Meet these conditions
 stacking_rule_count,{0} rules
 stacking_enable,Merge stacks
@@ -374,13 +379,12 @@ stacking_remove_rule_tip,Remove this rule
 stacking_add_rule,Add stack rule
 stacking_clear_rules,Clear all rules
 stacking_search,Search attributes...
+stacking_rule_search,Search current rules...
+stacking_rule_search_empty,No matching rules.
+stacking_rules_reset,Rules from the previous version were cleared.
 stacking_field_absent,No stored item has this attribute now
 stacking_mode_match,Match
 stacking_mode_ignore,Ignore
-stacking_summary_disabled,Stacking: off
-stacking_summary_exact,Stacking: identical items only
-stacking_summary_ignored,Stacking: ignore {0}
-stacking_summary_separator,", "
 stacking_note_match_alone,Match only affects merging when used with an Ignore rule.
 stacking_note_derived_alone,Items with different price compositions stay separate even if estimated value is ignored.
 stacking_note_value_still_compared,This attribute also affects estimated value. To merge items with different values you must ignore estimated value too.
@@ -388,17 +392,9 @@ stacking_note_container_first_only,Merged containers may hold different items. T
 stacking_field_appraised_value,Estimated value
 stacking_field_appraised_value_desc,The estimated value shown in the item tooltip.
 stacking_field_price_composition,Price composition
-stacking_field_price_composition_desc,"Base value, purchase price and adjustments that only affect price, such as discounts."
-stacking_field_metal_purity,Metal purity
-stacking_field_metal_purity_desc,The identified purity of metal ingots.
+stacking_field_price_composition_desc,"Stored price values and adjustments that only affect price, such as discounts."
 stacking_field_container_content,Container content
 stacking_field_container_content_desc,The items inside a container.
-stacking_field_legality,Legality
-stacking_field_legality_desc,The contraband level.
-stacking_field_stolen,Stolen status
-stacking_field_stolen_desc,"Whether an item is stolen, including its heat."
-stacking_field_heat,Heat
-stacking_field_heat_desc,The heat of stolen items.
 stacking_field_feature,Feature: {0}
 stacking_field_feature_desc,The visible item feature {0}.
 integration_itemdetails_section,Item Details

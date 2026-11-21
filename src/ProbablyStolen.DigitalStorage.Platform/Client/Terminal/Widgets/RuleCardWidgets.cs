@@ -33,11 +33,11 @@ internal static class RuleCardWidgets
     /// Opens the light box that holds a rule list, shown even when empty so players see where rules will appear;
     /// the caller closes it.
     /// </summary>
-    internal static void BeginListBox(CustomUIBuilder builder, float gap, float width)
+    internal static void BeginListBox(CustomUIBuilder builder, float gap, float width, Color? fill = null)
     {
         builder.BeginColumn(gap);
         var box = builder.CurrentContainer.gameObject;
-        Fill(box, StripeFill);
+        Fill(box, fill ?? StripeFill);
         if (box.GetComponent<VerticalLayoutGroup>() is { } column)
             column.padding = new RectOffset((int)ListPadding, (int)ListPadding, (int)ListPadding, (int)ListPadding);
         FixWidth(box, width);
@@ -75,6 +75,43 @@ internal static class RuleCardWidgets
         if (label.text == null) return;
         label.text.overflowMode = TextOverflowModes.Ellipsis;
         label.text.enableWordWrapping = false;
+    }
+
+    /// <summary>Reserves a separate gutter for the native scroll bar and lets the list box provide the fill.</summary>
+    internal static float ConfigureListScroll(GameObject view, float width, float gap)
+    {
+        FixWidth(view, width);
+        if (view.GetComponentInChildren<ScrollRect>(true) is not { } scroll || scroll.viewport == null || scroll.content == null)
+            return width;
+
+        var gutter = ScrollbarSpace(view) + 8f;
+        if (view != scroll.viewport.gameObject && view.GetComponent<Image>() is { } background)
+        {
+            var color = background.color;
+            color.a = 0;
+            background.color = color;
+        }
+        scroll.horizontal = false;
+        if (scroll.verticalScrollbar != null)
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+        scroll.viewport.anchorMin = Vector2.zero;
+        scroll.viewport.anchorMax = Vector2.one;
+        scroll.viewport.offsetMin = Vector2.zero;
+        scroll.viewport.offsetMax = new Vector2(-gutter, 0);
+        // The viewport Image still provides the mask geometry and the wheel hit area.
+        if (scroll.viewport.GetComponent<Mask>() is { } mask) mask.showMaskGraphic = false;
+        scroll.content.anchorMin = new Vector2(0, 1);
+        scroll.content.anchorMax = Vector2.one;
+        scroll.content.pivot = new Vector2(0, 1);
+        scroll.content.anchoredPosition = Vector2.zero;
+        scroll.content.sizeDelta = new Vector2(0, scroll.content.sizeDelta.y);
+        if (scroll.content.GetComponent<VerticalLayoutGroup>() is { } column)
+        {
+            column.padding = new RectOffset();
+            column.spacing = gap;
+        }
+
+        return width - gutter;
     }
 
     /// <summary>Gets the width a scroll view's vertical scrollbar takes beside its content.</summary>

@@ -33,6 +33,9 @@ public sealed class StackingRulesEditor
     /// <summary>Gets whether the saved settings can be read; edits are refused otherwise.</summary>
     public bool IsEditable => _store.Read().Status != StackingConfigStatus.Unreadable;
 
+    /// <summary>Gets whether the saved settings are from a retired version and have been reset to defaults.</summary>
+    public bool WasReset => _store.Read().Status == StackingConfigStatus.Reset;
+
     /// <summary>Gets the settings shown on the page; the default while unreadable.</summary>
     public StackingConfig Config => _store.Effective() ?? StackingConfig.Default;
 
@@ -42,6 +45,18 @@ public sealed class StackingRulesEditor
     /// <summary>Lists the attribute menu for the items the terminal stores now.</summary>
     public IReadOnlyList<StackingFieldOption> MenuOptions(IEnumerable<ItemKey> storedKeys) =>
         StackingFieldCatalog.Discover(storedKeys, Config.Rules.Select(rule => rule.FieldId));
+
+    /// <summary>Finds matching rules, including the one the picker just selected if it falls outside the filter.</summary>
+    public static IReadOnlyList<int> FindRows(StackingConfig config, string query, Func<string, string> name,
+        Func<string, string, bool> matches, string? revealedFieldId = null)
+    {
+        query = query.Trim();
+        return Enumerable.Range(0, config.Rules.Count).Where(row =>
+        {
+            var id = config.Rules[row].FieldId;
+            return query.Length == 0 || id == revealedFieldId || matches(id, query) || matches(name(id), query);
+        }).ToArray();
+    }
 
     /// <summary>
     /// Adds a row set to ignore, or finds the row the field already has. Returns the row index, or -1 when the save was

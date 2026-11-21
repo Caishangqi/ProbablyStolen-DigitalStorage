@@ -26,7 +26,7 @@ public sealed class UnitTotalTooltip : IEntryTooltipContributor
     public bool IsActive(TerminalContext context) => true;
 
     /// <inheritdoc />
-    public void Contribute(DisplayEntry entry, TerminalContext context, EntryTooltipSink sink)
+    public void Contribute(DisplayEntry entry, TerminalContext context, EntryAttributes attributes, EntryTooltipSink sink)
     {
         if (entry.TotalUnits > entry.Total) sink.Body(TooltipPanelDefinition.HintId, TextKey, entry.TotalUnits);
     }

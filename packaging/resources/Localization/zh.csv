@@ -363,6 +363,11 @@ stacking_info_title,堆叠显示模块
 stacking_info_kinds,合并的物品种类: {0}
 stacking_info_rules,生效的堆叠规则:
 stacking_info_rule,"    {0}"
+stacking_info_selection,选中同类物品组: {0}
+stacking_info_selection_unavailable,当前设置无法读取，不能判断分组原因。
+stacking_info_selection_unknown,存在差异，但无法安全归入可配置属性。
+stacking_info_difference,"    {0}"
+stacking_info_tag_unavailable,标签: {0} 无法添加为规则
 stacking_conditions,满足以下条件
 stacking_rule_count,{0} 项
 stacking_enable,启用合并显示
@@ -374,13 +379,12 @@ stacking_remove_rule_tip,删除此规则
 stacking_add_rule,添加堆叠规则
 stacking_clear_rules,清空规则
 stacking_search,搜索属性...
+stacking_rule_search,搜索当前规则...
+stacking_rule_search_empty,没有匹配的规则。
+stacking_rules_reset,旧版堆叠规则已清空。
 stacking_field_absent,当前无物品具有此属性
 stacking_mode_match,匹配
 stacking_mode_ignore,忽略
-stacking_summary_disabled,堆叠: 已关闭
-stacking_summary_exact,堆叠: 只合并完全相同的物品
-stacking_summary_ignored,堆叠: 忽略 {0}
-stacking_summary_separator,、
 stacking_note_match_alone,单独使用「匹配」不会改变合并结果，需要配合「忽略」规则使用。
 stacking_note_derived_alone,价格组成不同时，只忽略估价仍会分开显示。
 stacking_note_value_still_compared,此属性也会影响估价。若要合并估价不同的物品，还需忽略估价。
@@ -388,17 +392,9 @@ stacking_note_container_first_only,合并的容器可能装有不同物品，悬
 stacking_field_appraised_value,估价
 stacking_field_appraised_value_desc,物品提示中显示的预估价值.
 stacking_field_price_composition,价格组成
-stacking_field_price_composition_desc,基础价值、购入价，以及折扣等只影响价格的修正。
-stacking_field_metal_purity,金属纯度
-stacking_field_metal_purity_desc,金属锭已鉴定的纯度。
+stacking_field_price_composition_desc,物品记录的价格数值和折扣等只影响价格的修正。
 stacking_field_container_content,容器内容
 stacking_field_container_content_desc,容器里装的物品.
-stacking_field_legality,合法性
-stacking_field_legality_desc,违禁等级.
-stacking_field_stolen,赃物状态
-stacking_field_stolen_desc,"物品是否为赃物, 包括热度."
-stacking_field_heat,热度
-stacking_field_heat_desc,赃物的热度.
 stacking_field_feature,特征: {0}
 stacking_field_feature_desc,可见的物品特征 {0}.
 integration_itemdetails_section,Item Details

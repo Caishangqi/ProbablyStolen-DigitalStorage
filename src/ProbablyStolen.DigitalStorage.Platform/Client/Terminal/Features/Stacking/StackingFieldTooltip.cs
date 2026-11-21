@@ -29,14 +29,16 @@ internal sealed class StackingFieldTooltip : IDropdownOptionHover
                 ? native.CreatePopupTooltip(popup)
                 : service.CreateTooltip(popup.gameObject);
             _panel = _tooltip.AddPanel("stacking_field", 0);
+            if (_panel is NativeTooltipService.TooltipPanel panel) panel.SetExpandToContent(true);
             _panel.SetStyle(Style);
         }
 
         if (optionIndex != _contentIndex)
         {
             var (title, description, absence) = _details[optionIndex];
-            // Native bold is suppressed at 1x UI scale. Separate TMP tags remain intact when the builder wraps the title.
-            var content = new RichTextBuilder().Add("<b>").Add(title).AddLine("</b>").AddLine(description);
+            // A zero-width space keeps the native builder from copying a markup-only slice into every text layer.
+            var content = new RichTextBuilder().AddLine("<b>" + title + "</b>\u200b");
+            if (!string.IsNullOrEmpty(description)) content.AddLine(description);
             if (absence != null) content.AddLine(absence);
             if (_tooltip is NativeTooltipService.TooltipGroup group)
                 group.SetSource(optionIndex.ToString(CultureInfo.InvariantCulture));

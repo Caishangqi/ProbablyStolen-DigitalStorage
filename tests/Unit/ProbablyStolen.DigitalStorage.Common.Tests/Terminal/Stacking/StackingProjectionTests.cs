@@ -13,6 +13,106 @@ public sealed class StackingProjectionTests
     private static readonly CanonicalIdentityFeature Discount = new("discount", "", valueModifier: -10);
 
     [Test]
+    public void RawTagIgnored_MergesOnlyItsPresenceAndValueDifferences()
+    {
+        var config = Ignore(StackingFieldCatalog.TagFieldId("AGRI_PERFUME_RECORDED"), StackingFieldCatalog.AppraisedValue);
+        var tagged = Plain("scrap_metal", tags: new[]
+        {
+            new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "one")
+        });
+        var untagged = Plain("scrap_metal");
+        var differentOtherTag = Plain("scrap_metal", tags: new[]
+        {
+            new CanonicalIdentityTag("OTHER", enabled: true, valueInt: 1)
+        });
+
+        Assert.That(Compute(tagged, config, StackingAttributes.Empty), Is.EqualTo(Compute(untagged, config, StackingAttributes.Empty)));
+        Assert.That(Compute(tagged, config, StackingAttributes.Empty),
+            Is.Not.EqualTo(Compute(differentOtherTag, config, StackingAttributes.Empty)));
+    }
+
+    [Test]
+    public void PriceCompositionOnlyIgnoresPriceValuesAndEconomicFeatures()
+    {
+        var bought = Plain("powerblock", tags: new[] { new CanonicalIdentityTag("BOUGHT_PRICE_TAG", enabled: true, valueInt: 120) });
+        var clean = Plain("powerblock");
+        var ignorePrice = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue);
+        var ignorePurchaseTag = ignorePrice.WithAddedRule("tag:BOUGHT_PRICE_TAG", StackingMode.Ignore);
+
+        Assert.That(Compute(bought, ignorePrice, StackingAttributes.Empty), Is.Not.EqualTo(Compute(clean, ignorePrice, StackingAttributes.Empty)));
+        Assert.That(Compute(bought, ignorePurchaseTag, StackingAttributes.Empty),
+            Is.EqualTo(Compute(clean, ignorePurchaseTag, StackingAttributes.Empty)));
+    }
+
+    [Test]
+    public void Differences_ReportsOnlyRemainingFieldNamesWithoutValues()
+    {
+        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue);
+        var first = Plain("scrap_metal", tags: new[]
+        {
+            new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "courrierMining|155|2444")
+        });
+        var second = Plain("scrap_metal", tags: new[]
+        {
+            new CanonicalIdentityTag("AGRI_PERFUME_RECORDED", enabled: true, valueString: "courrierMining|150|2345")
+        });
+
+        var differences = StackingProjection.Differences(first, StackingAttributes.Empty, second, StackingAttributes.Empty, config);
+
+        Assert.That(differences, Is.EqualTo(new[] { "tag:AGRI_PERFUME_RECORDED" }));
+        Assert.That(string.Join(" ", differences), Does.Not.Contain("155"));
+    }
+
+    [Test]
+    public void Differences_ReportsEstimatedValueWhenPriceCompositionIsIgnored()
+    {
+        var config = Ignore(StackingFieldCatalog.PriceComposition);
+        var differences = StackingProjection.Differences(Plain("ore", unitValue: 15), Value(10),
+            Plain("ore", unitValue: 20), Value(11), config);
+        Assert.That(differences, Is.EqualTo(new[] { StackingFieldCatalog.AppraisedValue }));
+    }
+
+    [Test]
+    public void Differences_HidesUndiscoveredFeatureNames()
+    {
+        var first = Plain("lamp", features: new[] { new CanonicalIdentityFeature("secret", "hidden") });
+        var second = Plain("lamp");
+        var differences = StackingProjection.Differences(first, StackingAttributes.Empty,
+            second, StackingAttributes.Empty, StackingConfig.Default);
+        Assert.That(differences, Is.EqualTo(new[] { "item_identity" }));
+        Assert.That(string.Join(" ", differences), Does.Not.Contain("secret"));
+    }
+
+    [Test]
+    public void MatchOnDisjointUndiscoveredField_DoesNotBlockAnUnrelatedMerge()
+    {
+        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue)
+            .WithAddedRule("feature:INGOT_PURITY_TAG", StackingMode.Match);
+        var first = Ingot("FAIR", discovered: false, unitValue: 50);
+        var second = Ingot("FAIR", discovered: false, unitValue: 60);
+
+        Assert.That(Compute(first, config, StackingAttributes.Empty), Is.EqualTo(Compute(second, config, StackingAttributes.Empty)));
+    }
+
+    [Test]
+    public void TryGetDifferences_SeparatesIncompleteReadsFromKnownIdentityDifferences()
+    {
+        var config = Ignore(StackingFieldCatalog.PriceComposition);
+        var first = Plain("scrap_metal", tags: new[] { new CanonicalIdentityTag("COLOR", enabled: true, valueString: "red") });
+        var second = Plain("scrap_metal", tags: new[] { new CanonicalIdentityTag("COLOR", enabled: true, valueString: "green") });
+        var third = Plain("scrap_metal", tags: new[] { new CanonicalIdentityTag("COLOR", enabled: true, valueString: "blue") });
+
+        var complete = StackingProjection.TryGetDifferences(second, Value(10), third, Value(20), config, out var known);
+        var incomplete = StackingProjection.TryGetDifferences(first, StackingAttributes.Empty,
+            second, Value(10), config, out var unknown);
+
+        Assert.That(complete, Is.True);
+        Assert.That(known, Does.Contain("tag:COLOR"));
+        Assert.That(incomplete, Is.False);
+        Assert.That(unknown, Is.EqualTo(new[] { "item_identity" }));
+    }
+
+    [Test]
     public void NoIgnoreRule_KeepsEveryEntryExact()
     {
         var config = new StackingConfig(true, new[] { new StackingRule(StackingFieldCatalog.AppraisedValue, StackingMode.Match) });
@@ -49,30 +149,15 @@ public sealed class StackingProjectionTests
     }
 
     [Test]
-    public void PurityIgnored_ButAppraisedValueKept_DifferentValuesStayApart()
+    public void PurityTagRules_RequireAnExplicitRuleForTheFeature()
     {
-        var config = Ignore(StackingFieldCatalog.MetalPurity);
-        var low = Compute(Ingot("POOR", purityMod: -40), config, Value(30));
-        var high = Compute(Ingot("GOOD", purityMod: -20), config, Value(40));
-        var sameValue = Compute(Ingot("GOOD", purityMod: -20), config, Value(30));
-        Assert.That(low, Is.Not.EqualTo(high));
-        Assert.That(low, Is.EqualTo(sameValue));
-    }
+        var tags = Ignore("tag:INGOT_PURITY_TAG", "tag:INGOT_PURITY_FAKE_TAG", StackingFieldCatalog.AppraisedValue);
+        var withFeature = tags.WithAddedRule("feature:INGOT_PURITY_TAG", StackingMode.Ignore);
+        var low = Ingot("POOR", purityMod: -40);
+        var high = Ingot("GOOD", purityMod: -20);
 
-    [Test]
-    public void ThreeIngotIgnores_MergeDifferentPurityAndValue()
-    {
-        var config = Ignore(StackingFieldCatalog.AppraisedValue, StackingFieldCatalog.PriceComposition,
-            StackingFieldCatalog.MetalPurity);
-        Assert.That(Compute(Ingot("POOR", unitValue: 50, purityMod: -40), config, Value(30)),
-            Is.EqualTo(Compute(Ingot("GOOD", unitValue: 70, purityMod: 10), config, Value(77))));
-    }
-
-    [Test]
-    public void UndiscoveredPurity_StaysExactWhenPurityIgnored()
-    {
-        var config = Ignore(StackingFieldCatalog.MetalPurity, StackingFieldCatalog.AppraisedValue);
-        Assert.That(Compute(Ingot("POOR", discovered: false), config, Value(30)).IsExact, Is.True);
+        Assert.That(Compute(low, tags, Value(30)), Is.Not.EqualTo(Compute(high, tags, Value(30))));
+        Assert.That(Compute(low, withFeature, Value(30)), Is.EqualTo(Compute(high, withFeature, Value(40))));
     }
 
     [Test]
@@ -143,20 +228,24 @@ public sealed class StackingProjectionTests
     }
 
     [Test]
-    public void StolenIgnored_MergesStolenAndClean()
+    public void StolenAndHeatTags_AreIndependent()
     {
-        var config = Ignore(StackingFieldCatalog.Stolen, StackingFieldCatalog.AppraisedValue);
+        var config = Ignore("tag:STOLEN_TAG", StackingFieldCatalog.AppraisedValue);
         var stolen = Plain("watch", tags: new[]
         {
             new CanonicalIdentityTag("STOLEN_TAG", enabled: true), new CanonicalIdentityTag("STOLEN_VALUE_INT", enabled: true, valueInt: 40)
         });
-        Assert.That(Compute(stolen, config, Value(5)), Is.EqualTo(Compute(Plain("watch"), config, Value(5))));
+        var clean = Plain("watch");
+        Assert.That(Compute(stolen, config, Value(5)), Is.Not.EqualTo(Compute(clean, config, Value(5))));
+        var ignoreBoth = config.WithAddedRule("tag:STOLEN_VALUE_INT", StackingMode.Ignore);
+        Assert.That(Compute(stolen, ignoreBoth, Value(5)), Is.EqualTo(Compute(clean, ignoreBoth, Value(5))));
     }
 
     [Test]
     public void Grouping_IsAnEquivalenceIndependentOfOrder()
     {
-        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.MetalPurity, StackingFieldCatalog.AppraisedValue);
+        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue, "tag:INGOT_PURITY_TAG",
+            "tag:INGOT_PURITY_FAKE_TAG", "feature:INGOT_PURITY_TAG");
         var keys = new[] { Ingot("POOR"), Ingot("GOOD", unitValue: 60), Ingot("FAIR", extra: new[] { Discount }) };
         var forward = keys.Select(key => Compute(key, config, Value(1))).ToList();
         var backward = keys.Reverse().Select(key => Compute(key, config, Value(1))).Reverse().ToList();
@@ -182,14 +271,6 @@ public sealed class StackingProjectionTests
     }
 
     [Test]
-    public void BoughtPrice_IsPartOfPriceComposition()
-    {
-        var config = Ignore(StackingFieldCatalog.PriceComposition);
-        var bought = Plain("powerblock", tags: new[] { new CanonicalIdentityTag("BOUGHT_PRICE_TAG", enabled: true, valueInt: 120) });
-        Assert.That(Compute(bought, config, Value(80)), Is.EqualTo(Compute(Plain("powerblock"), config, Value(80))));
-    }
-
-    [Test]
     public void NonCanonicalKey_StaysExact()
     {
         var key = new ItemKey("legacy");
@@ -200,21 +281,46 @@ public sealed class StackingProjectionTests
         StackingProjection.Compute(key, config, attributes);
 
     [Test]
-    public void AppliedIgnoredFields_ListsIgnoreRulesThatDescribeTheItemInRuleOrder()
+    public void AppliedIgnoredFields_ListsOnlyFieldsThatDifferWithinTheGroupInRuleOrder()
     {
-        var config = Ignore(StackingFieldCatalog.ContainerContent, StackingFieldCatalog.MetalPurity,
-            StackingFieldCatalog.AppraisedValue).WithAddedRule(StackingFieldCatalog.PriceComposition, StackingMode.Match);
-        var fields = StackingProjection.AppliedIgnoredFields(Bottle(4), config).Select(field => field.Id);
-        Assert.That(fields, Is.EqualTo(new[] { StackingFieldCatalog.ContainerContent, StackingFieldCatalog.AppraisedValue }));
+        var stableTag = new CanonicalIdentityTag("CHEMISTRY", enabled: true, valueInt: 1);
+        var secondTag = new CanonicalIdentityTag("VARIANT", enabled: true, valueInt: 2);
+        var config = Ignore("tag:CHEMISTRY", StackingFieldCatalog.PriceComposition, "tag:UNRELATED", "tag:VARIANT",
+            StackingFieldCatalog.AppraisedValue, "unknown_field");
+        var first = Plain("fruit", tags: new[] { stableTag });
+        var members = new[] { (first, Value(20)), (Plain("fruit", 11, new[] { stableTag, secondTag }), Value(20)) };
+
+        Assert.That(members.Select(member => Compute(member.Item1, config, member.Item2)).Distinct().Count(), Is.EqualTo(1));
+        Assert.That(StackingProjection.AppliedIgnoredFields(members, config).Select(field => field.Id),
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition, "tag:VARIANT" }));
+        Assert.That(StackingProjection.AppliedIgnoredFields(members.Reverse().ToArray(), config).Select(field => field.Id),
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition, "tag:VARIANT" }));
+        Assert.That(StackingProjection.AppliedIgnoredFields(members, config.WithEnabled(false)), Is.Empty);
     }
 
     [Test]
-    public void AppliedIgnoredFields_SkipsHiddenAndUnknownFieldsAndOffConfigs()
+    public void AppliedIgnoredFields_UsesKnownAppraisalsEvenWhenTheFirstIsMissing()
     {
-        var config = Ignore(StackingFieldCatalog.MetalPurity, "unknown_field");
-        Assert.That(StackingProjection.AppliedIgnoredFields(Ingot("Pure", discovered: false), config), Is.Empty);
-        Assert.That(StackingProjection.AppliedIgnoredFields(Ingot("Pure"), config).Select(field => field.Id),
-            Is.EqualTo(new[] { StackingFieldCatalog.MetalPurity }));
-        Assert.That(StackingProjection.AppliedIgnoredFields(Ingot("Pure"), config.WithEnabled(false)), Is.Empty);
+        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue);
+        var members = new[] { (Plain("fruit", 10), StackingAttributes.Empty), (Plain("fruit", 11), Value(20)),
+            (Plain("fruit", 12), Value(30)) };
+
+        Assert.That(StackingProjection.AppliedIgnoredFields(members.Take(2).ToArray(), config).Select(field => field.Id),
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition }));
+        Assert.That(StackingProjection.AppliedIgnoredFields(members, config).Select(field => field.Id),
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue }));
+    }
+
+    [Test]
+    public void AppliedIgnoredFields_OmitsMatchRulesEvenWhenAnotherFieldDiffers()
+    {
+        var config = Ignore(StackingFieldCatalog.PriceComposition, StackingFieldCatalog.AppraisedValue)
+            .WithAddedRule("tag:STOLEN_VALUE_INT", StackingMode.Match);
+        var heat = new CanonicalIdentityTag("STOLEN_VALUE_INT", enabled: true, valueInt: 3);
+        var members = new[] { (Plain("fruit", 10, new[] { heat }), Value(20)), (Plain("fruit", 11, new[] { heat }), Value(20)) };
+
+        Assert.That(members.Select(member => Compute(member.Item1, config, member.Item2)).Distinct().Count(), Is.EqualTo(1));
+        Assert.That(StackingProjection.AppliedIgnoredFields(members, config).Select(field => field.Id),
+            Is.EqualTo(new[] { StackingFieldCatalog.PriceComposition }));
     }
 }

@@ -14,7 +14,8 @@ public sealed class StackingConfigCodecTests
         var config = new StackingConfig(false, new[]
         {
             new StackingRule("price_composition", StackingMode.Ignore),
-            new StackingRule("feature:光泽|x=", StackingMode.Match)
+            new StackingRule("feature:光泽|x=", StackingMode.Match),
+            new StackingRule("tag:AGRI_PERFUME_RECORDED", StackingMode.Ignore)
         });
         var decoded = StackingConfigCodec.Decode(StackingConfigCodec.Encode(config));
         Assert.That(decoded.Status, Is.EqualTo(StackingConfigStatus.Ok));
@@ -26,18 +27,17 @@ public sealed class StackingConfigCodecTests
     {
         var config = StackingConfig.Default.WithMarker(new StackingMarker(0xB37FEB)).WithAddedRule("a", StackingMode.Ignore);
         var text = StackingConfigCodec.Encode(config);
-        Assert.That(text, Does.StartWith("v2\nenabled\t1\nmarker\t#B37FEB\n"));
+        Assert.That(text, Does.StartWith("v3\nenabled\t1\nmarker\t#B37FEB\n"));
         Assert.That(StackingConfigCodec.Decode(text).Config, Is.EqualTo(config));
     }
 
-    [Test]
-    public void LegacyText_ReadsWithDefaultMarkerAndSavesAsCurrent()
+    [TestCase("v1\nenabled\t0\nrule\tc3RvbGVu\tignore")]
+    [TestCase("v2\nenabled\t0\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore")]
+    public void ValidLegacyText_ResetsToDefaults(string text)
     {
-        var result = StackingConfigCodec.Decode("v1\nenabled\t1\nrule\tcHJpY2U=\tignore");
-        Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Ok));
-        Assert.That(result.Config!.Marker, Is.EqualTo(StackingMarker.Default));
-        Assert.That(result.Config.ModeOf("price"), Is.EqualTo(StackingMode.Ignore));
-        Assert.That(StackingConfigCodec.Encode(result.Config), Does.StartWith("v2\n"));
+        var result = StackingConfigCodec.Decode(text);
+        Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Reset));
+        Assert.That(result.Config, Is.EqualTo(StackingConfig.Default));
     }
 
     [TestCase("#4cd964", 0x4CD964)]
@@ -88,7 +88,8 @@ public sealed class StackingConfigCodecTests
         Assert.That(result.Config, Is.EqualTo(StackingConfig.Default));
     }
 
-    [TestCase("v3\nenabled\t1", "unknown_version")]
+    [TestCase("v4\nenabled\t1", "unknown_version")]
+    [TestCase("v3\nenabled\t1", "bad_marker")]
     [TestCase("v2\nenabled\t1", "bad_marker")]
     [TestCase("v2\nenabled\t1\nmarker\t#4cd964", "bad_marker")]
     [TestCase("v2\nenabled\t1\nmarker\t#4CD", "bad_marker")]

@@ -27,7 +27,7 @@ public sealed class StackingConfigStore
         return _cached;
     }
 
-    /// <summary>Gets the settings in effect: the saved ones, the default when none are saved, or null when unreadable.</summary>
+    /// <summary>Gets the settings in effect, including defaults for missing or retired settings.</summary>
     public StackingConfig? Effective() => Read().Config;
 
     /// <summary>Writes a candidate; false leaves the previous settings in effect.</summary>

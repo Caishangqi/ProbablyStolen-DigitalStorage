@@ -251,7 +251,7 @@ public sealed class StoragePresentationPipelineTests
         public int Order { get; }
         public bool IsActive(TerminalContext context) => true;
 
-        public void Contribute(DisplayEntry entry, TerminalContext context, EntryTooltipSink sink)
+        public void Contribute(DisplayEntry entry, TerminalContext context, EntryAttributes attributes, EntryTooltipSink sink)
         {
             if (_line == null) throw new InvalidOperationException();
             sink.Body(_panel, _line);

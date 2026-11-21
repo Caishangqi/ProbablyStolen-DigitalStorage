@@ -6,7 +6,9 @@ namespace ProbablyStolen.DigitalStorage.Client.Tooltips;
 /// <summary>Keeps natural measurement separate from the fitted rendering, including mutable-content resubmissions.</summary>
 internal sealed class TooltipContentCache<T> where T : class
 {
-    internal const int NaturalCharacters = 60;
+    internal const int DefaultCharacters = 60;
+    internal const int UnwrappedCharacters = 1_000_000;
+    private int _naturalCharacters = DefaultCharacters;
     private readonly Func<int, T> _build;
     private readonly IEqualityComparer<T> _comparer;
     private T? _natural;
@@ -31,6 +33,15 @@ internal sealed class TooltipContentCache<T> where T : class
 
     internal T Natural => _natural ?? throw new InvalidOperationException("Natural content has not been built.");
     internal double NaturalWidth { get; private set; }
+    internal int NaturalCharacters => _naturalCharacters;
+
+    internal void SetExpandToContent(bool expand)
+    {
+        var characters = expand ? UnwrappedCharacters : DefaultCharacters;
+        if (_naturalCharacters == characters) return;
+        _naturalCharacters = characters;
+        InvalidateMetrics();
+    }
 
     internal void Submit()
     {
@@ -101,6 +112,9 @@ internal sealed class TooltipContentCache<T> where T : class
     }
 
     internal static int FitCharacters(double naturalWidth, double availableWidth) => naturalWidth > availableWidth
-        ? Math.Max(8, (int)(NaturalCharacters * Math.Max(1, availableWidth) / naturalWidth))
-        : NaturalCharacters;
+        ? Math.Max(8, (int)(DefaultCharacters * Math.Max(1, availableWidth) / naturalWidth))
+        : DefaultCharacters;
+
+    internal int FitContent(double availableWidth, int chrome) =>
+        Math.Max(1, (int)Math.Min(Math.Ceiling(NaturalWidth), Math.Floor(availableWidth)) - chrome);
 }

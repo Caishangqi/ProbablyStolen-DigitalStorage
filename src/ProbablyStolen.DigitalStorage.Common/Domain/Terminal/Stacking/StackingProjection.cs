@@ -142,26 +142,152 @@ public static class StackingProjection
     }
 
     /// <summary>
-    /// Lists the ignore rules that act on an item, in rule order: registered fields that describe it and that the player
-    /// can see on it. Derived fields always count. Empty when the configuration does not merge.
+    /// Lists configurable field identifiers that differ between two identities after the active ignore rules. Values are
+    /// never returned; unclassified or unreadable state is represented by the item identity field.
     /// </summary>
-    public static IReadOnlyList<StackingField> AppliedIgnoredFields(ItemKey key, StackingConfig config)
+    public static IReadOnlyList<string> Differences(ItemKey left, StackingAttributes leftAttributes, ItemKey right,
+        StackingAttributes rightAttributes, StackingConfig config)
     {
-        if (key == null) throw new ArgumentNullException(nameof(key));
+        TryGetDifferences(left, leftAttributes, right, rightAttributes, config, out var differences);
+        return differences;
+    }
+
+    /// <summary>Compares two identities, returning false when an exact fallback prevents a complete comparison.</summary>
+    public static bool TryGetDifferences(ItemKey left, StackingAttributes leftAttributes, ItemKey right,
+        StackingAttributes rightAttributes, StackingConfig config, out IReadOnlyList<string> result)
+    {
+        if (left == null) throw new ArgumentNullException(nameof(left));
+        if (right == null) throw new ArgumentNullException(nameof(right));
+        if (leftAttributes == null) throw new ArgumentNullException(nameof(leftAttributes));
+        if (rightAttributes == null) throw new ArgumentNullException(nameof(rightAttributes));
         if (config == null) throw new ArgumentNullException(nameof(config));
-        if (!config.Enabled || !config.HasIgnoreRule) return Array.Empty<StackingField>();
-        var input = CanonicalMask.Decode(key);
-        if (input == null) return Array.Empty<StackingField>();
-        var fields = new List<StackingField>();
-        foreach (var rule in config.Rules)
+
+        var a = MaskForComparison(left, leftAttributes, config);
+        var b = MaskForComparison(right, rightAttributes, config);
+        if (a.Input == null || b.Input == null)
         {
-            if (rule.Mode != StackingMode.Ignore) continue;
-            var field = StackingFieldCatalog.Find(rule.FieldId);
-            if (field == null) continue;
-            if (field.Kind == StackingFieldKind.Derived || field.Applies(input) && field.IsVisible(input)) fields.Add(field);
+            result = left.Equals(right) ? Array.Empty<string>() : new[] { "item_identity" };
+            return false;
+        }
+
+        var differences = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var fieldId in a.DerivedFields.Concat(b.DerivedFields).Distinct(StringComparer.Ordinal))
+        {
+            var leftIndex = Array.IndexOf(a.DerivedFields, fieldId);
+            var rightIndex = Array.IndexOf(b.DerivedFields, fieldId);
+            if (leftIndex < 0 || rightIndex < 0 || a.Derived[leftIndex] != b.Derived[rightIndex]) differences.Add(fieldId);
+        }
+
+        if (a.Input.Identifier != b.Input.Identifier) differences.Add("item_identity");
+        if (a.Input.UnitBaseValue != b.Input.UnitBaseValue || a.Input.UnitValue != b.Input.UnitValue ||
+            a.Input.LateUnitValue != b.Input.LateUnitValue || a.Input.BackupUnitValue != b.Input.BackupUnitValue)
+            differences.Add(StackingFieldCatalog.PriceComposition);
+        if (!a.Input.ItemTypes.SequenceEqual(b.Input.ItemTypes) || a.Input.Name != b.Input.Name ||
+            a.Input.ShortDescription != b.Input.ShortDescription || a.Input.FlavorText != b.Input.FlavorText ||
+            a.Input.SpriteAtlasPath != b.Input.SpriteAtlasPath || a.Input.SpritePath != b.Input.SpritePath)
+            differences.Add("item_identity");
+
+        foreach (var tagKey in DifferentNames(a.Input.Tags, b.Input.Tags, tag => tag.Key, Encoded))
+            differences.Add(StackingFieldCatalog.TagFieldId(tagKey));
+        foreach (var featureId in DifferentNames(a.Input.Features, b.Input.Features, feature => feature.Identifier, Encoded))
+        {
+            var leftFeature = a.Input.Features.FirstOrDefault(feature => feature.Identifier == featureId);
+            var rightFeature = b.Input.Features.FirstOrDefault(feature => feature.Identifier == featureId);
+            var present = leftFeature ?? rightFeature;
+            if (present == null ||
+                leftFeature != null && (!leftFeature.IsFeatureExposed || leftFeature.IsDisabled) ||
+                rightFeature != null && (!rightFeature.IsFeatureExposed || rightFeature.IsDisabled))
+            {
+                differences.Add("item_identity");
+                continue;
+            }
+
+            var owner = StackingFieldCatalog.FixedFields.FirstOrDefault(field => field.OwnedPaths.FeatureIds.Contains(featureId));
+            differences.Add(owner?.Id ?? StackingFieldCatalog.FeaturePrefix + featureId);
+        }
+
+        if (!SameNode(a.Input.ContentWindow, b.Input.ContentWindow, a.Input, b.Input, true))
+            differences.Add(StackingFieldCatalog.ContainerContent);
+        if (!SameNode(a.Input.ExamineWindow, b.Input.ExamineWindow, a.Input, b.Input, false))
+            differences.Add("item_identity");
+        result = differences.ToArray();
+        return true;
+    }
+
+    /// <summary>
+    /// Lists the ignore rules whose unprotected fields differ among the members of one projected group, in rule order.
+    /// Derived fields are included only when captured values show a difference.
+    /// </summary>
+    public static IReadOnlyList<StackingField> AppliedIgnoredFields(
+        IReadOnlyList<(ItemKey Key, StackingAttributes Attributes)> members, StackingConfig config)
+    {
+        if (members == null) throw new ArgumentNullException(nameof(members));
+        if (config == null) throw new ArgumentNullException(nameof(config));
+        if (members.Count < 2 || !config.Enabled || !config.HasIgnoreRule) return Array.Empty<StackingField>();
+        var inputs = new CanonicalIdentityInput[members.Count];
+        for (var i = 0; i < members.Count; i++)
+        {
+            var input = CanonicalMask.Decode(members[i].Key);
+            if (input == null || input.Identifier != members[0].Key.Identifier) return Array.Empty<StackingField>();
+            inputs[i] = input;
+        }
+
+        // Within one projected group, the applicability of a Match field overlapping ignored paths is shared.
+        var rules = config.Rules.Select(rule => (rule.Mode, Field: StackingFieldCatalog.Find(rule.FieldId))).ToArray();
+        var matchedPaths = StackingOwnedPaths.None;
+        foreach (var (mode, field) in rules)
+        {
+            if (mode == StackingMode.Match && field != null && !field.OwnedPaths.IsEmpty && field.Applies(inputs[0]))
+                matchedPaths = matchedPaths.Union(field.OwnedPaths);
+        }
+
+        var presentTags = new HashSet<string>(inputs.SelectMany(input => input.Tags).Select(tag => tag.Key), StringComparer.Ordinal);
+        var presentFeatures = new HashSet<string>(inputs.SelectMany(input => input.Features).Select(feature => feature.Identifier),
+            StringComparer.Ordinal);
+        var hasContentWindow = inputs.Any(input => input.ContentWindow != null);
+        var fields = new List<StackingField>();
+        foreach (var (mode, field) in rules)
+        {
+            if (mode != StackingMode.Ignore || field == null || !field.Applies(inputs[0]) || !field.IsVisible(inputs[0])) continue;
+            if (field.Kind == StackingFieldKind.Derived)
+            {
+                if (HasDerivedDifference(members, field.Id)) fields.Add(field);
+                continue;
+            }
+
+            var paths = field.OwnedPaths.Without(matchedPaths);
+            var hasOwnedData = paths.ValueFields || paths.ContentWindow && hasContentWindow ||
+                paths.TagKeys.Any(presentTags.Contains) || paths.FeatureIds.Any(presentFeatures.Contains);
+            if (hasOwnedData && HasOwnedDifference(inputs, paths)) fields.Add(field);
         }
 
         return fields;
+    }
+
+    private static bool HasDerivedDifference(IReadOnlyList<(ItemKey Key, StackingAttributes Attributes)> members, string fieldId)
+    {
+        long? first = null;
+        foreach (var member in members)
+        {
+            if (!member.Attributes.TryGet(fieldId, out var value)) continue;
+            if (first.HasValue && first.Value != value) return true;
+            first = value;
+        }
+
+        return false;
+    }
+
+    private static bool HasOwnedDifference(IReadOnlyList<CanonicalIdentityInput> inputs, StackingOwnedPaths paths)
+    {
+        var first = CanonicalMask.EncodeOwned(inputs[0], paths);
+        if (first == null) return false;
+        for (var i = 1; i < inputs.Count; i++)
+        {
+            var other = CanonicalMask.EncodeOwned(inputs[i], paths);
+            if (other != null && !first.AsSpan().SequenceEqual(other)) return true;
+        }
+
+        return false;
     }
 
     private static Masked Mask(ItemKey key, StackingConfig config, StackingAttributes attributes)
@@ -173,30 +299,58 @@ public static class StackingProjection
         var input = CanonicalMask.Decode(key);
         if (input == null) return Masked.Exact("not_canonical");
 
-        var ignored = new HashSet<string>(config.Rules.Where(rule => rule.Mode == StackingMode.Ignore)
-            .Select(rule => rule.FieldId), StringComparer.Ordinal);
+        var ignoredRules = config.Rules.Where(rule => rule.Mode == StackingMode.Ignore)
+            .OrderBy(rule => rule.FieldId, StringComparer.Ordinal).ToArray();
+        var matchedRules = config.Rules.Where(rule => rule.Mode == StackingMode.Match)
+            .OrderBy(rule => rule.FieldId, StringComparer.Ordinal).ToArray();
+        var ignored = new HashSet<string>(ignoredRules.Select(rule => rule.FieldId), StringComparer.Ordinal);
         var paths = StackingOwnedPaths.None;
+        var matchedPaths = StackingOwnedPaths.None;
         var derived = new List<long>();
-        foreach (var fieldId in ignored.OrderBy(id => id, StringComparer.Ordinal))
+        var derivedFields = new List<string>();
+        foreach (var rule in ignoredRules)
         {
-            var field = StackingFieldCatalog.Find(fieldId);
+            var field = StackingFieldCatalog.Find(rule.FieldId);
             if (field == null || field.Kind == StackingFieldKind.Derived) continue;
             var applies = field.Applies(input);
-            // An item the field describes and one it does not stay apart, so absence is never read as a default.
             derived.Add(applies ? 1 : 0);
+            derivedFields.Add(field.Id);
             if (!applies) continue;
             if (!field.IsVisible(input)) return Masked.Exact("hidden:" + field.Id);
             paths = paths.Union(field.OwnedPaths);
         }
 
+        foreach (var rule in matchedRules)
+        {
+            var field = StackingFieldCatalog.Find(rule.FieldId);
+            if (field == null || field.Kind == StackingFieldKind.Derived) continue;
+            var overlap = paths.Intersect(field.OwnedPaths);
+            if (overlap.IsEmpty) continue;
+            var applies = field.Applies(input);
+            derived.Add(applies ? 1 : 0);
+            derivedFields.Add(field.Id);
+            if (!applies) continue;
+            if (!field.IsVisible(input)) return Masked.Exact("hidden:" + field.Id);
+            matchedPaths = matchedPaths.Union(overlap);
+        }
+
+        paths = paths.Without(matchedPaths);
         foreach (var field in StackingFieldCatalog.FixedFields.Where(field => field.Kind == StackingFieldKind.Derived))
         {
             if (ignored.Contains(field.Id) || !field.Applies(input)) continue;
             if (!attributes.TryGet(field.Id, out var value)) return Masked.Exact("unread:" + field.Id);
             derived.Add(value);
+            derivedFields.Add(field.Id);
         }
 
-        return new Masked(CanonicalMask.Strip(input, paths), derived.ToArray(), null);
+        return new Masked(CanonicalMask.Strip(input, paths), derived.ToArray(), derivedFields.ToArray(), null);
+    }
+
+    private static Masked MaskForComparison(ItemKey key, StackingAttributes attributes, StackingConfig config)
+    {
+        if (config.Enabled && config.HasIgnoreRule) return Mask(key, config, attributes);
+        var input = CanonicalMask.Decode(key);
+        return input == null ? Masked.Exact("not_canonical") : new Masked(input, Array.Empty<long>(), Array.Empty<string>(), null);
     }
 
     private static List<string> DifferentNames<T>(IReadOnlyList<T> left, IReadOnlyList<T> right, Func<T, string> name,
@@ -240,17 +394,20 @@ public static class StackingProjection
 
     private readonly struct Masked
     {
-        internal Masked(CanonicalIdentityInput? input, long[] derived, string? reason)
+        internal Masked(CanonicalIdentityInput? input, long[] derived, string[] derivedFields, string? reason)
         {
             Input = input;
             Derived = derived;
+            DerivedFields = derivedFields;
             Reason = reason;
         }
 
         internal CanonicalIdentityInput? Input { get; }
         internal long[] Derived { get; }
+        internal string[] DerivedFields { get; }
         internal string? Reason { get; }
 
-        internal static Masked Exact(string reason) => new(null, Array.Empty<long>(), reason);
+        internal static Masked Exact(string reason) =>
+            new(null, Array.Empty<long>(), Array.Empty<string>(), reason);
     }
 }

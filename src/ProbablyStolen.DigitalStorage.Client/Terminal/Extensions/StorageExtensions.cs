@@ -58,7 +58,21 @@ public interface IEntryTooltipContributor
     bool IsActive(TerminalContext context);
 
     /// <summary>Adds the lines of one slot.</summary>
-    void Contribute(DisplayEntry entry, TerminalContext context, EntryTooltipSink sink);
+    void Contribute(DisplayEntry entry, TerminalContext context, EntryAttributes attributes, EntryTooltipSink sink);
+}
+
+/// <summary>Adds tooltip lines that depend on the terminal's retained slot selection.</summary>
+public interface ISelectionTooltipContributor
+{
+    /// <summary>Gets the unique id.</summary>
+    string Id { get; }
+
+    /// <summary>Whether the contributor runs in this terminal.</summary>
+    bool IsActive(TerminalContext context);
+
+    /// <summary>Adds lines for the hovered slot and selected display groups.</summary>
+    void ContributeSelection(DisplayEntry entry, IReadOnlyList<DisplayEntry> selection, TerminalContext context,
+        EntryAttributes attributes, EntryTooltipSink sink);
 }
 
 /// <summary>Reads and writes small named values stored on the terminal item itself.</summary>
