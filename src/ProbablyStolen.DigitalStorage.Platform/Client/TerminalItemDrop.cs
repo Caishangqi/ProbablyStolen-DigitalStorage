@@ -100,24 +100,31 @@ internal sealed class TerminalItemDrop
         return _cachedRefusal;
     }
 
-    /// <summary>Gets whether any of a group's whole stacks could be stored, reading the network once.</summary>
-    internal bool AnyStorable(IReadOnlyList<GameItem> items)
+    /// <summary>Gets whether any group member may be worth trying to store; capacity is checked only on release.</summary>
+    internal bool AnyPotentiallyStorable(IReadOnlyList<GameItem> items)
     {
-        if (items.Count == 0) return false;
-        try
+        for (var index = 0; index < items.Count; index++)
+            if (MayAttemptStorage(items[index])) return true;
+        return false;
+    }
+
+    internal bool HasNativeAction(IReadOnlyList<GameItem> items)
+    {
+        var mayInsert = GeneralHelper.MayPlayerInsertInto(_terminal);
+        for (var index = 0; index < items.Count; index++)
         {
-            foreach (var refusal in _storeRefusals(items, null))
-            {
-                if (refusal == null) return true;
-            }
-        }
-        catch
-        {
-            // A failed check reads as nothing storable; the native highlight stays.
+            var source = items[index];
+            if ((mayInsert && _terminal.MayHaveValidInventorySlot(source)) || _terminal.MayStack(source)) return true;
+            // The terminal's own target callback is storage, not a native item-use action.
+            if (Classify(source) != DropKind.Store && source.MayTarget(_terminal) && source.CanTarget(_terminal)) return true;
         }
 
         return false;
     }
+
+    internal bool MayAttemptStorage(GameItem source) =>
+        EndsInStore(source) && StoreAdmission.Refusal(source) == null;
+
 
     /// <summary>Builds the hover tooltip for dragging <paramref name="source"/> over the terminal.</summary>
     internal RichText HoverHint(GameItem source, int amount)
@@ -139,12 +146,27 @@ internal sealed class TerminalItemDrop
         _ => false
     };
 
-    private bool CanTarget(GameItem source, GameItem target) => Classify(source) switch
+    private bool CanTarget(GameItem source, GameItem target)
     {
-        DropKind.Defer => true,
-        DropKind.Store => Refusal(source, DraggedAmount(source)) == null,
-        _ => false
-    };
+        var groupDrag = ItemMultiSelectHandler.current?.IsGroupDragging == true;
+        return Classify(source) switch
+        {
+            DropKind.Defer => true,
+            DropKind.Store => CanTargetStorage(groupDrag, groupDrag && TerminalItemDropRouter.IsGroupDropInProgress,
+                () => StoreAdmission.Refusal(source) == null,
+                () => Refusal(source, DraggedAmount(source)) == null),
+            _ => false
+        };
+    }
+
+    internal static bool CanTargetStorage(bool groupDrag, bool groupRelease,
+        Func<bool> staticAdmission, Func<bool> capacityAdmission)
+    {
+        if (staticAdmission == null) throw new ArgumentNullException(nameof(staticAdmission));
+        if (capacityAdmission == null) throw new ArgumentNullException(nameof(capacityAdmission));
+        // Group hover avoids capacity work; native release keeps the capacity gate before item-use side effects.
+        return groupDrag && !groupRelease ? staticAdmission() : capacityAdmission();
+    }
 
     private void Target(GameItem source, GameItem target)
     {

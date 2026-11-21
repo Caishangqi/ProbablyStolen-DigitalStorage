@@ -8,7 +8,79 @@ using GestureButton = ProbablyStolen.DigitalStorage.Client.Interaction.Drag.Poin
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
-internal enum TerminalDropHighlight { Hidden, Ready, Hover, Rejected }
+internal enum TerminalDropHighlight { Hidden, Ready, Hover, Pending, Rejected }
+
+internal enum TerminalDropPreviewState { Unavailable, Pending, Accepted, Rejected }
+
+internal readonly struct TerminalDropPreview
+{
+    private TerminalDropPreview(TerminalDropPreviewState state, GameItem? refusedItem, string? refusal)
+    {
+        State = state;
+        RefusedItem = refusedItem;
+        Refusal = refusal;
+    }
+
+    internal TerminalDropPreviewState State { get; }
+    internal GameItem? RefusedItem { get; }
+    internal string? Refusal { get; }
+
+    internal static TerminalDropPreview Unavailable() =>
+        new(TerminalDropPreviewState.Unavailable, null, null);
+
+    internal static TerminalDropPreview Pending() =>
+        new(TerminalDropPreviewState.Pending, null, null);
+
+    internal static bool Matches(TerminalDropPreview preview, bool previewGroup, int previewAmount,
+        IReadOnlyList<GameItem> previewItems, IReadOnlyList<int> previewCounts,
+        IReadOnlyList<GameItem> items, IReadOnlyList<int> itemCounts, bool groupDrag, int amount)
+    {
+        if (preview.State == TerminalDropPreviewState.Unavailable || previewGroup != groupDrag ||
+            previewAmount != amount || previewItems.Count != items.Count || previewCounts.Count != items.Count ||
+            itemCounts.Count != items.Count)
+            return false;
+
+        for (var index = 0; index < items.Count; index++)
+            if (!ReferenceEquals(items[index], previewItems[index]) || itemCounts[index] != previewCounts[index])
+                return false;
+
+        return true;
+    }
+
+    internal static TerminalDropPreview ForThrottledObservation(bool groupDrag,
+        TerminalDropPreview preview, bool previewGroup, int previewAmount,
+        IReadOnlyList<GameItem> previewItems, IReadOnlyList<int> previewCounts,
+        IReadOnlyList<GameItem> items, IReadOnlyList<int> itemCounts, int amount) =>
+        groupDrag ? Pending() : Matches(preview, previewGroup, previewAmount, previewItems, previewCounts,
+            items, itemCounts, groupDrag, amount) ? preview : Unavailable();
+
+    internal static TerminalDropPreview Evaluate(IReadOnlyList<GameItem> items, bool groupDrag, int amount,
+        Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>>? storeRefusals, string unknownRefusal)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (groupDrag) return Pending();
+        if (items.Count == 0) return new TerminalDropPreview(TerminalDropPreviewState.Rejected, null, unknownRefusal);
+
+        var refusals = storeRefusals?.Invoke(items, amount);
+        GameItem? firstRefused = null;
+        string? firstRefusal = null;
+        for (var index = 0; index < items.Count; index++)
+        {
+            var refusal = refusals == null || index >= refusals.Count ? unknownRefusal : refusals[index];
+            if (refusal == null) return new TerminalDropPreview(TerminalDropPreviewState.Accepted, null, null);
+            if (firstRefused == null)
+            {
+                firstRefused = items[index];
+                firstRefusal = refusal;
+            }
+        }
+
+        return new TerminalDropPreview(TerminalDropPreviewState.Rejected, firstRefused, firstRefusal ?? unknownRefusal);
+    }
+
+    internal static TerminalDropPreview Rejected(GameItem? item, string refusal) =>
+        new(TerminalDropPreviewState.Rejected, item, refusal);
+}
 
 /// <summary>Receives native single/group releases before their ordinary inventory placement.</summary>
 internal sealed class TerminalDropInputHandler : EmptyActionHandler
@@ -18,7 +90,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
     private Func<bool>? _isCurrentSession;
     private Action<IReadOnlyList<GameItem>>? _storeSelection;
     private Action<GameItem, int>? _storeSingle;
-    // Without a store check, or when it throws, the hint still has to say the items stay where they are.
+    // Single-item previews may report a refusal; group previews remain pending until the release-time store.
     private const string UnknownRefusal = "terminal_storage_unsupported_item";
     private Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>>? _storeRefusals;
     private GameItemElement[] _groupSelection = Array.Empty<GameItemElement>();
@@ -26,12 +98,10 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
     private Action<TerminalDropHighlight>? _setHighlight;
     private Func<bool>? _isOverDropArea;
     private TerminalDiagnostics? _diagnostics;
-    private Action<int, GameItem?, string?>? _showHint;
+    private Action<int, GameItem?, string?, bool>? _showHint;
     private bool _hintVisible;
     private bool _consumedRelease;
-    private bool _previewAccepted;
-    private GameItem? _previewRefused;
-    private string? _previewRefusal;
+    private TerminalDropPreview _preview;
     private GameItem[] _previewItems = Array.Empty<GameItem>();
     private int[] _previewCounts = Array.Empty<int>();
     private int _previewAmount;
@@ -68,7 +138,7 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
 
     internal void Initialize(CustomUIWindow window, Func<bool> isCurrentSession,
         Action<IReadOnlyList<GameItem>> storeSelection, TerminalDiagnostics? diagnostics = null,
-        Action<int, GameItem?, string?>? showHint = null, Action<GameItem, int>? storeSingle = null,
+        Action<int, GameItem?, string?, bool>? showHint = null, Action<GameItem, int>? storeSingle = null,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>>? storeRefusals = null, Action<TerminalDropHighlight>? setHighlight = null,
         Func<bool>? isOverDropArea = null)
     {
@@ -316,13 +386,17 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
 
         if (Time.unscaledTime < _nextObservation)
         {
-            ApplyFeedback(items.Length, items.Length > 0 ? PointerTarget(items) : "idle", _previewAccepted);
+            var throttledTarget = items.Length > 0 ? PointerTarget(items) : "idle";
+            var itemCounts = groupDrag ? Array.Empty<int>() : GetUnitCounts(items);
+            var preview = TerminalDropPreview.ForThrottledObservation(groupDrag, _preview, _previewGroup,
+                _previewAmount, _previewItems, _previewCounts, items, itemCounts, amount);
+            ApplyFeedback(items.Length, throttledTarget, preview);
             return;
         }
 
         _nextObservation = Time.unscaledTime + 0.15f;
         var target = items.Length > 0 ? PointerTarget(items) : "idle";
-        var observation = $"mode={(groupDrag ? "group" : items.Length > 0 ? "single" : "idle")} selected={items.Length} amount={amount} target={target}";
+        var observation = $"mode={(groupDrag ? "group" : items.Length > 0 ? "single" : "idle")} selected={items.Length} amount={amount} target={target} capacity_preview={(groupDrag ? "pending" : "simulated")}";
         if (observation != _lastObservation)
         {
             _diagnostics?.Record("hover", $"{observation} hit={_hitDetails}");
@@ -337,45 +411,30 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
             return;
         }
 
-        if (_previewGroup != groupDrag || _previewAmount != amount || items.Length != _previewItems.Length ||
-            items.Where((item, index) => !ReferenceEquals(item, _previewItems[index]) || item.unitCount != _previewCounts[index]).Any())
+        var currentCounts = GetUnitCounts(items);
+        if (!TerminalDropPreview.Matches(_preview, _previewGroup, _previewAmount, _previewItems, _previewCounts,
+            items, currentCounts, groupDrag, amount))
         {
             // Native reconstruction can create render objects. Cache only this gesture's hint, never its commit.
             _previewItems = items;
-            _previewCounts = items.Select(item => item.unitCount).ToArray();
+            _previewCounts = currentCounts;
             _previewGroup = groupDrag;
             _previewAmount = amount;
-            _previewAccepted = false;
-            _previewRefused = items[0];
-            _previewRefusal = null;
             try
             {
-                // One call for the whole selection: each check scans the network and every cell on it.
-                var refusals = _storeRefusals?.Invoke(items, groupDrag ? null : amount);
-                for (var index = 0; index < items.Length; index++)
-                {
-                    var refusal = refusals == null || index >= refusals.Count ? UnknownRefusal : refusals[index];
-                    if (refusal == null)
-                    {
-                        _previewAccepted = true;
-                        break;
-                    }
-                    if (_previewRefusal != null) continue;
-                    _previewRefused = items[index];
-                    _previewRefusal = refusal;
-                }
+                _preview = TerminalDropPreview.Evaluate(items, groupDrag, amount, _storeRefusals, UnknownRefusal);
             }
             catch
             {
-                _previewAccepted = false;
+                _preview = TerminalDropPreview.Rejected(items[0], UnknownRefusal);
                 _diagnostics?.Record("preview_failed", "inventory_unchanged=true");
             }
         }
 
-        ApplyFeedback(items.Length, target, _previewAccepted);
+        ApplyFeedback(items.Length, target, _preview);
     }
 
-    private void ApplyFeedback(int count, string target, bool canStore)
+    private void ApplyFeedback(int count, string target, TerminalDropPreview preview)
     {
         if (count == 0)
         {
@@ -385,31 +444,48 @@ internal sealed class TerminalDropInputHandler : EmptyActionHandler
             return;
         }
 
-        _setHighlight?.Invoke(!canStore ? TerminalDropHighlight.Rejected :
-            target == "terminal" ? TerminalDropHighlight.Hover : TerminalDropHighlight.Ready);
+        if (preview.State == TerminalDropPreviewState.Unavailable)
+        {
+            ClearHint();
+            _setHighlight?.Invoke(TerminalDropHighlight.Hidden);
+            return;
+        }
+
+        var highlight = preview.State switch
+        {
+            TerminalDropPreviewState.Accepted => target == "terminal" ? TerminalDropHighlight.Hover : TerminalDropHighlight.Ready,
+            TerminalDropPreviewState.Rejected => TerminalDropHighlight.Rejected,
+            _ => target == "terminal" ? TerminalDropHighlight.Pending : TerminalDropHighlight.Ready
+        };
+        _setHighlight?.Invoke(highlight);
         if (target == "terminal")
         {
-            if (canStore) _showHint?.Invoke(count, null, null);
-            else _showHint?.Invoke(count, _previewRefused, _previewRefusal ?? UnknownRefusal);
+            _showHint?.Invoke(count, preview.RefusedItem, preview.Refusal,
+                preview.State == TerminalDropPreviewState.Pending);
             _hintVisible = true;
         }
         else ClearHint();
+    }
+
+    private static int[] GetUnitCounts(GameItem[] items)
+    {
+        var counts = new int[items.Length];
+        for (var index = 0; index < items.Length; index++) counts[index] = items[index].unitCount;
+        return counts;
     }
 
     private void ResetPreview()
     {
         _previewItems = Array.Empty<GameItem>();
         _previewCounts = Array.Empty<int>();
-        _previewAccepted = false;
-        _previewRefused = null;
-        _previewRefusal = null;
+        _preview = TerminalDropPreview.Unavailable();
     }
 
     private void ClearHint()
     {
         if (_hintVisible)
         {
-            _showHint?.Invoke(0, null, null);
+            _showHint?.Invoke(0, null, null, false);
             _hintVisible = false;
         }
     }

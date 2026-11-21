@@ -2,6 +2,7 @@ terminal_name,Terminal
 terminal_desc,Accesses the items stored on the network.
 terminal_storage_title,Terminal
 terminal_storage_drag_hint,Release to store {0} stacks in {1}.
+terminal_storage_drag_pending,Release to try storing {0} stacks in {1}.
 terminal_storage_drag_refused,Can't insert {0} into {1}: {2}.
 terminal_drag_reason_not_owned,not owned
 terminal_drag_reason_whole_stack,drag the whole stack

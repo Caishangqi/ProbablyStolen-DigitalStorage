@@ -1,3 +1,4 @@
+using System;
 using HarmonyLib;
 using UnityEngine;
 using ProbablyStolen.DigitalStorage.Platform.Client;
@@ -31,6 +32,12 @@ internal static class TerminalGroupDropPatch
         __state = TerminalItemDropRouter.BeginGroupDrop(__instance);
 
     private static void Postfix(object? __state) => TerminalItemDropRouter.CompleteDrop(__state);
+
+    private static Exception? Finalizer(object? __state, Exception? __exception)
+    {
+        if (__exception != null && __state is IDisposable groupScope) groupScope.Dispose();
+        return __exception;
+    }
 }
 
 [HarmonyPatch(typeof(ItemMultiSelectHandler), "UpdateDropTarget")]

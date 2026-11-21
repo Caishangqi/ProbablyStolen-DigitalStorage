@@ -80,6 +80,7 @@ class ContentContractTests(unittest.TestCase):
             texts = read_localization(REPOSITORY / "packaging/resources" / language)
             self.assertEqual(set(), keys - set(texts), language)
             self.assertIn("terminal_storage_drag_refused", texts)
+            self.assertIn("terminal_storage_drag_pending", texts)
 
     def test_log_category_settings_and_localization_are_wired(self):
         platform = REPOSITORY / "src/ProbablyStolen.DigitalStorage.Platform"

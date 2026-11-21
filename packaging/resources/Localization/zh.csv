@@ -2,6 +2,7 @@ terminal_name,终端
 terminal_desc,访问存储网络中的物品.
 terminal_storage_title,终端
 terminal_storage_drag_hint,松开鼠标，将 {0} 个堆叠存入{1}。
+terminal_storage_drag_pending,松开鼠标，尝试将 {0} 个堆叠存入{1}。
 terminal_storage_drag_refused,无法将{0}放入{1}：{2}。
 terminal_drag_reason_not_owned,未拥有
 terminal_drag_reason_whole_stack,请拖动整个堆叠

@@ -17,6 +17,9 @@ public static class TerminalItemDropRouter
     private static GameItem? _paintedTerminal;
     private static bool _paintedAccepted;
     private static GameItem? _groupPainted;
+    [ThreadStatic] private static int _groupDropDepth;
+
+    internal static bool IsGroupDropInProgress => _groupDropDepth > 0;
 
     /// <summary>Called before <c>ItemMouseDragHandler.EndDrag</c>; returns the pending store, or null.</summary>
     public static object? BeginSingleDrop(ItemMouseDragHandler drag, bool cancelled)
@@ -37,39 +40,74 @@ public static class TerminalItemDropRouter
         }
     }
 
-    /// <summary>Called before <c>ItemMultiSelectHandler.EndGroupDrag</c>; returns the pending stores, or null.</summary>
+    /// <summary>Called before <c>ItemMultiSelectHandler.EndGroupDrag</c>; opens release-only capacity gating and captures fallbacks.</summary>
     public static object? BeginGroupDrop(ItemMultiSelectHandler group)
     {
+        _groupPainted = null;
+        if (group == null || !group.IsGroupDragging) return null;
+        var scope = new GroupDropScope();
         try
         {
-            _groupPainted = null;
-            if (group == null || !group.IsGroupDragging) return null;
             // The same raycast the native group drop makes first, in the same frame.
             var drop = TerminalItemDrop.Find(RenderHandler.RaycastElement<GameItem>(Input.mousePosition));
-            if (drop == null) return null;
+            if (drop == null) return scope;
             var items = NativeTerminalDragAccess.GetGroupItems(group);
             var pending = new List<PendingItem>();
             foreach (var item in items)
             {
-                if (ReferenceEquals(item, drop.Terminal)) return null;
+                if (ReferenceEquals(item, drop.Terminal)) return scope;
                 // The native group drop skips these items before trying any step.
                 if (item.IsDestroyed() || item.parentInventory == null || !item.MayRemove() || item.MaxNumRemove() < 1) continue;
                 if (drop.NeedsFallback(item)) pending.Add(new PendingItem(item, item.unitCount));
             }
 
-            return pending.Count == 0 ? null : new PendingDrop(drop, pending);
+            scope.PendingState = pending.Count == 0 ? null : new PendingDrop(drop, pending);
+            return scope;
         }
         catch (Exception error)
         {
             Report("group drop check", error);
-            return null;
+            return scope;
         }
     }
 
-    /// <summary>Called after the native drop finished; stores each pending item it left in place.</summary>
+    /// <summary>Completes pending fallbacks and closes only the group release scope that owns this state.</summary>
     public static void CompleteDrop(object? pending)
     {
-        if (pending is not PendingDrop drop) return;
+        if (pending is GroupDropScope groupScope)
+        {
+            try
+            {
+                CompletePendingDrop(groupScope.PendingState as PendingDrop);
+            }
+            finally
+            {
+                groupScope.Dispose();
+            }
+            return;
+        }
+
+        CompletePendingDrop(pending as PendingDrop);
+    }
+
+    internal sealed class GroupDropScope : IDisposable
+    {
+        private bool _disposed;
+        internal object? PendingState { get; set; }
+
+        internal GroupDropScope() => _groupDropDepth++;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _groupDropDepth--;
+        }
+    }
+
+    private static void CompletePendingDrop(PendingDrop? drop)
+    {
+        if (drop == null) return;
         foreach (var item in drop.Items)
         {
             try
@@ -82,6 +120,9 @@ public static class TerminalItemDropRouter
             }
         }
     }
+
+    internal static bool ShouldPaintGroupStoreFeedback(bool nativeAction, bool storageCandidate) =>
+        !nativeAction && storageCandidate;
 
     /// <summary>
     /// Called after <c>ItemMouseDragHandler.Drag</c>. Over a terminal where the drop would store, shows the store
@@ -127,8 +168,8 @@ public static class TerminalItemDropRouter
     }
 
     /// <summary>
-    /// Called after <c>ItemMultiSelectHandler.UpdateDropTarget</c>. The native group highlight is green only when an
-    /// item could be inserted, stacked or used; it turns green too when the fallback would store one.
+    /// Called after <c>ItemMultiSelectHandler.UpdateDropTarget</c>. Native insertion, stacking, or use stays green;
+    /// blue marks a storage-only candidate whose capacity will be checked on release.
     /// </summary>
     public static void AfterGroupHover(ItemMultiSelectHandler group)
     {
@@ -144,14 +185,10 @@ public static class TerminalItemDropRouter
 
             if (ReferenceEquals(_groupPainted, target)) return;
             _groupPainted = target;
-            var fallback = new List<GameItem>();
-            foreach (var item in NativeTerminalDragAccess.GetGroupItems(group))
-            {
-                if (drop.NeedsFallback(item)) fallback.Add(item);
-            }
-
-            if (drop.AnyStorable(fallback))
-                NativeTerminalDragAccess.HighlightGroupTarget(group, target!, RenderHandler.BackgroundColor.Green);
+            var items = NativeTerminalDragAccess.GetGroupItems(group);
+            var nativeAction = drop.HasNativeAction(items);
+            if (ShouldPaintGroupStoreFeedback(nativeAction, !nativeAction && drop.AnyPotentiallyStorable(items)))
+                NativeTerminalDragAccess.HighlightGroupTarget(group, target!, RenderHandler.BackgroundColor.Blue);
         }
         catch (Exception error)
         {

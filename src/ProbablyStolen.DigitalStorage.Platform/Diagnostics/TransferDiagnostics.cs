@@ -64,7 +64,8 @@ internal sealed class TransferDiagnostics
         _log.Write(_category, level, "store_result", "Terminal store completed.", () => new[]
         {
             LogField.Of("mode", operation.Mode), LogField.Of("requested_pieces", operation.RequestedPieces),
-            LogField.Of("moved_units", result.StoredAmount), LogField.Of("outcome", outcome)
+            LogField.Of("moved_units", result.StoredAmount), LogField.Of("outcome", outcome),
+            LogField.Of("transfer_elapsed_ms", operation.ElapsedMilliseconds)
         }, operation.Id, operation.ExceptionType);
     }
 
@@ -73,7 +74,7 @@ internal sealed class TransferDiagnostics
             "Terminal transfer failed before a result was available.", () => new[]
             {
                 LogField.Of("mode", operation.Mode), LogField.Of("requested_pieces", operation.RequestedPieces),
-                LogField.Of("outcome", "failed")
+                LogField.Of("transfer_elapsed_ms", operation.ElapsedMilliseconds), LogField.Of("outcome", "failed")
             }, operation.Id, operation.ExceptionType);
 
     private bool TakePair(TransferOperation operation, StoredRootIdentityMismatch mismatch)

@@ -120,8 +120,8 @@ try {
         $reviewedSources = @(
             'CanonicalFilterKeyCodecTests.cs', 'CellDiagnosticsTests.cs', 'ItemContentSynchronizationTests.cs',
             'LogSettingTests.cs', 'LogSettingsRowEditTests.cs', 'ModuleBayContentBootstrapTests.cs',
-            'NativeItemIdentityReaderTests.cs', 'TerminalDragControllerTests.cs', 'TerminalDragTargetResolverTests.cs',
-            'TransferDiagnosticsTests.cs'
+            'NativeItemIdentityReaderTests.cs', 'TerminalDropPreviewTests.cs', 'TerminalDragControllerTests.cs',
+            'TerminalDragTargetResolverTests.cs', 'TransferDiagnosticsTests.cs'
         )
         $platformSources = @(Get-ChildItem -LiteralPath $platformDirectory -File -Filter '*.cs' -Recurse |
             Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |

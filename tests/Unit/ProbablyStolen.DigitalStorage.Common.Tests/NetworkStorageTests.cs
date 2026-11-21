@@ -213,6 +213,25 @@ public sealed class NetworkStorageTests
     }
 
     [Test]
+    public void Insert_Enforces128TypeLimitAcrossLargeBatchAndRetainsRemainder()
+    {
+        var cell = new BasicCellInventory(
+            MemoryCellPages.EmptyView(StorageCellTier.All[0]), new MemoryCellPages());
+        var network = new NetworkStorage();
+        network.Mount(0, new InventoryHandler(cell, CellPartition.Unfiltered));
+        var items = new MemoryInventory();
+        for (var index = 0; index < 179; index++)
+            items.With(OneByOne, $"item.type_{index}", 1);
+
+        var result = network.Insert(items, Actionable.Modulate, Player);
+
+        Assert.That(result.InsertedUnits, Is.EqualTo(128));
+        Assert.That(result.StoppedBy.Rejection, Is.EqualTo(StoreRejection.TypeLimit));
+        Assert.That(cell.View.TypeCount, Is.EqualTo(128));
+        Assert.That(items.Roots, Has.Count.EqualTo(51));
+    }
+
+    [Test]
     public void Simulate_ChangesNothing()
     {
         var (network, cells) = Mount((0, Cell(CellPartition.Unfiltered)));

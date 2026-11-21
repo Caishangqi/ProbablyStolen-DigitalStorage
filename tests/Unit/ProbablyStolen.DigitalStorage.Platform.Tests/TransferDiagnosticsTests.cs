@@ -56,6 +56,22 @@ internal sealed class TransferDiagnosticsTests
     }
 
     [Test]
+    public void Stored_ReportsTransferDurationThroughTheExistingCategory()
+    {
+        var logs = new List<string>();
+        var diagnostics = Create(logs);
+        var operation = diagnostics.Begin("store_selection", 179);
+
+        diagnostics.Stored(operation, TerminalInsertionResult.Create(TerminalInsertionStatus.Success, 128,
+            "terminal_storage_inserted_partial"));
+
+        Assert.That(logs, Has.Count.EqualTo(1));
+        Assert.That(logs[0], Does.Contain("event=store_result").And.Contain("mode=\"store_selection\"")
+            .And.Contain("requested_pieces=179").And.Contain("moved_units=128")
+            .And.Contain("transfer_elapsed_ms="));
+    }
+
+    [Test]
     public void Extracted_CapsRepeatedAndGlobalMismatchPairsWithOneNotice()
     {
         var logs = new List<string>();

@@ -427,7 +427,7 @@ def check_content(project: Path, output: Path) -> None:
         "network_power_drive_name", "network_power_drive_desc",
         "network_power_terminal_name", "network_power_terminal_desc",
         "terminal_storage_title", "terminal_storage_search_placeholder", "terminal_storage_loading",
-        "terminal_storage_drag_hint", "terminal_storage_drag_refused",
+        "terminal_storage_drag_hint", "terminal_storage_drag_pending", "terminal_storage_drag_refused",
         "terminal_drag_reason_not_owned", "terminal_drag_reason_whole_stack", "terminal_drag_reason_unsupported", "terminal_drag_reason_offline", "terminal_drag_reason_store_disabled", "terminal_drag_reason_no_cell", "terminal_drag_reason_type_limit", "terminal_drag_reason_too_large", "terminal_drag_reason_full", "terminal_drag_reason_capacity", "terminal_drag_reason_quota", "terminal_drag_reason_read_only", "terminal_drag_reason_partition_unknown", "terminal_drag_reason_partition_invalid", "terminal_storage_whole_stack_only", "terminal_diagnostics_name", "terminal_diagnostics_desc",
         "debug_item_identity_log_name", "debug_item_identity_log_desc",
         "config_section_logs", "log_category_storage", "log_category_transfer", "log_category_comp", "log_category_temp", "log_category_enabled",

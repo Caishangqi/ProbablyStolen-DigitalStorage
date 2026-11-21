@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Client.Tooltips;
@@ -676,9 +677,9 @@ internal sealed class StorageTerminalView : ITerminalView
 
     /// <summary>
     /// Shows the drop hint over the terminal, or hides it when <paramref name="count"/> is zero. A null
-    /// <paramref name="refusal"/> means the drop would store; otherwise it names the refused item and why.
+    /// <paramref name="refusal"/> accepts a single-item preview unless <paramref name="pending"/> is true.
     /// </summary>
-    private void ShowDragHint(int count, GameItem? refused, string? refusal)
+    private void ShowDragHint(int count, GameItem? refused, string? refusal, bool pending)
     {
         var overlay = OverlayHandler.current;
         if (overlay == null)
@@ -695,7 +696,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _grid.HideTooltips();
 
         overlay.ShowTooltip(Input.mousePosition, new Vector2(32f, 0f),
-            TerminalDropHint.Build(_services.Text, count, refused, refusal));
+            TerminalDropHint.Build(_services.Text, count, refused, refusal, pending));
     }
 
     private void StoreSelection(IReadOnlyList<GameItem> items)
@@ -707,9 +708,7 @@ internal sealed class StorageTerminalView : ITerminalView
 
         var operation = _services.Transfers.Begin("store_selection", items.Count);
         var result = Store(operation, () => _menu.HandleInsertion(() => _services.StoreSelection(items, operation)));
-        _messageKey = result.MessageKey;
-        _messageAmount = result.StoredAmount;
-        Refresh(ReadSnapshot(), preserveView: true);
+        RefreshAfterStore(result, operation, items.Count);
     }
 
     private void StoreSingle(GameItem item, int amount)
@@ -717,9 +716,17 @@ internal sealed class StorageTerminalView : ITerminalView
         if (!_host.IsCurrentSession()) return;
         var operation = _services.Transfers.Begin("store_single", 1);
         var result = Store(operation, () => _menu.HandleInsertion(() => _services.StoreSingle(item, amount, operation)));
+        RefreshAfterStore(result, operation, 1);
+    }
+
+    private void RefreshAfterStore(TerminalInsertionResult result, TransferOperation operation, int selectedCount)
+    {
         _messageKey = result.MessageKey;
         _messageAmount = result.StoredAmount;
+        var startedAt = Stopwatch.GetTimestamp();
         Refresh(ReadSnapshot(), preserveView: true);
+        Diagnostics?.Record("store_refresh",
+            $"operation_id={operation.Id} selected={selectedCount} elapsed_ms={TransferOperation.ElapsedMillisecondsSince(startedAt)}");
     }
 
     private TerminalInsertionResult Store(TransferOperation operation, Func<TerminalInsertionResult> store)
