@@ -93,15 +93,12 @@ Auto enables pinyin only in Chinese. Choose On or Off to override it.
 [/list]
 Terminals and drives can open the native module panel. Native module properties currently do not change digital storage capacity, throughput, or network power usage.
 
-[h2]Upgrades and compatibility[/h2]
-Downgrading is unsupported. If a Do not save warning appears, quit and restore your backup from before the upgrade.
-
-[h3]Supported mods[/h3]
-[list]
-[*][url=steamcommunity.com/sharedfiles/filedetails/?id=3829653222]Customer Stocking[/url]: one-click stocking can select goods from online digital networks within the mod's scan range.
-[/list]
+[h2] Module Compatibility [/h2]
+[url=steamcommunity.com/workshop/filedetails/discussion/3836902912/573806979786739121/] Compatibility notes and list [/url]
 
 [h2]Issues and feedback[/h2]
 [list]
-[*]QQ group: 1058183851
+[*] QQ group:[b] 1058183851 [/b]
+[*] Discord: [url=discord.com/users/627314822609895455] link [/url]
+[*] browse [url=steamcommunity.com/sharedfiles/filedetails/discussions/3836902912] discussion page [/url]and create new discussion
 [/list]
