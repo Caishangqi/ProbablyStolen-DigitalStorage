@@ -42,7 +42,7 @@ public sealed class RootDrainSimulatorTests
     [Test]
     public void Forecast_OverCapacityCellsStillMigrate()
     {
-        // 9000 1x1 units exceed the 1k capacity of 8160 area units for one type.
+        // 9000 1x1 units exceed the 1k capacity of 8176 area units for one type.
         var cell = new LegacyCell(Tier1K, 2, (1, 0, 0, new BoundingSize(1, 1), "item.a", 9000));
 
         var forecast = RootDrainSimulator.Forecast(cell.View, cell.Snapshot());
@@ -59,7 +59,7 @@ public sealed class RootDrainSimulatorTests
         var cell = new LegacyCell(Tier1K, 2, roots);
         // Every other page is a full 1x1 strip page, up to the restorable limit.
         var full = cell.View;
-        var filled = new CellView(full.Rules, full.TypeLimit,
+        var filled = new CellView(full.Rules, full.StorageTypeLimit, full.PartitionRuleLimit,
             full.Pages.Concat(Enumerable.Range(0, LayoutDescriptor.MaxPages - 2)
                 .Select(_ => PageView.Strip(StripLayout.PageFor(new BoundingSize(1, 1)), Enumerable.Range(0, 16)))),
             full.Usage, full.Partition);
@@ -117,7 +117,7 @@ public sealed class RootDrainSimulatorTests
                 counts[page]++;
             }
 
-            View = new CellView(CellRules.For(tier), 128,
+            View = new CellView(CellRules.For(tier), tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
                 Enumerable.Range(0, pageCount).Select(page =>
                     PageView.Unslotted(page == 0 ? PageGeometry.Anchor : PageGeometry.Legacy, counts[page])),
                 usage, CellPartition.Unfiltered);

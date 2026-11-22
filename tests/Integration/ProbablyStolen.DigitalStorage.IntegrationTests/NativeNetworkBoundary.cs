@@ -3,11 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 
 // Physical boundary doubles for the linked production scanner. They do not simulate native shape or Unity behavior.
-internal sealed class GameItemState
-{
-    internal readonly Dictionary<string, object?> dict = new();
-}
-
 internal sealed class GameItemShape
 {
     internal int width;
@@ -36,6 +31,16 @@ internal static class ModHook
 internal static class ModuleHelper
 {
     internal const string MODULE_STUCK_TAG = "MODULE_STUCK_BOOL";
+    internal const string ADDITIONAL_EFFECT_STRING = "ADDITIONAL_EFFECT_STRING";
+
+    public static void CreateModuleTooltip(RichTextBuilder builder, GameItem item)
+    {
+        if (item.IsTag(ADDITIONAL_EFFECT_STRING))
+            builder.AddLine(item.GetTagReadonly(ADDITIONAL_EFFECT_STRING).GetString(), true, RenderHandler.ColorPalette.LightCyan);
+    }
+
+    internal static void InitModuleItem(GameItem item, string moduleType, bool isShipModule) =>
+        throw new InvalidOperationException("unexpected item initialization");
 }
 
 internal static class SaveManager
@@ -46,10 +51,13 @@ internal static class SaveManager
 public sealed class TagState
 {
     public int valueInt;
+    private string _valueString = string.Empty;
     public bool valueEnabled;
     public bool GetBool() => valueEnabled;
     public int GetInt() => valueInt;
-    public TagState Clone() => new() { valueInt = valueInt, valueEnabled = valueEnabled };
+    public string GetString() => _valueString;
+    public TagState Clone() => new() { valueInt = valueInt, valueEnabled = valueEnabled, _valueString = _valueString };
+    public TagState SetString(string value) { _valueString = value; return this; }
     public TagState Enable() { valueEnabled = true; return this; }
     public TagState SetInt(int value) { valueInt = value; return this; }
 }
@@ -82,14 +90,14 @@ public class GameItem
     internal GameItem(string id)
     {
         identifier = id;
-        state = new GameItemState();
+        state = new TagSystem();
         Stuck = false;
     }
 
     internal string identifier;
     public string shortDescription { get; set; } = string.Empty;
     public string flavorText { get; set; } = string.Empty;
-    internal GameItemState? state;
+    internal TagSystem state;
     internal TagSystem modifiedState = new();
     internal GameInventory? parentInventory;
     internal PixelWindow? contentWindow;
@@ -102,6 +110,17 @@ public class GameItem
     internal bool ContainerTooltip = false;
     internal bool Owned = true;
     internal Func<bool>? RemovalProbe;
+    internal Func<GameItem, GameItem, bool>? mayStackItemFunc;
+    internal Func<GameItem, GameItem, int, int>? maxSlotAmountItemFunc;
+    internal int TagWrites;
+    internal string GetDisplayName(bool preferCustomName) => identifier;
+    internal void Destroy() => throw new InvalidOperationException("unexpected item destruction");
+    internal void ModifyTag(string key, Action<TagState> change)
+    {
+        TagWrites++;
+        change(state.GetTag(key));
+        modifiedState = state.Clone();
+    }
     public bool MayRemove() => RemovalProbe?.Invoke() ?? throw new InvalidOperationException("unexpected removal probe");
     public int MaxNumRemove() => throw new InvalidOperationException("unexpected native removal count");
     internal readonly List<GameItem> Children = new();

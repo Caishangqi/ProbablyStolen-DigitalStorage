@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 internal sealed class ItemMouseHandler
 {
@@ -20,7 +20,13 @@ internal sealed class MachineryPanelRow : GraphNodeStorage
 {
     internal GraphNodeStorage? parent;
     internal MachineryPanel? Modules;
-    internal MachineryPanel? GetPanel(string role) => role == "cell_modules" ? Modules : null;
+    internal int ModulePanelReads { get; private set; }
+    internal MachineryPanel? GetPanel(string role)
+    {
+        if (role != "cell_modules") return null;
+        ModulePanelReads++;
+        return Modules;
+    }
 }
 
 internal sealed class MachineryPanel
@@ -40,6 +46,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage
         private static readonly ConditionalWeakTable<GameItem, PageReadSpy> Spies = new();
 
         internal static PageReadSpy Spy(GameItem cell) => Spies.GetValue(cell, _ => new PageReadSpy());
+
+        internal static CellView ProjectContents(GameItem cell, CellView contents) =>
+            ViewOf(cell, contents.Pages, contents.Usage, CellWriteState.Writable);
 
         internal static IReadOnlyList<GameGridInventory> Pages(GameItem cell) => cell.StoragePages;
 
@@ -91,13 +100,22 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage
     internal static class CellHealth
     {
         internal static bool IsUnavailable(GameItem cell) => CellPages.Spy(cell).Unavailable;
+        internal static CellHealthState Get(GameItem cell) => CellHealthState.Available;
+        internal static void Set(GameItem cell, CellHealthState state) =>
+            throw new InvalidOperationException("unexpected health write");
     }
 
-    internal static class ModuleTags
+    internal static class DrivePriorityTag
     {
-        internal static TypeLimitRoll? Read(GameItem module) => module.identifier == CellUpgradeInventory.TypeLimitId
-            ? new TypeLimitRoll(ModuleQuality.Common, 8, 5)
-            : null;
+        internal static int ReadForCell(GameItem cell) => DrivePriority.Default;
+    }
+
+    internal sealed class CellPartitionTags
+    {
+        internal CellPartitionTags(GameItem cell) { }
+        internal CellPartitionTags Capture() => this;
+        internal (PartitionConfig Config, bool Valid) Interpret() => (PartitionConfig.Empty, true);
+        internal static CellPartition Read(GameItem cell) => CellPartition.Unfiltered;
     }
 
     internal static class ModuleBayExpansionHooks

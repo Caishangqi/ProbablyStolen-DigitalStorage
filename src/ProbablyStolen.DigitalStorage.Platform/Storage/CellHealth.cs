@@ -102,7 +102,7 @@ internal sealed class CellHealth
         if (state.Status == CellHealthStatus.Unavailable) return state;
         try
         {
-            CellTypeLimitSource.EffectiveOrBase(cell);
+            _ = CellTypeLimitSource.ReadOrBase(cell).StorageTypeLimit;
         }
         catch (ArgumentException)
         {

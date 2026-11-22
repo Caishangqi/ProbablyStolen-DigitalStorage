@@ -24,15 +24,15 @@ To configure a cell, move it from the drive to the workbench, where its contents
 [h2]Capacity and storage cells[/h2]
 Components and cells come in five tiers:
 [list]
-[*]1k: 1,024 bytes
-[*]4k: 4,096 bytes
-[*]16k: 16,384 bytes
-[*]64k: 65,536 bytes
-[*]256k: 262,144 bytes
+[*]1k: 1,024 bytes, 256 types
+[*]4k: 4,096 bytes, 1,024 types
+[*]16k: 16,384 bytes, 4,096 types
+[*]64k: 65,536 bytes, 16,384 types
+[*]256k: 262,144 bytes, 65,536 types
 [/list]
-Each tier starts with a 128-type limit. Type overhead takes half the capacity at the effective type limit. Type Limit Modules spread that overhead across more types without adding bytes.
+Type overhead uses half the capacity when a cell reaches its type limit. Type Limit Modules spread that overhead across more types without adding bytes. Existing cells use the new limits without a save migration.
 
-Items use one byte per eight grid squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 9 bytes (5 for the items and 4 for their type).
+Items use one byte per eight grid squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 7 bytes (5 for the items and 2 for their type).
 
 Items are grouped by size on locked pages that disappear when empty. The terminal handles all transfers. Items wider or taller than 12 squares do not fit.
 
@@ -41,8 +41,8 @@ Hover over a cell to see its capacity, partition, and modules. Before removing t
 [h2]Cell modules[/h2]
 Cell modules take up 2x2 squares and fit only in cells. Use the workbench's Modules panel to install or remove them.
 [list]
-[*]Type Limit Modules come in Common, Rare, and Epic qualities with random +N and +P% bonuses. The limit is (128 + total flat bonus) x (1 + total percentage), rounded down. Install as many as the bay can hold.
-[*]One Equal Distribution Module per cell caps each type's usage at the usable item space divided by the effective type limit. The cap does not depend on rule count.
+[*]Type Limit Modules add +80–160 types and +5–10% (Common), +160–320 and +10–20% (Rare), or +320–640 and +20–30% (Epic). Add the flat bonuses to the tier's base limit, then apply the sum of the percentage bonuses and round down. The bay size limits how many you can install. Existing modules keep their rolls and get the higher flat bonus.
+[*]One Equal Distribution Module per cell limits the area each type can occupy. It divides half the cell's bytes, expressed as grid area, by the partition rule limit and rounds up. The quota does not depend on the number of rules you add.
 [/list]
 Take items out first if removing a Type Limit Module would put the cell over its type or byte limit.
 
@@ -57,7 +57,7 @@ Double-click a rule to edit its item, type, legality, stolen status, heat, or vi
 [list]
 [*]Drag rules to move or swap them. Position does not affect matching or storage priority.
 [*]Copy, rename, or delete rules, and undo deletion or clearing.
-[*]The rule limit follows the effective type limit. Lowering it keeps existing rules but prevents additions while over the limit.
+[*]Each tier starts with 128 rule slots. Modules still expand these slots at the old rate: one tenth of each advertised flat bonus plus the unchanged percentage bonus, combined the same way as the type limit. Lowering the rule limit keeps existing rules but prevents additions until there is room.
 [*]Overview edits and valid detail edits save automatically. Invalid input shows Not saved.
 [*]Press Back to close the attribute menu, return to the overview, or close the editor. Picking up the cell or closing the workbench also closes it.
 [/list]

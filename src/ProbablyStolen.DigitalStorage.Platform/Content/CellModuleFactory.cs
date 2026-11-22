@@ -15,16 +15,17 @@ internal sealed class CellModuleFactory
     internal const string EqualDistributionSprite = "module_equal_distribution";
     internal const int Width = 2;
     internal const int Height = 2;
-    private const string EffectTag = "ADDITIONAL_EFFECT_STRING";
     private readonly ItemAppearance _appearance;
     private readonly Action<GameItem> _contentChanged;
     private readonly ModText _text;
+    private readonly Action<string> _reportError;
 
-    internal CellModuleFactory(ItemAppearance appearance, Action<GameItem> contentChanged, ModText text)
+    internal CellModuleFactory(ItemAppearance appearance, Action<GameItem> contentChanged, ModText text, Action<string> reportError)
     {
         _appearance = appearance ?? throw new ArgumentNullException(nameof(appearance));
         _contentChanged = contentChanged ?? throw new ArgumentNullException(nameof(contentChanged));
         _text = text ?? throw new ArgumentNullException(nameof(text));
+        _reportError = reportError ?? throw new ArgumentNullException(nameof(reportError));
     }
 
     /// <summary>
@@ -55,6 +56,21 @@ internal sealed class CellModuleFactory
     {
         if (module.identifier != CellUpgradeInventory.TypeLimitId) throw new ArgumentException("Not a type limit module.", nameof(module));
         ModuleTags.Write(module, roll ?? throw new ArgumentNullException(nameof(roll)));
+        if (TypeLimitRolls.IsValid(roll))
+        {
+            try
+            {
+                var effect = TypeLimitModuleText.Effect(_text, roll, roll.Add,
+                    error => _reportError($"Digital Storage: initial module effect translation failed ({error.GetType().Name})."));
+                const string effectTag = ModuleHelper.ADDITIONAL_EFFECT_STRING;
+                if (!module.IsTag(effectTag) || module.GetTagReadonly(effectTag).GetString() != effect)
+                    module.ModifyTag(effectTag, state => state.Enable().SetString(effect));
+            }
+            catch (Exception error)
+            {
+                _reportError($"Digital Storage: initial module effect text failed ({error.GetType().Name}).");
+            }
+        }
         _contentChanged(module);
     }
 
@@ -77,20 +93,11 @@ internal sealed class CellModuleFactory
         }
     }
 
-    internal bool Present(GameItem module)
+    internal void Present(GameItem module)
     {
         var roll = ModuleTags.Read(module);
-        if (roll == null || !TypeLimitRolls.IsValid(roll)) return false;
-
-        _appearance.SetPreparedSprite(module, Sprite(roll.Quality));
-        var quality = _text.Get("module_quality_" + ModuleTags.QualityText(roll.Quality));
-        var effect = _text.Get("module_type_limit_effect", quality, roll.Add, roll.Percent);
-        if (string.IsNullOrWhiteSpace(quality) || string.IsNullOrWhiteSpace(effect) ||
-            quality == "module_quality_" + ModuleTags.QualityText(roll.Quality) || effect == "module_type_limit_effect")
-            throw new InvalidOperationException("Module localization is unavailable.");
-        if (module.IsTag(EffectTag) && module.GetTagReadonly(EffectTag).GetString() == effect) return false;
-        module.ModifyTag(EffectTag, state => state.Enable().SetString(effect));
-        return true;
+        if (roll != null && TypeLimitRolls.IsValid(roll))
+            _appearance.SetPreparedSprite(module, Sprite(roll.Quality));
     }
 
     private static string Sprite(ModuleQuality quality) => TypeLimitSpritePrefix + ModuleTags.QualityText(quality);

@@ -26,9 +26,6 @@ public sealed class StorageCellTier
         CellId = "digital_storage.item_storage_cell_" + name;
     }
 
-    /// <summary>The base type limit of every tier.</summary>
-    public const int BaseTypeLimit = 128;
-
     /// <summary>Gets the immutable ordered catalog.</summary>
     public static IReadOnlyList<StorageCellTier> All => Tiers;
     /// <summary>Selects a merchant tier from an inclusive 1..100 draw.</summary>
@@ -74,15 +71,15 @@ public sealed class StorageCellTier
     /// <summary>Gets the byte capacity: 1024 per multiplier step.</summary>
     public long GetBytes() => 1024L * Multiplier;
 
-    /// <summary>Gets the bytes each stored type costs at the base type limit: 4 per multiplier step.</summary>
-    public long GetBytesPerType() => 4L * Multiplier;
+    /// <summary>Gets the bytes each stored type costs at the base type limit.</summary>
+    public long GetBytesPerType() => GetTypeBudget() / GetTotalTypes();
 
     /// <summary>
     /// Gets the bytes all types together cost when the cell holds as many types as its effective limit: half the
     /// capacity. Each stored type costs <c>budget / limit</c>, so raising the limit spreads the same budget thinner.
     /// </summary>
-    public long GetTypeBudget() => checked(GetBytesPerType() * BaseTypeLimit);
+    public long GetTypeBudget() => GetBytes() / 2;
 
     /// <summary>Gets the base type limit before extensions.</summary>
-    public int GetTotalTypes() => BaseTypeLimit;
+    public int GetTotalTypes() => checked((int)(GetBytes() / 4));
 }

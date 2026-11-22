@@ -225,7 +225,7 @@ public sealed class PlatformComposition : IDisposable
             message => log.Log(message));
         var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, workbench.FindUsage,
             message => log.Error(message));
-        var modules = new CellModuleFactory(appearance, itemContent.Changed, text);
+        var modules = new CellModuleFactory(appearance, itemContent.Changed, text, message => log.Error(message));
         itemContent.SetModulePresenter(modules.Present);
         var goods = new StorageGoods(modules);
         var networkSprites = new NetworkSprites(log);

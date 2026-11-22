@@ -111,7 +111,7 @@ public sealed class CellRecordTests
                     ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.ModuleQuality.Common, 8, 5)),
             ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.InstalledModule.EqualDistribution()
         });
-        var view = new CellView(CellRules.For(StorageCellTier.All[2]), 142,
+        var view = new CellView(CellRules.For(StorageCellTier.All[2]), 4384, 142,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(),
             CellPartition.Invalid(PartitionMode.Whitelist, CellPartitionFailure.MalformedRule), upgrades: modules);
 
@@ -128,7 +128,7 @@ public sealed class CellRecordTests
     public void Lore_ListsBytesTypesPartitionSchemaAndStatusInOrder()
     {
         var partition = Partitions.Blacklist(new ItemKey("item.a"));
-        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 352, 142,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(), partition);
         var lines = CellLore.Lines(new CellLoreInput
         {
@@ -143,6 +143,8 @@ public sealed class CellRecordTests
             "cell_storage_migration_refused"
         }));
         Assert.That(lines[0].Arguments, Is.EqualTo(new object[] { 0L, 1024L }));
+        Assert.That(lines[1].Arguments, Is.EqualTo(new object[] { 0, 352 }));
+        Assert.That(lines[2].Arguments, Is.EqualTo(new object[] { 1, 142 }));
         Assert.That(lines[3].Arguments, Is.EqualTo(new object[] { 1, 2 }));
     }
 

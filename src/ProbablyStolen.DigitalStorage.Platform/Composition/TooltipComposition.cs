@@ -17,6 +17,7 @@ internal sealed class TooltipComposition : IDisposable
 {
     private readonly RegistryManager _registries = new();
     private readonly NativeNetworkScanner _scanner;
+    private readonly ModText _text;
     private readonly Action<string> _reportError;
     private readonly HashSet<Identifier> _reportedFailures = new();
     private NativeTooltipDispatcher? _dispatcher;
@@ -25,6 +26,7 @@ internal sealed class TooltipComposition : IDisposable
 #endif
     private GridNetworkTooltipPresenter? _networkPresenter;
     private IDisposable? _projection;
+    private IDisposable? _moduleProjection;
     private bool _subscribed;
     private bool _disposed;
 
@@ -32,6 +34,7 @@ internal sealed class TooltipComposition : IDisposable
         ModText text, BasicCellHandler cells, Func<GameItem, CellModuleUsage?> findWorkbenchUsage, Action<string> reportError)
     {
         _scanner = scanner;
+        _text = text;
         _reportError = reportError;
         var contributorsId = ContributorsId;
         var detailsId = DetailsId;
@@ -75,6 +78,7 @@ internal sealed class TooltipComposition : IDisposable
             TerminalTooltipPresenter.SetService(_service);
 #endif
             _projection = NetworkPowerTooltipBridge.Register(_scanner, _reportError);
+            _moduleProjection = TypeLimitModuleTooltipBridge.Register(_text, _reportError);
             _subscribed = true;
             ModHook.OnCreateTooltipLate += _dispatcher.OnCreateTooltipLate;
         }
@@ -105,6 +109,8 @@ internal sealed class TooltipComposition : IDisposable
 #endif
         _projection?.Dispose();
         _projection = null;
+        _moduleProjection?.Dispose();
+        _moduleProjection = null;
         _registries.Dispose();
     }
 

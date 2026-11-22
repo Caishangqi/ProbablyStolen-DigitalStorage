@@ -131,7 +131,7 @@ public static class CellUpgradeCallbacks
         if (cell.Tier == null || module.Kind != CellModuleKind.TypeLimit || !module.IsValid) return ModuleChangeCheck.Allowed;
 
         var after = new UpgradeInventory(cell.Modules.Modules).Without(index);
-        var limit = CellTypeLimit.Effective(cell.Tier, after);
+        var limit = CellTypeLimit.Calculate(cell.Tier, after).StorageTypeLimit;
         if (cell.StoredTypes > limit)
             return ModuleChangeCheck.Fail(ModuleChangeFailure.TypesExceedLimit, cell.StoredTypes - limit);
 

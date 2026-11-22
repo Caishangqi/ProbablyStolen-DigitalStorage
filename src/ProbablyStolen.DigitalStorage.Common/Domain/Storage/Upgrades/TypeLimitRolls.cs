@@ -16,8 +16,11 @@ public sealed class TypeLimitRoll
     /// <summary>Gets the quality grade.</summary>
     public ModuleQuality Quality { get; }
 
-    /// <summary>Gets the flat type limit bonus.</summary>
+    /// <summary>Gets the raw flat bonus used for rolls, valuation, and legacy rules.</summary>
     public int Add { get; }
+
+    /// <summary>Gets the flat bonus applied to storage capacity.</summary>
+    public long EffectiveAdd => 10L * Add;
 
     /// <summary>Gets the percentage type limit bonus, in whole percent.</summary>
     public int Percent { get; }

@@ -5,6 +5,7 @@ using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
 
@@ -17,9 +18,10 @@ public sealed class CellStorePlannerTests
     private static readonly StorageCellTier Tier1K = StorageCellTier.All[0];
 
     private static CellView Cell(
-        IEnumerable<PageView>? pages = null, CellUsage? usage = null, int typeLimit = 128, CellRules? rules = null,
-        CellPartition? partition = null, CellWriteState state = CellWriteState.Writable, bool equal = false) =>
-        new(rules ?? CellRules.For(Tier1K), typeLimit,
+        IEnumerable<PageView>? pages = null, CellUsage? usage = null, int? typeLimit = null, CellRules? rules = null,
+        CellPartition? partition = null, CellWriteState state = CellWriteState.Writable, bool equal = false,
+        int ruleLimit = CellTypeLimit.BasePartitionRuleLimit) =>
+        new(rules ?? CellRules.For(Tier1K), typeLimit ?? (rules?.Tier ?? Tier1K).GetTotalTypes(), ruleLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }.Concat(pages ?? Array.Empty<PageView>()),
             usage ?? new CellUsage(), partition ?? CellPartition.Unfiltered, writeState: state,
             upgrades: equal ? Partitions.EqualDistribution : null);
@@ -110,11 +112,11 @@ public sealed class CellStorePlannerTests
     [Test]
     public void Capacity_BillsTypesAndRoundedAreaUnits()
     {
-        // 1k: 1024 bytes, 4 per type. One type leaves 1020 bytes = 8160 area units.
-        Assert.That(Plan(Cell(), OneByOne, units: 8160).IsAccepted, Is.True);
-        Assert.That(Plan(Cell(), OneByOne, units: 8161).Rejection, Is.EqualTo(StoreRejection.Capacity));
+        // 1k: 1024 bytes, 2 per type. One type leaves 1022 bytes = 8176 area units.
+        Assert.That(Plan(Cell(), OneByOne, units: 8176).IsAccepted, Is.True);
+        Assert.That(Plan(Cell(), OneByOne, units: 8177).Rejection, Is.EqualTo(StoreRejection.Capacity));
 
-        var usage = UsageOf((Apple, 8159, OneByOne));
+        var usage = UsageOf((Apple, 8175, OneByOne));
         var cell = Cell(new[] { Strip(OneByOne, 0) }, usage);
         Assert.That(Plan(cell, OneByOne).IsAccepted, Is.True);
         Assert.That(Plan(cell, OneByOne, new ItemKey("item.pear")).Rejection, Is.EqualTo(StoreRejection.Capacity));
@@ -124,7 +126,7 @@ public sealed class CellStorePlannerTests
     public void DistributionQuota_LimitsEachTypeToItsShare()
     {
         var two = new[] { Apple, new ItemKey("item.pear") };
-        // The share follows the type limit, never the rule count: (1024 - 512) * 8 / 128 = 32 area units per type.
+        // The share follows the retained rule limit, regardless of the active rule count: (1024 - 512) * 8 / 128 = 32 area units per type.
         var cell = Cell(partition: Partitions.Whitelist(two), equal: true);
 
         Assert.That(cell.EqualShareQuota(), Is.EqualTo(32));
@@ -137,7 +139,7 @@ public sealed class CellStorePlannerTests
     [Test]
     public void Rejections_FollowTheDesignOrder()
     {
-        var usage = UsageOf((new ItemKey("item.other"), 8160, OneByOne));
+        var usage = UsageOf((new ItemKey("item.other"), 8176, OneByOne));
         var full = Strip(OneByOne, Enumerable.Range(0, 16).ToArray());
 
         Assert.That(Plan(Cell(state: CellWriteState.ExtractOnly), new BoundingSize(13, 13)).Rejection,
@@ -183,31 +185,37 @@ public sealed class CellStorePlannerTests
     [Test]
     public void UsedBytes_RoundsAreaOnceForTheWholeCell()
     {
-        Assert.That(CellView.UsedBytes(0, 0, 512, 128), Is.Zero);
-        Assert.That(CellView.UsedBytes(2, 1, 512, 128), Is.EqualTo(9));
-        Assert.That(CellView.UsedBytes(2, 16, 512, 128), Is.EqualTo(10));
-        Assert.That(CellView.UsedBytes(2, 17, 512, 128), Is.EqualTo(11));
+        Assert.That(CellView.UsedBytes(0, 0, 512, 256), Is.Zero);
+        Assert.That(CellView.UsedBytes(2, 1, 512, 256), Is.EqualTo(5));
+        Assert.That(CellView.UsedBytes(2, 16, 512, 256), Is.EqualTo(6));
+        Assert.That(CellView.UsedBytes(2, 17, 512, 256), Is.EqualTo(7));
         Assert.Throws<OverflowException>(new Action(() => CellView.UsedBytes(int.MaxValue, 0, long.MaxValue, 1)));
     }
 
     [Test]
     public void EqualShareQuota_RoundsUpPerShareOfTheFreeBytes()
     {
+        var modules = new UpgradeInventory(new[]
+        {
+            InstalledModule.TypeLimit(new TypeLimitRoll(ModuleQuality.Common, 8, 5)), InstalledModule.EqualDistribution()
+        });
+        var limits = CellTypeLimit.Calculate(Tier1K, modules);
         var keys = Enumerable.Range(0, 128).Select(i => new ItemKey($"item.t{i}")).ToArray();
-        // The type budget (512) is paid for the whole limit (192), and the rest is shared over the limit:
-        // (1024 - 512) * 8 / 192 = 21.3, rounded up to 22, however many rules list types.
-        Assert.That(Cell(typeLimit: 192, partition: Partitions.Whitelist(keys), equal: true).EqualShareQuota(), Is.EqualTo(22));
-        Assert.That(Cell(typeLimit: 192, rules: new CellRules(Tier1K, 64), equal: true).EqualShareQuota(), Is.EqualTo(22));
+        var cell = Cell(typeLimit: limits.StorageTypeLimit, ruleLimit: limits.PartitionRuleLimit, equal: true,
+            partition: Partitions.Whitelist(keys));
+        Assert.That(cell.EqualShareQuota(), Is.EqualTo(29));
+        Assert.That(Plan(cell, OneByOne, keys[0], 29).IsAccepted, Is.True);
+        Assert.That(Plan(cell, OneByOne, keys[0], 30).Rejection, Is.EqualTo(StoreRejection.DistributionQuota));
     }
 
     [Test]
-    public void UsedBytes_AtTheBaseLimitMatchesTheFormerPerTypeCost()
+    public void UsedBytes_AtTheBaseLimitMatchesThePerTypeCost()
     {
         foreach (var tier in StorageCellTier.All)
         {
-            for (var types = 0; types <= 128; types += 7)
+            for (var types = 0; types <= tier.GetTotalTypes(); types += 127)
             {
-                Assert.That(CellView.UsedBytes(types, 13, tier.GetTypeBudget(), 128),
+                Assert.That(CellView.UsedBytes(types, 13, tier.GetTypeBudget(), tier.GetTotalTypes()),
                     Is.EqualTo(types * tier.GetBytesPerType() + 2), tier.Name);
             }
         }
@@ -225,17 +233,20 @@ public sealed class CellStorePlannerTests
         Assert.Throws<ArgumentOutOfRangeException>(new Action(() => CellView.TypeBytes(1, 512, 0)));
     }
 
-    [Test]
-    public void Planner_AcceptsMoreTypesBecauseEachCostsLess()
+    [TestCase(128, null)]
+    [TestCase(255, null)]
+    [TestCase(256, StoreRejection.TypeLimit)]
+    public void Planner_UsesTheActualBaseLimitForNewTypes(int stored, StoreRejection? rejection)
     {
-        // Limit 256 on 1k: each type costs 2 bytes. 255 types using one unit each cost 510 + 32 bytes; the 256th still fits,
-        // where the former fixed 4 bytes per type would already need 1020 + 32 > 1024.
-        var roots = Enumerable.Range(0, 255).Select(i => (new ItemKey($"item.many{i}"), 1L, OneByOne)).ToArray();
-        var cell = Cell(usage: UsageOf(roots), typeLimit: 256);
+        var roots = Enumerable.Range(0, stored).Select(i => (new ItemKey($"item.many{i}"), 1L, OneByOne)).ToArray();
+        Assert.That(Plan(Cell(usage: UsageOf(roots)), OneByOne, new ItemKey("item.new")).Rejection, Is.EqualTo(rejection));
+    }
 
-        Assert.That(cell.UsedBytes(), Is.EqualTo(510 + 32));
-        Assert.That(Plan(cell, OneByOne, new ItemKey("item.new")).Rejection, Is.Null);
-        Assert.That(Plan(Cell(usage: UsageOf(roots.Concat(new[] { (new ItemKey("item.last"), 1L, OneByOne) }).ToArray()),
-            typeLimit: 256), OneByOne, new ItemKey("item.new")).Rejection, Is.EqualTo(StoreRejection.TypeLimit));
+    [TestCase(4095, null)]
+    [TestCase(4096, StoreRejection.Capacity)]
+    public void Planner_RejectsThe256thTypeIfAreaNeedsOneExtraByte(int area, StoreRejection? rejection)
+    {
+        var roots = Enumerable.Range(0, 255).Select(i => (new ItemKey($"item.many{i}"), i == 0 ? area - 254L : 1L, OneByOne));
+        Assert.That(Plan(Cell(usage: UsageOf(roots.ToArray())), OneByOne, new ItemKey("item.new")).Rejection, Is.EqualTo(rejection));
     }
 }

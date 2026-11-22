@@ -146,7 +146,7 @@ public sealed class StripMeasurementTests
     private static double RunStrip16(List<(int W, int H, string Id)> roots, int expectedPages)
     {
         var pages = new MemoryPages();
-        var view = new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit,
+        var view = new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit, CellTypeLimit.BasePartitionRuleLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(), CellPartition.Unfiltered);
         var inventory = new BasicCellInventory(view, pages);
         var source = new MemorySource(roots);
@@ -160,12 +160,12 @@ public sealed class StripMeasurementTests
 
     private static string TypeLimit()
     {
-        var roots = Mixed(129, 129, seed: 4, distinctTypes: true);
-        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+        var roots = Enumerable.Range(0, 257).Select(index => (1, 1, $"item.limit_{index}"));
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(), CellPartition.Unfiltered);
         var result = new BasicCellInventory(view, new MemoryPages()).Insert(new MemorySource(roots), Actionable.Modulate, Source);
-        return $"4 type limit (1k, limit 128): stored {view.TypeCount} types, stopped by {result.StoppedBy}, " +
-            $"used {view.UsedBytes()}/1024 bytes, type cost {view.TypeCount * 4} bytes";
+        return $"4 type limit (1k, limit 256): stored {view.TypeCount} types, stopped by {result.StoppedBy}, " +
+            $"used {view.UsedBytes()}/1024 bytes, type cost {view.TypeCount * 2} bytes";
     }
 
     /// <summary>
@@ -183,7 +183,7 @@ public sealed class StripMeasurementTests
         var catalog = Mixed(30, 30, seed: 6, distinctTypes: true);
         for (var round = 0; round < 21; round++)
         {
-            var view = new CellView(rules, MeasuredTypeLimit, pages, usage, CellPartition.Unfiltered);
+            var view = new CellView(rules, MeasuredTypeLimit, CellTypeLimit.BasePartitionRuleLimit, pages, usage, CellPartition.Unfiltered);
             foreach (var _ in Enumerable.Range(0, round == 0 ? 1000 : 300))
             {
                 var type = catalog[random.Next(catalog.Count)];
@@ -236,7 +236,7 @@ public sealed class StripMeasurementTests
 
         var usage = new CellUsage();
         foreach (var root in roots) usage.Add(root.Key, root.Units, CellUsage.AreaOf(root.Size, root.Units));
-        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
             Enumerable.Range(0, 16).Select(page => PageView.Unslotted(page == 0 ? PageGeometry.Anchor : PageGeometry.Legacy,
                 roots.Count(root => root.Page == page))), usage, CellPartition.Unfiltered);
         var clock = Stopwatch.StartNew();
@@ -316,7 +316,7 @@ public sealed class StripMeasurementTests
         {
             var usage = new CellUsage();
             foreach (var root in _legacy) usage.Add(root.Key, root.Units, CellUsage.AreaOf(root.Size, root.Units));
-            return new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit,
+            return new CellView(new CellRules(StorageCellTier.All[4], LayoutDescriptor.MaxPages), MeasuredTypeLimit, CellTypeLimit.BasePartitionRuleLimit,
                 _pages.Select((page, index) => PageView.Unslotted(page, _legacy.Count(root => root.Page == index))),
                 usage, CellPartition.Unfiltered);
         }

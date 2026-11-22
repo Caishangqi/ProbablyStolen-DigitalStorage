@@ -40,7 +40,11 @@ namespace ProbablyStolen.DigitalStorage.Platform.Localization
 {
     internal sealed class ModText
     {
-        internal string Get(string key, params object[] args) => key is "network_tooltip_device_power" or
+        internal Func<string, string?>? Translation;
+        internal string Get(string key, params object[] args) => Translation?.Invoke(key) ?? Default(key, args);
+
+        private static string Default(string key, object[] args) => key == "workbench_info_count"
+            ? $"{args[0]}/{args[1]}" : key is "network_tooltip_device_power" or
             "network_tooltip_total_power" or "module_refusal_typesexceedlimit" or "module_refusal_bytesexceedcapacity"
             ? $"{key}:{args[0]}" : key;
     }

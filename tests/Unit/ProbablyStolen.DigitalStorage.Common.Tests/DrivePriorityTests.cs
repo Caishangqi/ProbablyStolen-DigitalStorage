@@ -50,7 +50,7 @@ public sealed class DrivePriorityTests
     {
         var rules = CellRules.For(StorageCellTier.All[0]);
         var pages = new[] { PageView.Unslotted(PageGeometry.Anchor, 0) };
-        Assert.That(new CellView(rules, 128, pages, new CellUsage(), CellPartition.Unfiltered).Priority, Is.EqualTo(0));
-        Assert.That(new CellView(rules, 128, pages, new CellUsage(), CellPartition.Unfiltered, 4000).Priority, Is.EqualTo(999));
+        Assert.That(new CellView(rules, rules.Tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, pages, new CellUsage(), CellPartition.Unfiltered).Priority, Is.EqualTo(0));
+        Assert.That(new CellView(rules, rules.Tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, pages, new CellUsage(), CellPartition.Unfiltered, 4000).Priority, Is.EqualTo(999));
     }
 }

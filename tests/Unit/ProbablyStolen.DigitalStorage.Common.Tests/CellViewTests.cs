@@ -14,7 +14,7 @@ public sealed class CellViewTests
     private static readonly BoundingSize TwoByTwo = new(2, 2);
 
     private static CellView Empty(params PageView[] extra) => new(
-        CellRules.For(StorageCellTier.All[0]), 128,
+        CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
         new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }.Concat(extra), new CellUsage(), CellPartition.Unfiltered);
 
     [Test]
@@ -142,11 +142,11 @@ public sealed class CellViewTests
         var anchor = PageView.Unslotted(PageGeometry.Anchor, 0);
 
         Assert.Throws<ArgumentException>(new Action(() =>
-            _ = new CellView(rules, 128, new[] { legacy }, new CellUsage(), CellPartition.Unfiltered)));
+            _ = new CellView(rules, rules.Tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, new[] { legacy }, new CellUsage(), CellPartition.Unfiltered)));
         Assert.Throws<ArgumentException>(new Action(() =>
-            _ = new CellView(rules, 128, new[] { anchor, anchor }, new CellUsage(), CellPartition.Unfiltered)));
+            _ = new CellView(rules, rules.Tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, new[] { anchor, anchor }, new CellUsage(), CellPartition.Unfiltered)));
         Assert.Throws<ArgumentException>(new Action(() =>
-            _ = new CellView(rules, 0, new[] { anchor }, new CellUsage(), CellPartition.Unfiltered)));
+            _ = new CellView(rules, 0, CellTypeLimit.BasePartitionRuleLimit, new[] { anchor }, new CellUsage(), CellPartition.Unfiltered)));
     }
 
     [Test]
@@ -196,10 +196,11 @@ public sealed class CellViewTests
         var usage = new CellUsage();
         usage.Add(Apple, 1, CellUsage.AreaOf(TwoByTwo, 1));
         usage.Add(Pear, 1, CellUsage.AreaOf(TwoByTwo, 1));
-        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0), page }, usage, CellPartition.Unfiltered);
 
         var copy = view.Clone();
+        Assert.That((copy.StorageTypeLimit, copy.PartitionRuleLimit), Is.EqualTo((256, 128)));
         copy.RecordRemoved(1, 1, Apple, 1, TwoByTwo);
         copy.RecordStored(1, 0, Pear, 1, TwoByTwo);
 
@@ -212,7 +213,7 @@ public sealed class CellViewTests
     [Test]
     public void RecordRelocated_TakesTheGivenTypeForARootFromAnUnslottedPage()
     {
-        var view = new CellView(CellRules.For(StorageCellTier.All[0]), 128,
+        var view = new CellView(CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit,
             new[] { PageView.Unslotted(PageGeometry.Anchor, 0), PageView.Unslotted(PageGeometry.Legacy, 1),
                 PageView.Strip(PageGeometry.Strip(TwoByTwo, 4), Array.Empty<int>()) }, new CellUsage(),
             CellPartition.Unfiltered);

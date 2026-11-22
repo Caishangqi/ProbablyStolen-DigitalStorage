@@ -18,7 +18,7 @@ internal sealed class ItemContentService : IDisposable
     private readonly ItemContentCoordinator<GameItem> _coordinator;
     private readonly Action<string> _log;
     private readonly StorageDiagnostics _diagnostics;
-    private Func<GameItem, bool>? _presentModule;
+    private Action<GameItem>? _presentModule;
     private ItemContentFeatureSnapshot? _nativeStuckTemplate;
     private IReadOnlyCollection<string> _nativeStuckConditionDisplays = Array.Empty<string>();
     private IReadOnlyCollection<string> _nativeStuckFeatureDisplays = Array.Empty<string>();
@@ -39,7 +39,7 @@ internal sealed class ItemContentService : IDisposable
                 "Digital Storage: item content failed.", error, () => NativeStorageDiagnosticContext.Item(item)));
     }
 
-    internal void SetModulePresenter(Func<GameItem, bool> presenter) => _presentModule = presenter;
+    internal void SetModulePresenter(Action<GameItem> presenter) => _presentModule = presenter;
 
     internal void BeginLoad()
     {
@@ -129,7 +129,7 @@ internal sealed class ItemContentService : IDisposable
             CellContentWindow.RefreshTitle(item);
         if (result != ItemContentResult.Skipped && item.identifier == CellUpgradeInventory.TypeLimitId && _presentModule != null)
         {
-            try { if (_presentModule(item)) repaired = true; }
+            try { _presentModule(item); }
             catch (Exception error)
             {
                 _diagnostics.Failure(item, "module_presentation_failed",

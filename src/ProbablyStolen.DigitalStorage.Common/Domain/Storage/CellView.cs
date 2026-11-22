@@ -150,15 +150,17 @@ public sealed class CellView
     private readonly Dictionary<BoundingSize, List<int>> _chains = new();
 
     /// <summary>Creates a cell projection.</summary>
-    /// <exception cref="ArgumentException">The pages do not start with the anchor or the type limit is not positive.</exception>
-    public CellView(CellRules rules, int typeLimit, IEnumerable<PageView> pages, CellUsage usage,
+    /// <exception cref="ArgumentException">The pages do not start with the anchor or either limit is not positive.</exception>
+    public CellView(CellRules rules, int storageTypeLimit, int partitionRuleLimit, IEnumerable<PageView> pages, CellUsage usage,
         CellPartition partition, int priority = DrivePriority.Default, CellWriteState writeState = CellWriteState.Writable,
         IUpgradeInventory? upgrades = null)
     {
         Upgrades = upgrades ?? UpgradeInventory.Empty;
         Rules = rules ?? throw new ArgumentNullException(nameof(rules));
-        if (typeLimit < 1) throw new ArgumentException("A type limit is positive.", nameof(typeLimit));
-        TypeLimit = typeLimit;
+        if (storageTypeLimit < 1) throw new ArgumentException("A type limit is positive.", nameof(storageTypeLimit));
+        if (partitionRuleLimit < 1) throw new ArgumentException("A rule limit is positive.", nameof(partitionRuleLimit));
+        StorageTypeLimit = storageTypeLimit;
+        PartitionRuleLimit = partitionRuleLimit;
         _pages = (pages ?? throw new ArgumentNullException(nameof(pages))).ToList();
         if (_pages.Count == 0 || _pages.Any(page => page == null) || _pages[0].Kind != PageKind.Anchor ||
             _pages.Skip(1).Any(page => page.Kind == PageKind.Anchor))
@@ -173,8 +175,11 @@ public sealed class CellView
     /// <summary>Gets the tier page rules.</summary>
     public CellRules Rules { get; }
 
-    /// <summary>Gets the effective type limit.</summary>
-    public int TypeLimit { get; }
+    /// <summary>Gets the effective limit on stored item types.</summary>
+    public int StorageTypeLimit { get; }
+
+    /// <summary>Gets the retained limit for partition rules and equal distribution shares.</summary>
+    public int PartitionRuleLimit { get; }
 
     /// <summary>Gets the pages in native page order.</summary>
     public IReadOnlyList<PageView> Pages => _pages;
@@ -215,8 +220,7 @@ public sealed class CellView
     }
 
     /// <summary>
-    /// Gets used bytes: <c>ceil(types * typeBudget / typeLimit) + ceil(areaUnits / 8)</c>. At the base limit of 128 this equals
-    /// the former <c>types * bytesPerType + ceil(areaUnits / 8)</c> exactly.
+    /// Gets used bytes: <c>ceil(types * typeBudget / typeLimit) + ceil(areaUnits / 8)</c>.
     /// </summary>
     public static long UsedBytes(int types, long areaUnits, long typeBudget, int typeLimit)
     {
@@ -225,24 +229,21 @@ public sealed class CellView
     }
 
     /// <summary>Gets the bytes this cell uses now.</summary>
-    public long UsedBytes() => UsedBytes(TypeCount, Usage.AreaUnits, Rules.Tier.GetTypeBudget(), TypeLimit);
+    public long UsedBytes() => UsedBytes(TypeCount, Usage.AreaUnits, Rules.Tier.GetTypeBudget(), StorageTypeLimit);
 
     /// <summary>
-    /// Gets the area units one type may hold under equal distribution: the bytes left once the limit's worth of types
-    /// is paid for, shared over the effective type limit, <c>ceil((totalBytes - typeBudget) * 8 / limit)</c>, at least 0.
-    /// The share follows the type limit, not the rule count, so one rule matching many types does not widen it.
+    /// Gets the area units one type may hold under equal distribution. The retained partition rule limit sets the
+    /// number of shares, regardless of how many rules are filled or how many types they match.
     /// </summary>
     public long EqualShareQuota()
     {
-        long shares = TypeLimit;
-        var free = checked(Rules.Tier.GetBytes() - TypeBytes(shares, Rules.Tier.GetTypeBudget(), TypeLimit));
-        if (free <= 0) return 0;
-        var area = checked(free * AreaUnitsPerByte);
-        return (area + shares - 1) / shares;
+        long shares = PartitionRuleLimit;
+        var free = checked(Rules.Tier.GetBytes() - Rules.Tier.GetTypeBudget());
+        return checked((free * AreaUnitsPerByte + shares - 1) / shares);
     }
 
     /// <summary>Gets an independent copy for simulation; changes to the copy never reach this view.</summary>
-    public CellView Clone() => new(Rules, TypeLimit, _pages.Select(page => page.Clone()), Usage.Clone(), Partition,
+    public CellView Clone() => new(Rules, StorageTypeLimit, PartitionRuleLimit, _pages.Select(page => page.Clone()), Usage.Clone(), Partition,
         Priority, WriteState, Upgrades);
 
     /// <summary>Gets the strip slot a root occupies, or -1 for anchor and legacy pages.</summary>

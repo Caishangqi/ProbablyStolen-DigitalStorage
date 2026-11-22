@@ -57,7 +57,7 @@ public sealed class BasicCellInventory : IStorageCell
     public long GetStoredItemTypes() => _view.TypeCount;
 
     /// <summary>Gets the effective type limit.</summary>
-    public long GetTotalItemTypes() => _view.TypeLimit;
+    public long GetTotalItemTypes() => _view.StorageTypeLimit;
 
     /// <summary>Gets how many more types fit, bounded by both the type limit and the free bytes; never negative.</summary>
     public long GetRemainingItemTypes()
@@ -65,7 +65,7 @@ public sealed class BasicCellInventory : IStorageCell
         // The largest type count t whose ceil(t * budget / limit) still fits beside the stored area.
         var areaBytes = (GetStoredItemCount() + CellView.AreaUnitsPerByte - 1) / CellView.AreaUnitsPerByte;
         var forTypes = Math.Max(0, checked(GetTotalBytes() - areaBytes));
-        var byBytes = checked(forTypes * _view.TypeLimit) / Tier.GetTypeBudget() - GetStoredItemTypes();
+        var byBytes = checked(forTypes * _view.StorageTypeLimit) / Tier.GetTypeBudget() - GetStoredItemTypes();
         return Math.Max(0, Math.Min(byBytes, GetTotalItemTypes() - GetStoredItemTypes()));
     }
 
@@ -73,7 +73,7 @@ public sealed class BasicCellInventory : IStorageCell
     public bool CanHoldNewItem()
     {
         var usedAfter = CellView.UsedBytes(checked(_view.TypeCount + 1), checked(GetStoredItemCount() + 1),
-            Tier.GetTypeBudget(), _view.TypeLimit);
+            Tier.GetTypeBudget(), _view.StorageTypeLimit);
         return usedAfter <= GetTotalBytes() && GetRemainingItemTypes() > 0;
     }
 

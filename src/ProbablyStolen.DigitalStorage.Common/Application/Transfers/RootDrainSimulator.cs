@@ -60,7 +60,7 @@ public sealed class DrainForecast
     /// Gets whether the cell is over its byte capacity or type limit. This never blocks migration: relocating does
     /// not change usage, and the cell keeps refusing new items until it is under its limits again.
     /// </summary>
-    public bool OverCapacity => After.UsedBytes() > After.Rules.Tier.GetBytes() || After.TypeCount > After.TypeLimit;
+    public bool OverCapacity => After.UsedBytes() > After.Rules.Tier.GetBytes() || After.TypeCount > After.StorageTypeLimit;
 }
 
 /// <summary>

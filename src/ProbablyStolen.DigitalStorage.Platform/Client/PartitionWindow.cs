@@ -100,7 +100,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         }
         _session = new PartitionSession(cell);
         _opened = new CellPartitionTags(cell).Capture().Interpret();
-        _draft = new PartitionDraft(_opened.Config, CellTypeLimitSource.EffectiveOrBase(cell), Columns,
+        _draft = new PartitionDraft(_opened.Config, CellTypeLimitSource.ReadOrBase(cell).PartitionRuleLimit, Columns,
             () => Guid.NewGuid().ToString("N"));
         _pictures = new ItemPictureCapture(new PictureSourceChain<GameItem>(
             key => _dropped.TryGetValue(key, out var item) ? item : null, FindInCell), log, "partition");
@@ -704,7 +704,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     {
         if (!_session.IsActive || !ReferenceEquals(cell, _cell)) return;
         int limit;
-        try { limit = CellTypeLimitSource.EffectiveOrBase(_cell); }
+        try { limit = CellTypeLimitSource.ReadOrBase(_cell).PartitionRuleLimit; }
         catch (ArgumentException) { return; }
         if (limit == _draft.RuleLimit || limit < 1) return;
         _draft.SetRuleLimit(limit);

@@ -84,9 +84,9 @@ internal sealed class MemoryCellPages : ICellPagesPort
     internal IReadOnlyList<PageGeometry> Pages => _pages;
     internal IReadOnlyList<RootSnapshot> Roots => _roots;
 
-    internal static CellView EmptyView(StorageCellTier tier, int typeLimit = 128, CellPartition? partition = null,
+    internal static CellView EmptyView(StorageCellTier tier, int? typeLimit = null, CellPartition? partition = null,
         ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades.IUpgradeInventory? upgrades = null) =>
-        new(CellRules.For(tier), typeLimit, new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(),
+        new(CellRules.For(tier), typeLimit ?? tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, new[] { PageView.Unslotted(PageGeometry.Anchor, 0) }, new CellUsage(),
             partition ?? CellPartition.Unfiltered, upgrades: upgrades);
 
     internal void Remove(RootSnapshot root) =>

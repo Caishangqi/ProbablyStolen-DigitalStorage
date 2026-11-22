@@ -65,23 +65,23 @@ public sealed class CellUpgradeCallbacksTests
     [Test]
     public void Remove_TypeLimitModuleWhenTheTypesStillFit()
     {
-        // With the module the limit is (128 + 8) * 1.05 = 142; without it 128.
+        // With the module the storage limit is 352; without it 256.
         var modules = UpgradeInventory.Empty.With(Common8);
-        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 128), 0).IsAllowed, Is.True);
+        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 256), 0).IsAllowed, Is.True);
 
-        var check = CellUpgradeCallbacks.CanRemove(State(modules, types: 142), 0);
-        Assert.That((check.Failure, check.Shortfall), Is.EqualTo((ModuleChangeFailure.TypesExceedLimit, 14L)));
+        var check = CellUpgradeCallbacks.CanRemove(State(modules, types: 257), 0);
+        Assert.That((check.Failure, check.Shortfall), Is.EqualTo((ModuleChangeFailure.TypesExceedLimit, 1L)));
     }
 
     [Test]
     public void Remove_TypeLimitModuleWhenTheSmallerLimitRaisesTheTypeCostPastCapacity()
     {
-        // 128 types cost ceil(128 * 512 / 142) = 462 bytes now, but 512 once the limit falls to 128. With 4097 area units
-        // (513 bytes) the cell uses 975 bytes now and would need 1025 > 1024.
+        // 256 types cost ceil(256 * 512 / 352) = 373 bytes now, but 512 once the limit falls to 256. With 4097 area units
+        // (513 bytes) the cell uses 886 bytes now and would need 1025 > 1024.
         var modules = UpgradeInventory.Empty.With(Common8);
-        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 128, area: 4096), 0).IsAllowed, Is.True);
+        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 256, area: 4096), 0).IsAllowed, Is.True);
 
-        var check = CellUpgradeCallbacks.CanRemove(State(modules, types: 128, area: 4097), 0);
+        var check = CellUpgradeCallbacks.CanRemove(State(modules, types: 256, area: 4097), 0);
         Assert.That((check.Failure, check.Shortfall), Is.EqualTo((ModuleChangeFailure.BytesExceedCapacity, 1L)));
     }
 
@@ -89,6 +89,6 @@ public sealed class CellUpgradeCallbacksTests
     public void Remove_InvalidTypeLimitModuleIsAlwaysAllowedBecauseItAddsNothing()
     {
         var modules = UpgradeInventory.Empty.With(InstalledModule.TypeLimit(null));
-        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 128, area: 4096), 0).IsAllowed, Is.True);
+        Assert.That(CellUpgradeCallbacks.CanRemove(State(modules, types: 256, area: 4096), 0).IsAllowed, Is.True);
     }
 }

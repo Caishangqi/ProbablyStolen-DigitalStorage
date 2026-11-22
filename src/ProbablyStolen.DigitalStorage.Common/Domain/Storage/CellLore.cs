@@ -55,12 +55,12 @@ public static class CellLore
         if (input.View is { } view)
         {
             lines.Add(new LoreLine("cell_storage_bytes", view.UsedBytes(), view.Rules.Tier.GetBytes()));
-            lines.Add(new LoreLine("cell_storage_types", view.TypeCount, view.TypeLimit));
+            lines.Add(new LoreLine("cell_storage_types", view.TypeCount, view.StorageTypeLimit));
             var partition = view.Partition;
             if (!partition.IsValid)
                 lines.Add(new LoreLine("cell_storage_partition_invalid"));
             else if (partition.RuleCount > 0)
-                lines.Add(new LoreLine(PartitionKey(partition), partition.RuleCount, view.TypeLimit));
+                lines.Add(new LoreLine(PartitionKey(partition), partition.RuleCount, view.PartitionRuleLimit));
             var typeModules = view.Upgrades.GetInstalledUpgrades(CellModuleKind.TypeLimit);
             if (typeModules > 0) lines.Add(new LoreLine("cell_storage_type_modules", typeModules));
             if (view.EqualDistribution) lines.Add(new LoreLine("cell_storage_equal_distribution"));

@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using UnityEngine;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -53,36 +50,8 @@ internal sealed class CellWorkbenchItem
 
     internal CellModuleUsage? FindUsage(GameItem cell) => _usage.Find(cell);
 
-    // Native slot and module callbacks must survive an unreadable cell; keep its name or notice visible.
-    private string Summary(GameItem? cell, string? notice)
-    {
-        if (cell == null) return notice ?? _text.Get("workbench_status_empty");
-        var first = notice ?? cell.GetDisplayName(preferCustomName: true);
-        try
-        {
-            var config = new CellPartitionTags(cell).Capture().Interpret().Config;
-            var limit = CellTypeLimitSource.EffectiveOrBase(cell);
-            var mode = _text.Get(config.Mode == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist");
-            var storedTypes = FindUsage(cell) is { Status: CellModuleUsage.ReadStatus.Ready } usage
-                ? usage.StoredTypes.ToString()
-                : "?";
-            return string.Join("\n", new List<string>
-            {
-                first,
-                Line("workbench_info_mode", mode),
-                Line("workbench_info_rules", _text.Get("workbench_info_count", config.Rules.Count, limit)),
-                Line("workbench_info_types", _text.Get("workbench_info_count", storedTypes, limit))
-            });
-        }
-        catch (Exception error)
-        {
-            ReportSummaryFailure("summarize its cell", error);
-            return first;
-        }
-    }
-
-    private string Line(string labelKey, string value) =>
-        _text.Get(labelKey) + ": <color=#" + ColorUtility.ToHtmlStringRGB(MachineryStyle.VALUE_TEXT) + ">" + value + "</color>";
+    private string Summary(GameItem? cell, string? notice) =>
+        WorkbenchCellSummary.Render(cell, notice, _text, FindUsage, error => ReportSummaryFailure("summarize its cell", error));
 
     private void ReportSummaryFailure(string operation, Exception error)
     {

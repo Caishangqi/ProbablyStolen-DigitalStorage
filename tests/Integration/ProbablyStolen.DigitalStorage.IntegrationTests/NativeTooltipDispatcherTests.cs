@@ -136,6 +136,7 @@ public sealed class NativeTooltipDispatcherTests
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
         ModHook.RaiseTooltip(new RichTextBuilder(), new GameItem(ControllerItem.ItemId));
         Assert.That(NetworkPowerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
+        Assert.That(TypeLimitModuleTooltipBridge.Begin(new GameItem(CellUpgradeInventory.TypeLimitId)), Is.Null);
         composition.Dispose();
     }
 
@@ -237,6 +238,7 @@ public sealed class NativeTooltipDispatcherTests
         Assert.Throws<InvalidOperationException>((Action)composition.Enable);
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
         Assert.That(NetworkPowerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
+        Assert.That(TypeLimitModuleTooltipBridge.Begin(new GameItem(CellUpgradeInventory.TypeLimitId)), Is.Null);
         Assert.Throws<ObjectDisposedException>((Action)composition.Enable);
         composition.Dispose();
     }

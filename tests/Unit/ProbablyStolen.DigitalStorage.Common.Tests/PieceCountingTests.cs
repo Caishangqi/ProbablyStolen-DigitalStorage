@@ -84,7 +84,7 @@ public sealed class PieceCountingTests
     private static BasicCellInventory NewCell()
     {
         var pages = new MemoryCellPages();
-        return new BasicCellInventory(MemoryCellPages.EmptyView(StorageCellTier.All[0], 128, null, null), pages);
+        return new BasicCellInventory(MemoryCellPages.EmptyView(StorageCellTier.All[0]), pages);
     }
 
     private static KeyCounter Pieces(IRootStorage storage)

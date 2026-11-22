@@ -21,12 +21,12 @@ public static class CellStorePlanner
         if (insert)
         {
             var isNewType = !cell.Contains(item.Key);
-            if (isNewType && cell.TypeCount >= cell.TypeLimit) return StorePlan.Reject(StoreRejection.TypeLimit);
+            if (isNewType && cell.TypeCount >= cell.StorageTypeLimit) return StorePlan.Reject(StoreRejection.TypeLimit);
 
             var area = CellUsage.AreaOf(item.Size, item.Units);
             var types = cell.TypeCount + (isNewType ? 1 : 0);
             var usedAfter = CellView.UsedBytes(types, checked(cell.Usage.AreaUnits + area), cell.Rules.Tier.GetTypeBudget(),
-                cell.TypeLimit);
+                cell.StorageTypeLimit);
             if (usedAfter > cell.Rules.Tier.GetBytes()) return StorePlan.Reject(StoreRejection.Capacity);
 
             if (cell.EqualDistribution &&

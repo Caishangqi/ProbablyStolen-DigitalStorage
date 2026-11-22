@@ -21,7 +21,7 @@ public sealed class BasicCellInventoryTests
     private static readonly IActionSource Player = new PlayerSource("tester");
 
     private static (BasicCellInventory Cell, MemoryCellPages Pages) NewCell(
-        StorageCellTier? tier = null, int typeLimit = 128, CellPartition? partition = null, bool equal = false)
+        StorageCellTier? tier = null, int? typeLimit = null, CellPartition? partition = null, bool equal = false)
     {
         var pages = new MemoryCellPages();
         var view = MemoryCellPages.EmptyView(tier ?? Tier1K, typeLimit, partition,
@@ -39,10 +39,19 @@ public sealed class BasicCellInventoryTests
 
         Assert.That(cell.GetStoredItemCount(), Is.EqualTo(13));
         Assert.That(cell.GetStoredItemTypes(), Is.EqualTo(2));
-        Assert.That(cell.GetUsedBytes(), Is.EqualTo(2 * 4 + 2));
-        Assert.That(cell.GetFreeBytes(), Is.EqualTo(1024 - 10));
-        Assert.That(cell.GetRemainingItemCount(), Is.EqualTo(1014 * 8 + 3));
-        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(126));
+        Assert.That(cell.GetUsedBytes(), Is.EqualTo(2 * 2 + 2));
+        Assert.That(cell.GetFreeBytes(), Is.EqualTo(1024 - 6));
+        Assert.That(cell.GetRemainingItemCount(), Is.EqualTo(1018 * 8 + 3));
+        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(254));
+    }
+
+    [Test]
+    public void Billing_TenTwoByTwoItemsOfOneTypeCostSevenBytes()
+    {
+        var (cell, _) = NewCell();
+        Assert.That(cell.Insert(new MemoryInventory().With(TwoByTwo, "item.a", 10), Actionable.Modulate, Player).InsertedUnits,
+            Is.EqualTo(10));
+        Assert.That(cell.GetUsedBytes(), Is.EqualTo(7));
     }
 
     [Test]
@@ -67,7 +76,7 @@ public sealed class BasicCellInventoryTests
         {
             var (cell, _) = NewCell(tier);
             Assert.That(cell.GetTotalBytes(), Is.EqualTo(1024L * tier.Multiplier));
-            Assert.That(tier.GetBytesPerType() * 128, Is.EqualTo(cell.GetTotalBytes() / 2), tier.Name);
+            Assert.That(tier.GetBytesPerType() * cell.GetTotalItemTypes(), Is.EqualTo(cell.GetTotalBytes() / 2), tier.Name);
             Assert.That(tier.GetTypeBudget(), Is.EqualTo(cell.GetTotalBytes() / 2), tier.Name);
         }
     }
@@ -75,15 +84,15 @@ public sealed class BasicCellInventoryTests
     [Test]
     public void RaisedLimit_SpreadsTheTypeCostAndKeepsHalfTheBytesForItems()
     {
-        var (cell, _) = NewCell(typeLimit: 256);
-        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(256));
+        var (cell, _) = NewCell(typeLimit: 600);
+        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(600));
         Assert.That(cell.CanHoldNewItem(), Is.True);
 
         cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 1), Actionable.Modulate, Player);
 
-        // ceil(512 / 256) = 2 type bytes plus 1 area byte.
-        Assert.That(cell.GetUsedBytes(), Is.EqualTo(3));
-        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(255));
+        // ceil(512 / 600) = 1 type bytes plus 1 area byte.
+        Assert.That(cell.GetUsedBytes(), Is.EqualTo(2));
+        Assert.That(cell.GetRemainingItemTypes(), Is.EqualTo(599));
     }
 
     [Test]
@@ -101,7 +110,7 @@ public sealed class BasicCellInventoryTests
         Assert.That(typesFull.GetStatus(), Is.EqualTo(CellState.TypesFull));
 
         var (full, _) = NewCell();
-        full.Insert(new MemoryInventory().With(OneByOne, "item.a", 8160), Actionable.Modulate, Player);
+        full.Insert(new MemoryInventory().With(OneByOne, "item.a", 8176), Actionable.Modulate, Player);
         Assert.That(full.GetFreeBytes(), Is.Zero);
         Assert.That(full.GetStatus(), Is.EqualTo(CellState.Full));
     }
@@ -305,6 +314,36 @@ public sealed class BasicCellInventoryTests
         }
     }
 
+    [TestCase(0, 32)]
+    [TestCase(1, 128)]
+    [TestCase(2, 512)]
+    [TestCase(3, 2048)]
+    [TestCase(4, 8192)]
+    public void EqualShareQuota_WithNoTypeModuleRetainsTheLegacyTierQuota(int tier, int area)
+    {
+        var (cell, _) = NewCell(StorageCellTier.All[tier], equal: true);
+        Assert.That(cell.GetEqualShareQuota(), Is.EqualTo(area));
+    }
+
+    [Test]
+    public void EqualShareQuota_ExistingOverQuotaRootCanLeaveButCannotGrow()
+    {
+        var (before, pages) = NewCell();
+        before.Insert(new MemoryInventory().With(OneByOne, "item.a", 33), Actionable.Modulate, Player);
+        var view = before.View;
+        var cell = new BasicCellInventory(new CellView(view.Rules, view.StorageTypeLimit, view.PartitionRuleLimit,
+            view.Pages, view.Usage, view.Partition, upgrades: Partitions.EqualDistribution), pages);
+
+        var source = new MemoryInventory().With(OneByOne, "item.a", 1);
+        var rejected = cell.Insert(source, Actionable.Modulate, Player);
+        Assert.That(rejected.StoppedBy.Rejection, Is.EqualTo(StoreRejection.DistributionQuota));
+        Assert.That(source.Units("item.a"), Is.EqualTo(1));
+        var bag = new MemoryInventory();
+        Assert.That(cell.Extract(new ItemKey("item.a"), 33, bag, Actionable.Modulate, Player).ExtractedUnits, Is.EqualTo(33));
+        Assert.That(bag.Units("item.a"), Is.EqualTo(33));
+        Assert.That(cell.GetUsedBytes(), Is.Zero);
+    }
+
     [Test]
     public void EqualShareQuota_AndPreference()
     {
@@ -312,7 +351,7 @@ public sealed class BasicCellInventoryTests
         var (cell, _) = NewCell(partition: Partitions.Whitelist(keys), equal: true);
         cell.Insert(new MemoryInventory().With(OneByOne, "item.a", 1), Actionable.Modulate, Player);
 
-        // The share follows the effective type limit, not the rule count: (1024 - 512) * 8 / 128 = 32.
+        // The share uses the retained rule limit: (1024 - 512) * 8 / 128 = 32.
         Assert.That(cell.GetEqualShareQuota(), Is.EqualTo(32));
         Assert.That(cell.IsPreferredStorageFor(keys[0], Player), Is.True);
         Assert.That(cell.IsPreferredStorageFor(keys[1], Player), Is.False);

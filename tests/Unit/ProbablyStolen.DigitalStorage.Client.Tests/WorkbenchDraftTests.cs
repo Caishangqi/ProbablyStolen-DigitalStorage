@@ -4,7 +4,9 @@ using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Workbench;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tests;
 
@@ -112,6 +114,24 @@ public sealed class WorkbenchDraftTests
         Assert.That((draft.CanAdd, draft.Rules.Count, draft.Capacity), Is.EqualTo((false, 2, 2)),
             "A lower limit keeps every rule and stops additions.");
         Assert.Throws<ArgumentOutOfRangeException>(new Action(() => draft.SetRuleLimit(0)));
+    }
+
+    [Test]
+    public void SetRuleLimit_RemovingARealRollRetainsRulesBeyondTheLegacyCap()
+    {
+        var tier = StorageCellTier.All[0];
+        var roll = InstalledModule.TypeLimit(new TypeLimitRoll(ModuleQuality.Common, 8, 5));
+        var upgraded = CellTypeLimit.Calculate(tier, UpgradeInventory.Empty.With(roll));
+        var baseline = new PartitionConfig(PartitionMode.Whitelist, Enumerable.Range(0, 142)
+            .Select(slot => PartitionRule.ForSample($"rule-{slot}", slot, new ItemKey($"item.type_{slot}"))));
+        var draft = Draft(upgraded.PartitionRuleLimit, baseline: baseline);
+        Assert.That((draft.RuleLimit, draft.CanAdd), Is.EqualTo((142, false)));
+
+        draft.SetRuleLimit(CellTypeLimit.Calculate(tier, UpgradeInventory.Empty).PartitionRuleLimit);
+
+        Assert.That((draft.RuleLimit, draft.Capacity, draft.CanAdd, draft.IsDirty), Is.EqualTo((128, 142, false, false)));
+        Assert.That(draft.Rules.Select(rule => rule.RuleId), Is.EqualTo(baseline.Rules.Select(rule => rule.RuleId)));
+        Assert.That(draft.At(141)!.IsDefaultFor("item.type_141"), Is.True);
     }
 
     [Test]

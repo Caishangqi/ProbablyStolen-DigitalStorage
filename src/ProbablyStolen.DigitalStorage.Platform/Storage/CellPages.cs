@@ -217,21 +217,6 @@ internal static partial class CellPages
         return view;
     }
 
-    /// <summary>Builds a cell view over page contents, reading the cell's current settings.</summary>
-    private static CellView ViewOf(GameItem cell, IReadOnlyList<PageView> pages, CellUsage usage, CellWriteState writeState)
-    {
-        if (pages.Any(page => page.IsProtected))
-        {
-            if (CellHealth.Get(cell).Status == CellHealthStatus.Available)
-                CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Protected));
-            writeState = CellWriteState.ExtractOnly;
-        }
-        var tier = StorageCellTier.FromCellId(cell.identifier) ?? throw new InvalidOperationException("Unknown storage cell tier.");
-        var typeLimit = CellTypeLimitSource.EffectiveOrBase(cell);
-        return new CellView(CellRules.For(tier), typeLimit, pages, usage, CellPartitionTags.Read(cell),
-            DrivePriorityTag.ReadForCell(cell), writeState, CellUpgradeInventory.Read(cell));
-    }
-
     // Reads every root on the pages, with its type; the slow part of a read.
     private static (IReadOnlyList<PageView> Pages, CellUsage Usage) ReadContent(GameItem cell, Func<GameItem, ItemKey?> identify)
     {

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
@@ -16,57 +17,65 @@ public sealed class CellTypeLimitTests
         InstalledModule.TypeLimit(new TypeLimitRoll(quality, add, percent));
 
     [Test]
-    public void Effective_DefaultsTo128()
+    public void Calculate_DefaultsToTierStorageAnd128Rules()
     {
-        Assert.That(CellTypeLimit.Effective(Tier, UpgradeInventory.Empty), Is.EqualTo(128));
-        Assert.That(CellTypeLimit.Effective(Tier, Modules(InstalledModule.EqualDistribution())), Is.EqualTo(128));
+        Assert.That(CellTypeLimit.Calculate(Tier, UpgradeInventory.Empty), Is.EqualTo((256, 128)));
+        Assert.That(CellTypeLimit.Calculate(Tier, Modules(InstalledModule.EqualDistribution())), Is.EqualTo((256, 128)));
     }
 
     [Test]
-    public void Effective_AddsFlatBonusesThenSummedPercentages()
+    public void Calculate_AddsFlatBonusesThenSummedPercentages()
     {
-        // (128 + 64 + 10) * 1.4 = 282.8, rounded down to 282.
-        Assert.That(CellTypeLimit.Effective(Tier, Modules(
-            TypeLimit(ModuleQuality.Epic, 64, 30), TypeLimit(ModuleQuality.Common, 10, 10))), Is.EqualTo(282));
-        // (128 + 8) * 1.05 = 142.8, rounded down to 142.
-        Assert.That(CellTypeLimit.Effective(Tier, Modules(TypeLimit(ModuleQuality.Common, 8, 5))), Is.EqualTo(142));
+        // Storage floors (256 + 640 + 100) * 1.4; rules floor (128 + 64 + 10) * 1.4.
+        Assert.That(CellTypeLimit.Calculate(Tier, Modules(
+            TypeLimit(ModuleQuality.Epic, 64, 30), TypeLimit(ModuleQuality.Common, 10, 10))), Is.EqualTo((1394, 282)));
+        // 352.8 storage types and 142.8 rule slots both round down.
+        Assert.That(CellTypeLimit.Calculate(Tier, Modules(TypeLimit(ModuleQuality.Common, 8, 5))), Is.EqualTo((352, 142)));
     }
 
     [Test]
-    public void Effective_HasNoUpperClampForFiveMaximalEpicModules()
+    public void Calculate_HasNoUpperClampForFiveMaximalEpicModules()
     {
         var epic = TypeLimit(ModuleQuality.Epic, 64, 30);
         // (128 + 320) * 2.5 = 1120.
-        Assert.That(CellTypeLimit.Effective(Tier, Modules(epic, epic, epic, epic, epic)), Is.EqualTo(1120));
+        Assert.That(CellTypeLimit.Calculate(Tier, Modules(epic, epic, epic, epic, epic)), Is.EqualTo((8640, 1120)));
     }
 
     [Test]
-    public void Effective_IgnoresInvalidModules()
+    public void Calculate_IgnoresInvalidModules()
     {
-        Assert.That(CellTypeLimit.Effective(Tier, Modules(
+        Assert.That(CellTypeLimit.Calculate(Tier, Modules(
             InstalledModule.TypeLimit(null),
             TypeLimit(ModuleQuality.Common, 99, 5),
-            TypeLimit(ModuleQuality.Common, 8, 5))), Is.EqualTo(142));
+            TypeLimit(ModuleQuality.Common, 8, 5))), Is.EqualTo((352, 142)));
     }
 
     [Test]
-    public void Effective_RejectsMissingArguments()
+    public void Calculate_BoundsResultsThatExceedInt32()
     {
-        Assert.Throws<ArgumentNullException>(new Action(() => CellTypeLimit.Effective(Tier, null!)));
-        Assert.Throws<ArgumentNullException>(new Action(() => CellTypeLimit.Effective(null!, UpgradeInventory.Empty)));
+        var epic = TypeLimit(ModuleQuality.Epic, 64, 30);
+        var modules = new UpgradeInventory(Enumerable.Repeat(epic, 40000));
+        Assert.That(CellTypeLimit.Calculate(Tier, modules), Is.EqualTo((int.MaxValue, int.MaxValue)));
+    }
+
+    [Test]
+    public void Calculate_RejectsMissingArguments()
+    {
+        Assert.Throws<ArgumentNullException>(new Action(() => CellTypeLimit.Calculate(Tier, null!)));
+        Assert.Throws<ArgumentNullException>(new Action(() => CellTypeLimit.Calculate(null!, UpgradeInventory.Empty)));
     }
 
     [Test]
     public void TierCapacity_ScalesOneToFourToTheTop()
     {
         long[] bytes = { 1024, 4096, 16384, 65536, 262144 };
-        long[] perType = { 4, 16, 64, 256, 1024 };
+        int[] types = { 256, 1024, 4096, 16384, 65536 };
         for (var index = 0; index < StorageCellTier.All.Count; index++)
         {
             var tier = StorageCellTier.All[index];
             Assert.That(tier.GetBytes(), Is.EqualTo(bytes[index]), tier.Name);
-            Assert.That(tier.GetBytesPerType(), Is.EqualTo(perType[index]), tier.Name);
-            Assert.That(tier.GetTotalTypes(), Is.EqualTo(128), tier.Name);
+            Assert.That(tier.GetBytesPerType(), Is.EqualTo(2), tier.Name);
+            Assert.That(tier.GetTotalTypes(), Is.EqualTo(types[index]), tier.Name);
         }
     }
 }

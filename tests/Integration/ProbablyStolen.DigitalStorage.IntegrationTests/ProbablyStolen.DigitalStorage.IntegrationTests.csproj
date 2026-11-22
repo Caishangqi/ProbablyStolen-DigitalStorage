@@ -23,6 +23,14 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ModuleTooltipContributor.cs" Link="Client\ModuleTooltipContributor.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\ModuleChangeTooltipPresenter.cs" Link="Client\ModuleChangeTooltipPresenter.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\WorkbenchUsage.cs" Link="Client\WorkbenchUsage.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\ModuleTags.cs" Link="Storage\ModuleTags.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellTypeLimitSource.cs" Link="Storage\CellTypeLimitSource.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\CellModuleFactory.cs" Link="Content\CellModuleFactory.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\TypeLimitModuleText.cs" Link="Content\TypeLimitModuleText.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\TypeLimitModuleTooltipBridge.cs" Link="Client\TypeLimitModuleTooltipBridge.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\TypeLimitModuleTooltipPatch.cs" Link="Patches\TypeLimitModuleTooltipPatch.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPages.View.cs" Link="Storage\CellPages.View.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\WorkbenchCellSummary.cs" Link="Content\WorkbenchCellSummary.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellModuleUsage.cs" Link="Storage\CellModuleUsage.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPages.Usage.cs" Link="Storage\CellPages.Usage.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellUpgradeInventory.cs" Link="Storage\CellUpgradeInventory.cs" />

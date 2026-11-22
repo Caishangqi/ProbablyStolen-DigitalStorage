@@ -93,7 +93,7 @@ public sealed class MigrationResumeTests
                 ? PageView.Strip(geometry, _roots.Where(root => root.Page == index)
                     .Select(root => StripLayout.SlotIndexAt(geometry, root.X, root.Y)))
                 : PageView.Unslotted(geometry, _roots.Count(root => root.Page == index)));
-            return new CellView(CellRules.For(StorageCellTier.All[0]), 128, pages, usage, CellPartition.Unfiltered);
+            return new CellView(CellRules.For(StorageCellTier.All[0]), StorageCellTier.All[0].GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, pages, usage, CellPartition.Unfiltered);
         }
 
         internal IEnumerable<(string, long, BoundingSize)> Inventory() =>
