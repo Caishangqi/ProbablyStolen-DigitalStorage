@@ -86,10 +86,11 @@ Auto enables pinyin only in Chinese. Choose On or Off to override it.
 
 [h2]Terminal controls[/h2]
 [list]
-[*]Use the toolbar for sorting and window size; scroll to browse. Tooltips work while the search box has focus.
-[*]Left-click takes one stack, or one non-stackable item. Right-click takes half a stack; stored stacks are not split. Shift + left-click takes the full available amount.
-[*]Drag a whole stack onto the terminal grid or a displayed item to store it. Items that do not transfer stay in place.
-[*]Insertion may be refused for insufficient bytes, type limits, oversized items, partition mismatch, or an offline network.
+[*]Use the toolbar to sort or resize the window. Scroll to browse. Tooltips work while searching.
+[*]Left-click takes one item. Right-click takes half the slot's items, rounded up. Shift-click takes all. A stored stack counts as one item.
+[*]Drag from a single slot to place one item, or hold Shift as you start to drag all. Release Shift once dragging. Scroll to add or remove one per notch, or right-click to halve the amount, rounded up.
+[*]Drag items onto the terminal grid or a displayed item to store them. Unstored items stay in place.
+[*]Capacity, type limits, size, partitions or an offline network can prevent insertion.
 [/list]
 Terminals and drives can open the native module panel. Native module properties currently do not change digital storage capacity, throughput, or network power usage.
 

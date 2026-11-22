@@ -357,7 +357,8 @@ internal sealed class StorageTerminalView : ITerminalView
                 var slotIndex = _grid.IndexAt(new Vector2(gesture.Position.X, gesture.Position.Y), EventCamera(), page.Slots.Count);
                 var region = DragRegionAt(gesture.Position, slotIndex, page);
                 var slotId = slotIndex >= 0 ? page.Slots[slotIndex].Group?.Id : null;
-                return controller.Press(gesture.Position, region, slotId, page, candidates, nativeThreshold);
+                return controller.Press(gesture.Position, region, slotId, page, candidates, nativeThreshold,
+                    allPieces: gesture.Shift);
             case PointerGesturePhase.Press when gesture.Button == GestureButton.Secondary:
                 controller.Halve(gesture.Position);
                 return controller.OwnsGesture;
@@ -792,7 +793,8 @@ internal sealed class StorageTerminalView : ITerminalView
         }
         if (_pipelineRevision != _host.Pipeline.Revision) Regroup();
         ApplyWheel();
-        var viewChanged = _menu.SetPaused(IsShiftHeld());
+        // Releasing Shift during a drag must not reorder its source slot.
+        var viewChanged = _menu.SetPaused(IsShiftHeld() || _dragController?.PausesResort == true);
         var reason = _inventoryMonitor.BeginRefresh(Time.unscaledTime, Window.IsVisible, _services.DiagnosticsEnabled());
         if (reason == TerminalRefreshReason.None)
         {
@@ -1127,7 +1129,9 @@ internal sealed class StorageTerminalView : ITerminalView
             .AddLine(text.Get("terminal_hint_title"), ignoreEmpty: true, Palette(hint.TitleRgb))
             .AddLine(text.Get("terminal_hint_left"), ignoreEmpty: true, Palette(hint.LabelRgb))
             .AddLine(text.Get("terminal_hint_right"), ignoreEmpty: true, Palette(hint.LabelRgb))
-            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, Palette(hint.LabelRgb));
+            .AddLine(text.Get("terminal_hint_shift"), ignoreEmpty: true, Palette(hint.LabelRgb))
+            .AddLine(text.Get("terminal_hint_drag"), ignoreEmpty: true, Palette(hint.LabelRgb))
+            .AddLine(text.Get("terminal_hint_drag_amount"), ignoreEmpty: true, Palette(hint.LabelRgb));
     }
 
     private RichTextBuilder AddLines(RichTextBuilder builder, TooltipPanel panel)

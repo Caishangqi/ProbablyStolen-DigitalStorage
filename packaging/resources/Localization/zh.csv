@@ -157,9 +157,11 @@ terminal_keep_open_disabled,已关闭。按 Esc 可关闭终端。
 partition_view_size_name,分区窗口高度
 partition_view_size_desc,元件分区窗口占屏幕高度的比例。也可用分区窗口左侧按钮切换，设置会自动保存。
 terminal_hint_title,操作
-terminal_hint_left,左键: 取出 1 件
-terminal_hint_right,右键: 取出该格一半的件数
-terminal_hint_shift,Shift+左键: 取出全部
+terminal_hint_left,左键单击取出 1 件
+terminal_hint_right,右键单击取出该格一半的件数
+terminal_hint_shift,Shift + 左键单击取出全部
+terminal_hint_drag,单格拖动从 1 件开始，按住 Shift 开始则取全量
+terminal_hint_drag_amount,单格拖动中滚轮每档增减 1 件，点右键减半
 config_section_power,网络耗电
 config_section_debug,调试
 debug_show_cell_pages_name,双击存储元件时显示存储页

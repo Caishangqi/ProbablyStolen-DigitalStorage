@@ -470,6 +470,7 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_view_direction_name", "terminal_view_direction_desc", "terminal_view_size_name", "terminal_view_size_desc", "partition_view_size_name",
         "partition_view_size_desc", "terminal_keep_open_name", "terminal_keep_open_desc",
         "terminal_hint_title", "terminal_hint_left", "terminal_hint_right", "terminal_hint_shift",
+        "terminal_hint_drag", "terminal_hint_drag_amount",
         "config_section_power", "config_section_debug",
         "config_section_terminal_search",
         "terminal_search_keyboard_name", "terminal_search_keyboard_desc",

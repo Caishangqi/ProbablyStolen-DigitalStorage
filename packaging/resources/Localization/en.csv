@@ -157,9 +157,11 @@ terminal_keep_open_disabled,Off. Esc can close the terminal.
 partition_view_size_name,Partition window height
 partition_view_size_desc,How much of the screen height the cell partition window uses. You can also use the button on the left of that window. Your choice is saved.
 terminal_hint_title,Controls
-terminal_hint_left,Left click: take one item
-terminal_hint_right,Right click: take half of the items in the slot
-terminal_hint_shift,Shift + left click: take all
+terminal_hint_left,Left-click to take one item
+terminal_hint_right,Right-click to take half the slot's items
+terminal_hint_shift,Shift-click to take all
+terminal_hint_drag,Drag a single slot to start with one item. Hold Shift when starting to take all.
+terminal_hint_drag_amount,Scroll during a single-slot drag to adjust by one. Right-click to halve.
 config_section_power,Network power
 config_section_debug,Debug
 debug_show_cell_pages_name,Show storage pages when opening a cell

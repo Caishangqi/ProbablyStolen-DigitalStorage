@@ -31,7 +31,7 @@ public sealed class TerminalDragPresentationTests
         var group = page.Slots[0].Group!;
         var amount = new DragAmountModel();
         Assert.That(group.Total, Is.EqualTo(11));
-        Assert.That(amount.Begin(group.Total), Is.True);
+        Assert.That(amount.Begin(group.Total, allPieces: true), Is.True);
         Assert.That(amount.Halve(group.Total), Is.EqualTo(6));
 
         var batch = flow.Menu.CreateDragBatch(page, page, new[] { group.Id }, flow.Pipeline.Revision, amount.RequestedPieces);
@@ -53,7 +53,7 @@ public sealed class TerminalDragPresentationTests
         var mixed = groups.Single(group => group.IsMixed);
         Assert.That(mixed.Total, Is.EqualTo(89));
         var amount = new DragAmountModel();
-        amount.Begin(mixed.Total);
+        amount.Begin(mixed.Total, allPieces: true);
         Assert.That(amount.Halve(mixed.Total), Is.EqualTo(45));
 
         var batch = flow.Menu.CreateDragBatch(page, page, groups.Reverse().Select(group => group.Id), flow.Pipeline.Revision);

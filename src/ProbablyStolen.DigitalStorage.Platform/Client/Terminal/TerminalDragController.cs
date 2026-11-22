@@ -76,11 +76,13 @@ internal sealed class TerminalDragController
     internal IReadOnlyList<string> SelectedIds => _selected;
     internal IReadOnlyList<DragSelectionCandidate<string>> Candidates => _candidates;
     internal PointerPoint Origin => _origin;
+    internal bool PausesResort => _owned && !_dragSelection &&
+        Phase is TerminalDragPhase.Waiting or TerminalDragPhase.DraggingSingle;
     internal bool PreviewUsesAnchor => Phase == TerminalDragPhase.DraggingSingle &&
         _amount.RequestedPieces == 1;
 
     internal bool Press(PointerPoint point, TerminalDragRegion region, string? slotId, StorageScreenPage page,
-        IReadOnlyList<DragSelectionCandidate<string>> candidates, float? nativeThreshold)
+        IReadOnlyList<DragSelectionCandidate<string>> candidates, float? nativeThreshold, bool allPieces = false)
     {
         if (_owned || !point.IsValid || (_gestureArea != null && !_gestureArea(point)) || page == null || candidates == null || !_session() ||
             region == TerminalDragRegion.Other || page.ViewRevision != _currentPage().ViewRevision ||
@@ -97,9 +99,9 @@ internal sealed class TerminalDragController
                 _selection.Cancel();
                 _retainedSelection = false;
                 _selected = new[] { group.Id };
+                _amount.Begin(group.Total, allPieces);
             }
             _pressedId = group.Id;
-            _amount.Begin(group.Total);
             Phase = TerminalDragPhase.Waiting;
             _highlight(_selected);
         }
@@ -262,7 +264,7 @@ internal sealed class TerminalDragController
             return;
         }
         var previousAmount = _amount.RequestedPieces;
-        if ((Phase == TerminalDragPhase.Waiting || Phase == TerminalDragPhase.DraggingSingle) && !ClampAmount())
+        if (PausesResort && !ClampAmount())
         {
             Cancel();
             return;

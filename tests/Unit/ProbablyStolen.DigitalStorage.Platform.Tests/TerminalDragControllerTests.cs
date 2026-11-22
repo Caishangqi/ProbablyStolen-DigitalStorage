@@ -44,7 +44,8 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Selected));
 
         Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
-            fixture.Candidates, 3), Is.True);
+            fixture.Candidates, 3, allPieces: true), Is.True);
+        Assert.That(controller.PausesResort, Is.False);
         controller.Move(Point(20, 20));
         Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.DraggingSelection));
         Assert.That(controller.PreviewUsesAnchor, Is.False, "A multi-item selection previews the whole grid.");
@@ -84,19 +85,22 @@ internal sealed class TerminalDragControllerTests
             (_, _) => refreshes++);
 
         Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
-            fixture.Candidates, 3), Is.True);
+            fixture.Candidates, 3, allPieces: true), Is.True);
+        Assert.That(controller.PausesResort, Is.True);
         controller.Move(Point(9, 9));
-        Assert.That(controller.PreviewUsesAnchor, Is.False, "Dragging one icon can still request multiple pieces.");
-        controller.Wheel(-10, Point(9, 9));
-        Assert.That(controller.PreviewUsesAnchor, Is.True);
-        controller.Wheel(5, Point(9, 9));
-        Assert.That(controller.PreviewUsesAnchor, Is.False);
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(11));
+        controller.Halve(Point(9, 9));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(6));
+        controller.Wheel(-1, Point(9, 9));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(5));
+        Assert.That(controller.PausesResort, Is.True);
         Assert.That(controller.Release(Point(9, 9)), Is.True);
+        Assert.That(controller.PausesResort, Is.False);
 
         Assert.Multiple((Action)(() =>
         {
             Assert.That(extractionCalls, Is.EqualTo(1));
-            Assert.That(result!.RequestedAmount, Is.EqualTo(6));
+            Assert.That(result!.RequestedAmount, Is.EqualTo(5));
             Assert.That(result.ExtractedAmount, Is.EqualTo(3));
             Assert.That(available, Is.EqualTo(8));
             Assert.That(refreshes, Is.EqualTo(1));
@@ -602,18 +606,25 @@ internal sealed class TerminalDragControllerTests
             resolve: (PointerPoint _, out InventoryDropTarget? target, out TerminalDragTargetState state) =>
             {
                 resolutions++;
-                target = resolutions == 3 ? released : hover;
+                target = resolutions == 4 ? released : hover;
                 state = TerminalDragTargetState.Pending;
                 return true;
             });
         StartSingleDrag(controller, fixture);
-        controller.Wheel(-100, Point(20, 20));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(1));
+        Assert.That(controller.PreviewUsesAnchor, Is.True);
+        controller.Wheel(1, Point(20, 20));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(2));
+        Assert.That(controller.PreviewUsesAnchor, Is.False);
+        controller.Wheel(-1, Point(20, 20));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(1));
+        Assert.That(controller.PreviewUsesAnchor, Is.True);
         Assert.That(submissions, Is.Zero, "A hover marker is not an extraction.");
         controller.Release(Point(90, 90));
         controller.Release(Point(90, 90));
         Assert.Multiple((Action)(() =>
         {
-            Assert.That(resolutions, Is.EqualTo(3));
+            Assert.That(resolutions, Is.EqualTo(4));
             Assert.That(submitted, Is.SameAs(released));
             Assert.That(submitted!.Anchor, Is.EqualTo(new GridDropAnchor(4, 2)));
             var singlePlacement = submitted.ForSinglePlacement(1);
@@ -648,7 +659,7 @@ internal sealed class TerminalDragControllerTests
                 return TerminalExtractionResult.Create(TerminalExtractionStatus.Success, batch.RequestedPieces,
                     batch.RequestedPieces, "done");
             }, feedback: (state, _) => feedback = state);
-        StartSingleDrag(controller, fixture);
+        StartSingleDrag(controller, fixture, allPieces: true);
         Assert.That(feedback, Is.EqualTo(TerminalDragTargetState.Pending));
         var first = controller.CreatePreviewBatch();
         controller.Move(Point(21, 21));
@@ -663,7 +674,7 @@ internal sealed class TerminalDragControllerTests
         Assert.That(submittedAnchor, Is.Null);
 
         StartSingleDrag(controller, fixture);
-        controller.Wheel(-100, Point(21, 21));
+        Assert.That(controller.CreatePreviewBatch()?.RequestedPieces, Is.EqualTo(1));
         Assert.That(feedback, Is.EqualTo(TerminalDragTargetState.Rejected));
         Assert.That(controller.Release(Point(21, 21)), Is.True);
         Assert.That(submissions, Is.EqualTo(1));
@@ -746,7 +757,7 @@ internal sealed class TerminalDragControllerTests
                 if (state == TerminalDragTargetState.Pending) anchorPreviews.Add(controller!.PreviewUsesAnchor);
             });
         Assert.That(controller.Press(Point(17, 5), TerminalDragRegion.Slot, "group-stone", screen.GetPage(0),
-            fixture.Candidates, 3), Is.True);
+            fixture.Candidates, 3, allPieces: true), Is.True);
         controller.Move(Point(20, 20));
         UpdateQuantity(fixture, screen, serial: 3, amount: 1);
         controller.SynchronizePage();
@@ -755,6 +766,32 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.OwnsGesture, Is.True);
         Assert.That(controller.Release(Point(20, 20)), Is.True);
         Assert.That(moved, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void QuantityRefresh_RemovingSourceCancelsWithoutSubmitting()
+    {
+        var fixture = CreateFixture();
+        var screen = new StorageScreen(2, 1);
+        screen.SetEntriesInOrder(fixture.Menu.GetEntries());
+        var submissions = 0;
+        var controller = CreateController(fixture, OpaqueTarget(),
+            (shown, current, ids, revision, amount) => fixture.Menu.CreateDragBatch(shown, current, ids, revision, amount),
+            (_, _) =>
+            {
+                submissions++;
+                return TerminalExtractionResult.Create(TerminalExtractionStatus.Failed, 0, 0, "unused");
+            }, currentPage: () => screen.GetPage(0));
+        Assert.That(controller.Press(Point(17, 5), TerminalDragRegion.Slot, "group-stone", screen.GetPage(0),
+            fixture.Candidates, 3), Is.True);
+        controller.Move(Point(20, 20));
+        UpdateQuantity(fixture, screen, serial: 3, amount: 0);
+        controller.SynchronizePage();
+        controller.Release(Point(20, 20));
+
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Idle));
+        Assert.That(controller.PausesResort, Is.False);
+        Assert.That(submissions, Is.Zero);
     }
 
     [Test]
@@ -793,10 +830,10 @@ internal sealed class TerminalDragControllerTests
         Assert.That(controller.Release(Point(24, 12)), Is.True);
     }
 
-    private static void StartSingleDrag(TerminalDragController controller, Fixture fixture)
+    private static void StartSingleDrag(TerminalDragController controller, Fixture fixture, bool allPieces = false)
     {
         Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
-            fixture.Candidates, 3), Is.True);
+            fixture.Candidates, 3, allPieces), Is.True);
         controller.Move(Point(20, 20));
     }
 
@@ -845,7 +882,7 @@ internal sealed class TerminalDragControllerTests
         {
             new ProjectedGroup("group-fruit", entries.Where(entry => entry.Key.Identifier == "fruit").ToArray()),
             new ProjectedGroup("group-stone", entries.Where(entry => entry.Key.Identifier == "stone").ToArray())
-        });
+        }.Where(group => group.Members.Count > 0).ToArray());
 
         var screen = new StorageScreen(columns: 2, rows: 1);
         screen.SetEntriesInOrder(menu.GetEntries());

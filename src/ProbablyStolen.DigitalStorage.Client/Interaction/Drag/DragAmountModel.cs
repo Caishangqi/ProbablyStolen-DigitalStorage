@@ -12,12 +12,12 @@ public sealed class DragAmountModel
     /// <summary>Gets the current request, or zero when inactive.</summary>
     public long RequestedPieces => _requested;
 
-    /// <summary>Starts a drag at the complete available piece count.</summary>
-    public bool Begin(long availablePieces)
+    /// <summary>Starts a drag with one piece or the full available count.</summary>
+    public bool Begin(long availablePieces, bool allPieces)
     {
         End();
         if (availablePieces <= 0) return false;
-        _requested = availablePieces;
+        _requested = allPieces ? availablePieces : 1;
         return true;
     }
 
