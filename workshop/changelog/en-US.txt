@@ -1,6 +1,7 @@
-0.6.3
+0.6.4
 
-Optimized the checks and verifications when dragging items from game containers into the terminal.
+Storage cells can now hold more item types at every tier.
 
-- Now, dragging multiple items into the terminal will no longer simulate storage; it will only perform a single storage action when the item is released.
-- Fixed a bug where subsequent operations would reload the inventory after detecting a change in item ownership.
+- Flat bonuses from Type Limit Modules now scale with the cell tier using each module's saved roll.
+- Fixed lag when hovering over modules in the Cell Workbench.
+- Fixed incorrect counts of stored item types.
