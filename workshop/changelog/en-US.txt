@@ -1,7 +1,6 @@
-0.6.4
+0.6.5
 
-Storage cells can now hold more item types at every tier.
+The terminal now highlights items customers want and lets you adjust quantities while dragging items out.
 
-- Flat bonuses from Type Limit Modules now scale with the cell tier using each module's saved roll.
-- Fixed lag when hovering over modules in the Cell Workbench.
-- Fixed incorrect counts of stored item types.
+- Customer demand highlights mark ordinary wanted items in green, stolen items in amber, and contraband in red. During inspections, stolen items and contraband are highlighted; items in both categories use red.
+- A single-slot drag starts with one item. Hold Shift as you start to take all, scroll during the drag to adjust by one, or right-click to halve the amount.
