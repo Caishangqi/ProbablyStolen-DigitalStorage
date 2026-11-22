@@ -23,6 +23,7 @@ using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using UnityEngine.SceneManagement;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
@@ -53,6 +54,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly DigitalStorageContentService _contentApi;
     private readonly DigitalStorageRuntime _runtime;
     private readonly CompatibilityDiagnostics _compatibility;
+    private readonly IntegrationDecorationCatalog _decorations;
     private IntegrationHost? _integrations;
     private IDisposable? _moduleBayHooks;
     private bool _runtimeExposed;
@@ -71,9 +73,10 @@ public sealed class PlatformComposition : IDisposable
         NativeCustomerCatalog customers,
         TerminalSearchComposition search, CellWorkbenchItem workbench,
         DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons,
-        CompatibilityDiagnostics compatibility)
+        CompatibilityDiagnostics compatibility, IntegrationDecorationCatalog decorations)
     {
         _compatibility = compatibility;
+        _decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
         _buttonIcons = buttonIcons;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _contentApi = contentApi ?? throw new ArgumentNullException(nameof(contentApi));
@@ -120,7 +123,8 @@ public sealed class PlatformComposition : IDisposable
         if (_integrations != null || _isEnabled) throw new InvalidOperationException("Attach integrations once, before enabling.");
         var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _compatibility.Report);
         _integrations = new IntegrationHost(plugins, new NativeIntegrationEnvironment(),
-            new HarmonyIntegrationPatcher(_modId), _settings, _runtime, _compatibility.Report);
+            new HarmonyIntegrationPatcher(_modId), _settings, _runtime, _compatibility.Report, _decorations,
+            _buttonIcons.HasOverlay);
         _integrations.Initialize();
     }
 
@@ -168,6 +172,7 @@ public sealed class PlatformComposition : IDisposable
                 else log.Log(message);
             });
         var compatibility = new CompatibilityDiagnostics(diagnosticLogger, categories.Comp);
+        var decorations = new IntegrationDecorationCatalog(notificationFailed: compatibility.ReportDecorationNotificationFailure);
         var diagnostics = new StorageDiagnostics(message => log.Error(message), () => false);
         var cellDiagnostics = new CellDiagnostics(diagnosticLogger, categories.Storage);
         var search = new TerminalSearchComposition(identity.Id, text,
@@ -218,7 +223,8 @@ public sealed class PlatformComposition : IDisposable
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,
-            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics, compatibility);
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics,
+            compatibility, decorations, identity.Id);
         var workbench = new CellWorkbenchItem(text, appearance,
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
@@ -238,7 +244,7 @@ public sealed class PlatformComposition : IDisposable
             new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
-                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons, compatibility);
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons, compatibility, decorations);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -294,6 +300,9 @@ public sealed class PlatformComposition : IDisposable
             if (_integrations != null)
             {
                 ModHook.OnGameLoadedInit += _integrations.OnGameLoaded;
+                ModHook.OnNewGameStarted += OnIntegrationNewGameStarted;
+                SceneManager.sceneUnloaded += OnIntegrationSceneUnloaded;
+                ModLoader.OnTrustRefreshed += _integrations.OnDependenciesChanged;
                 _integrations.Enable();
             }
 
@@ -343,6 +352,9 @@ public sealed class PlatformComposition : IDisposable
         if (_integrations != null)
         {
             ModHook.OnGameLoadedInit -= _integrations.OnGameLoaded;
+            ModHook.OnNewGameStarted -= OnIntegrationNewGameStarted;
+            SceneManager.sceneUnloaded -= OnIntegrationSceneUnloaded;
+            ModLoader.OnTrustRefreshed -= _integrations.OnDependenciesChanged;
             _integrations.Dispose();
         }
         _settings.ClearIntegrationUiStates();
@@ -384,6 +396,17 @@ public sealed class PlatformComposition : IDisposable
         PartitionWindow.CloseCurrent();
     }
 
+    private void OnIntegrationNewGameStarted(string scenarioId)
+    {
+        _runtime.OnGameLoading();
+        _integrations?.OnNewGameStarted(scenarioId);
+    }
+
+    private void OnIntegrationSceneUnloaded(Scene scene)
+    {
+        if (scene.name == "InventoryScene") _integrations?.OnGameUnloaded();
+    }
+
     private void OnLocaleConfirmed(string? locale, bool settled)
     {
         if (!_isEnabled || _isDisposed) return;
@@ -399,10 +422,13 @@ public sealed class PlatformComposition : IDisposable
         if (_isEnabled && string.Equals(modId, _modId, StringComparison.Ordinal))
         {
             if (_assetsReady) _settings.RefreshSectionNames();
-            _pinyinLifecycle.OnConfigApplied();
             _integrations?.OnSettingsApplied();
-            _log.Log("Digital Storage: configuration applied; open network views refresh now.");
-            _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
+            if (_settings.ReadBuiltInChanges())
+            {
+                _pinyinLifecycle.OnConfigApplied();
+                _log.Log("Digital Storage: configuration applied; open network views refresh now.");
+                _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
+            }
         }
     }
 
@@ -413,8 +439,8 @@ public sealed class PlatformComposition : IDisposable
             return;
         }
 
-        // The loader loads mod assets only after every mod is listed, so other mods' versions are known now. Run it
-        // first: a failure in the work below must not leave the integrations unregistered for the session.
+        _buttonIcons.Load(mod);
+        // Every mod is listed now. The integration host also needs our loaded textures for registration.
         try
         {
             _integrations?.OnModsLoaded();
@@ -424,7 +450,6 @@ public sealed class PlatformComposition : IDisposable
             _log.Warning($"Digital Storage: mod integrations could not register ({error.GetType().Name}: {error.Message}).");
         }
 
-        _buttonIcons.Load(mod);
         _networkSprites.Load(mod);
         _assetsReady = true;
         FreezeContentRegistries();

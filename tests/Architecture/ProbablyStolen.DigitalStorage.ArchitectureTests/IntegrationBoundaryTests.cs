@@ -22,7 +22,8 @@ public sealed class IntegrationBoundaryTests
     {
         ("customerstocking", "CustomerStocking.", "CustomerStocking"),
         ("item_details", "ItemDetails.", "ItemDetails"),
-        ("brewing_expansion", "BrewingExpansion.", "BrewingExpansion")
+        ("brewing_expansion", "BrewingExpansion.", "BrewingExpansion"),
+        ("hollow.clientdemandhighlight", "ClientDemandHighlight.", "ClientDemandHighlight")
     };
 
     private static string RepositoryRoot => typeof(IntegrationBoundaryTests).Assembly
@@ -37,6 +38,20 @@ public sealed class IntegrationBoundaryTests
             .ToArray();
 
         Assert.That(violations, Is.Empty);
+    }
+
+    [Test]
+    public void StorageView_ComposesExternalDecorationsWithoutAWindowHostAdapter()
+    {
+        var client = Path.Combine(RepositoryRoot, "src", "ProbablyStolen.DigitalStorage.Platform", "Client", "Terminal");
+        var features = File.ReadAllText(Path.Combine(client, "TerminalFeatures.cs"));
+        var host = File.ReadAllText(Path.Combine(client, "TerminalWindowHost.cs"));
+        var view = File.ReadAllText(Path.Combine(client, "Features", "StorageTerminal", "StorageTerminalView.cs"));
+
+        Assert.That(File.Exists(Path.Combine(client, "IntegrationSlotDecorator.cs")), Is.False);
+        Assert.That(features, Does.Not.Contain("IntegrationSlotDecorator"));
+        Assert.That(host, Does.Not.Contain("IntegrationDecorations"));
+        Assert.That(view, Does.Contain(".DecoratePage(page, _host.Context, external)"));
     }
 
     [Test]

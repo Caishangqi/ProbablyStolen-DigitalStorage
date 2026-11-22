@@ -67,6 +67,13 @@ internal sealed class SlotDecorationLayer
         _current[index] = decorations;
     }
 
+    internal void Clear()
+    {
+        foreach (var images in _shown.Values) Recycle(images);
+        _shown.Clear();
+        _current.Clear();
+    }
+
     /// <summary>Drops every reference after the window closes; the images were destroyed with it.</summary>
     internal void Reset()
     {
@@ -80,6 +87,11 @@ internal sealed class SlotDecorationLayer
         _current.Remove(index);
         if (!_shown.TryGetValue(index, out var images)) return;
         _shown.Remove(index);
+        Recycle(images);
+    }
+
+    private void Recycle(List<Image> images)
+    {
         foreach (var image in images)
         {
             if (image == null) continue;

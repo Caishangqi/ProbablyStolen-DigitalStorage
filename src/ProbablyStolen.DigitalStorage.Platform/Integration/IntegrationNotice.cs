@@ -10,7 +10,7 @@ internal enum IntegrationSeverity
 internal readonly struct IntegrationNotice
 {
     internal IntegrationNotice(IntegrationSeverity severity, string pluginId, string modId, string version,
-        IntegrationState state, bool verified, string reason, string? exceptionType = null)
+        IntegrationState state, bool verified, string reason, string? exceptionType = null, string? decorationId = null)
     {
         Severity = severity;
         PluginId = pluginId;
@@ -20,6 +20,7 @@ internal readonly struct IntegrationNotice
         Verified = verified;
         Reason = reason;
         ExceptionType = exceptionType;
+        DecorationId = decorationId;
     }
 
     internal IntegrationSeverity Severity { get; }
@@ -30,4 +31,5 @@ internal readonly struct IntegrationNotice
     internal bool Verified { get; }
     internal string Reason { get; }
     internal string? ExceptionType { get; }
+    internal string? DecorationId { get; }
 }

@@ -14,6 +14,7 @@ using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
@@ -32,6 +33,8 @@ internal sealed class TerminalItem
     private readonly ButtonIcons _icons;
     private readonly TransferDiagnostics _transfers;
     private readonly CompatibilityDiagnostics _compatibility;
+    private readonly IntegrationDecorationCatalog _decorations;
+    private readonly string _modId;
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
@@ -49,10 +52,13 @@ internal sealed class TerminalItem
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, ModLog log,
         NativeNetworkEvents events,
         TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
-        ButtonIcons icons, TransferDiagnostics transfers, CompatibilityDiagnostics compatibility)
+        ButtonIcons icons, TransferDiagnostics transfers, CompatibilityDiagnostics compatibility,
+        IntegrationDecorationCatalog decorations, string modId)
     {
+        _modId = modId;
         _transfers = transfers;
         _compatibility = compatibility;
+        _decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
         _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -102,7 +108,8 @@ internal sealed class TerminalItem
                 (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
                 key => _networkPower.Storage.FindPreviewSample(item, key), RenderStoredTooltip,
-                _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers);
+                _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers,
+                _decorations, _modId);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 (source, amount) => _networkPower.StoreSingle(item, source, amount), _text, message => _log.Log(message)).Attach();

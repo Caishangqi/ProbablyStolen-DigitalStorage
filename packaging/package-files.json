@@ -795,6 +795,18 @@
           36
         ]
       }
+    },
+    {
+      "path": "Textures/client_demand_border.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
     }
   ]
 }

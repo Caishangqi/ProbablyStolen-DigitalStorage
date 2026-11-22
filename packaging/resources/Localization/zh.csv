@@ -400,6 +400,15 @@ stacking_field_container_content,容器内容
 stacking_field_container_content_desc,容器里装的物品.
 stacking_field_feature,特征: {0}
 stacking_field_feature_desc,可见的物品特征 {0}.
+integration_client_demand_section,客户需求高亮
+integration_client_demand_label,在终端显示高亮
+integration_client_demand_tooltip,在终端标出当前客户想要的物品。盘查时只标出赃物和违禁品。客户需求高亮模组的热键、延时和忽略名单只影响它自己的界面。
+integration_client_demand_normal,普通需求
+integration_client_demand_normal_desc,用绿框标出当前客户愿意购买或交换的普通物品。
+integration_client_demand_stolen,赃物
+integration_client_demand_stolen_desc,用琥珀色边框标出符合客户需求的赃物。盘查时也会标出赃物。
+integration_client_demand_contraband,违禁品
+integration_client_demand_contraband_desc,用红框标出符合客户需求的违禁品。盘查时也会标出违禁品。同时属于赃物和违禁品的物品只用红框标记。
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,为数字物流提示保留 Item Details 空间
 integration_itemdetails_tooltip,给可见的 Item Details 类型标签和内容面板留出空间。检测到 Item Details 正在运行时默认开启。

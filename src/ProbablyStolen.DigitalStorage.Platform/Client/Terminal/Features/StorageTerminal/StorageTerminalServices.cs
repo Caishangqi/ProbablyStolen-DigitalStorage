@@ -6,6 +6,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
@@ -26,8 +27,10 @@ internal sealed class StorageTerminalServices
         Func<ItemKey, GameItem?> findPreviewSample, Func<GameItemElement, ItemKey, RichText> renderStoredTooltip,
         Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
         Action<string> writeDiagnostic,
-        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers)
+        Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers,
+        IntegrationDecorationCatalog decorations, string modId)
     {
+        ModId = modId;
         Transfers = transfers;
         Text = text ?? throw new ArgumentNullException(nameof(text));
         Settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -46,8 +49,10 @@ internal sealed class StorageTerminalServices
         WriteDiagnostic = writeDiagnostic ?? throw new ArgumentNullException(nameof(writeDiagnostic));
         SubscribeNetwork = subscribeNetwork ?? throw new ArgumentNullException(nameof(subscribeNetwork));
         Search = search ?? throw new ArgumentNullException(nameof(search));
+        Decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
     }
 
+    internal string ModId { get; }
     internal TransferDiagnostics Transfers { get; }
     internal ModText Text { get; }
     internal ITerminalViewSettings Settings { get; }
@@ -75,6 +80,7 @@ internal sealed class StorageTerminalServices
     internal Action<string> WriteDiagnostic { get; }
     internal Func<Action<NetworkChanged>, IDisposable> SubscribeNetwork { get; }
     internal TerminalSearchService Search { get; }
+    internal IntegrationDecorationCatalog Decorations { get; }
 
     /// <summary>
     /// The last search text of this terminal. It outlives the window, so reopening shows the same search.

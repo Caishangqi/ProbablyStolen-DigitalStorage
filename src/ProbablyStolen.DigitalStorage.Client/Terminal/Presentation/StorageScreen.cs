@@ -10,11 +10,10 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 /// <summary>Represents one fixed-size terminal slot with no native item ownership.</summary>
 public sealed class TerminalSlotView
 {
-    internal TerminalSlotView(int index, DisplayEntry? group, int cellPixels, IReadOnlyList<SlotDecoration> decorations)
+    internal TerminalSlotView(int index, DisplayEntry? group, int cellPixels)
     {
         Index = index;
         Group = group;
-        Decorations = decorations;
         if (group == null)
         {
             return;
@@ -38,9 +37,6 @@ public sealed class TerminalSlotView
 
     /// <summary>Gets the stored pieces of the slot, zero for an empty slot or placeholder.</summary>
     public long Amount => Group?.Total ?? 0;
-
-    /// <summary>Gets the corner marks extensions added.</summary>
-    public IReadOnlyList<SlotDecoration> Decorations { get; } = Array.Empty<SlotDecoration>();
 
     /// <summary>Gets the equal-aspect fitted width for the fixed cell.</summary>
     public int SpriteWidthPixels { get; }
@@ -151,10 +147,8 @@ public sealed class StorageScreen
         CellPixels = cellPixels;
     }
 
-    private static readonly IReadOnlyList<SlotDecoration> NoDecorations = Array.Empty<SlotDecoration>();
     private readonly TerminalSearchService _search;
     private readonly List<DisplayEntry> _entries = new();
-    private Func<DisplayEntry, IReadOnlyList<SlotDecoration>> _decorate = _ => NoDecorations;
     private string _searchText = string.Empty;
     private int _scrollRow;
     private TerminalDisplayState _baseState = TerminalDisplayState.Loading;
@@ -203,13 +197,6 @@ public sealed class StorageScreen
         Rows = rows;
         BumpViewRevision();
         ClampScroll();
-    }
-
-    /// <summary>Sets how slots get their corner marks; the page is rebuilt.</summary>
-    public void SetDecorator(Func<DisplayEntry, IReadOnlyList<SlotDecoration>> decorate)
-    {
-        _decorate = decorate ?? throw new ArgumentNullException(nameof(decorate));
-        _page = null;
     }
 
     /// <summary>Drops the cached page, for example after extension settings changed.</summary>
@@ -334,8 +321,7 @@ public sealed class StorageScreen
         for (var index = 0; index < slotCount; index++)
         {
             var group = index < visible.Length ? visible[index] : null;
-            slots.Add(new TerminalSlotView(index, group, CellPixels,
-                group == null || group.Total == 0 ? NoDecorations : _decorate(group)));
+            slots.Add(new TerminalSlotView(index, group, CellPixels));
         }
 
         var state = _baseState == TerminalDisplayState.Ready && filtered.Length == 0

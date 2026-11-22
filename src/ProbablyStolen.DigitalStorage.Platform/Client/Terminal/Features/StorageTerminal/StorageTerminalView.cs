@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -43,6 +44,7 @@ internal sealed class StorageTerminalView : ITerminalView
     private readonly TerminalSnapshotCache<ItemPicture> _pictures;
     private readonly ItemSlotGrid _grid;
     private readonly SlotDecorationLayer _decorations;
+    private readonly TerminalDecorationRefresh _decorationRefresh;
     private readonly StorageMenu _menu = new();
     private readonly TerminalPotentialTargetHighlightView _potentialTargetHighlight;
     private const int MaxDumpedMembers = 4;
@@ -112,7 +114,8 @@ internal sealed class StorageTerminalView : ITerminalView
         _potentialTargetHighlight = new TerminalPotentialTargetHighlightView(services.WriteDiagnostic);
         _attributes = new EntryAttributeReader(services.AttributeCaptures, services.FindSample, services.WriteDiagnostic);
         _menu.SetProjection(Project);
-        _screen.SetDecorator(group => _host.Pipeline.Decorate(group, _host.Context));
+        _decorationRefresh = new TerminalDecorationRefresh(services.Decorations, ScheduleDecorationRefresh,
+            DrawDecorations, _decorations.Clear);
     }
 
     private CustomUIWindow Window => _host.Window;
@@ -203,7 +206,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _dropInput.SetGestureHandler(HandleDragGesture, () => _dragController?.AllowsPrimaryClick == true);
         // On the root as well, so the per-frame session check keeps running while the view is hidden.
         _refreshHandler = Window.root.AddComponent<TerminalInventoryRefreshHandler>();
-        _refreshHandler.Initialize(PollSnapshot);
+        _refreshHandler.Initialize(PollSnapshot, ShowDecorations, _decorationRefresh.Hide);
     }
 
     /// <inheritdoc />
@@ -225,12 +228,14 @@ internal sealed class StorageTerminalView : ITerminalView
         Refresh(ReadSnapshot(), preserveView: true);
         // A page such as the stacking rules may have changed how entries group while this view was hidden.
         Regroup();
+        ShowDecorations();
     }
 
     /// <inheritdoc />
     public void Suspend()
     {
         _suspended = true;
+        _decorationRefresh.Hide();
         CancelDrag();
         _hoverTooltip?.Dispose();
         _hoverTooltip = null;
@@ -279,6 +284,7 @@ internal sealed class StorageTerminalView : ITerminalView
     public void Dispose()
     {
         _suspended = true;
+        _decorationRefresh.Hide();
         CancelDrag();
         _hoverTooltip?.Dispose();
         _hoverTooltip = null;
@@ -292,7 +298,11 @@ internal sealed class StorageTerminalView : ITerminalView
             _dropInput.SetGestureHandler(null);
             UnityEngine.Object.Destroy(_dropInput);
         }
-        if (_refreshHandler != null) UnityEngine.Object.Destroy(_refreshHandler);
+        if (_refreshHandler != null)
+        {
+            _refreshHandler.Detach();
+            UnityEngine.Object.Destroy(_refreshHandler);
+        }
         _dragGhost?.Dispose();
         _selectionBand?.Dispose();
         _targetHover.Dispose();
@@ -806,6 +816,8 @@ internal sealed class StorageTerminalView : ITerminalView
         var snapshot = ReadSnapshot();
         if (!_inventoryMonitor.HasChanged(snapshot))
         {
+            // A fresh inventory read can replace preview samples without changing the display snapshot.
+            _decorationRefresh.SamplesChanged();
             if (viewChanged) ApplyMenuView(preserveView: true);
             UpdateHoverTooltip();
             return;
@@ -1177,19 +1189,55 @@ internal sealed class StorageTerminalView : ITerminalView
         _hoverSample = null;
     }
 
+    private void ShowDecorations()
+    {
+        if (CanShowDecorations()) _decorationRefresh.Show();
+    }
+
+    private bool CanShowDecorations() => !_suspended && _container != null && _refreshHandler != null &&
+        _refreshHandler.isActiveAndEnabled && _host.IsCurrentSession();
+
+    private Action? ScheduleDecorationRefresh(Action refresh)
+    {
+        var handle = ModHelper.StartCoroutine(_services.ModId, NextFrame(refresh));
+        return handle == null ? null : () => StopDecorationRefresh(handle);
+    }
+
+    private void StopDecorationRefresh(Coroutine handle)
+    {
+        try { ModHelper.StopCoroutine(_services.ModId, handle); }
+        catch (Exception error) { _services.WriteDiagnostic($"terminal_decoration_cancel failed={error.GetType().Name}"); }
+    }
+
+    private static IEnumerator NextFrame(Action refresh)
+    {
+        yield return null;
+        refresh();
+    }
+
+    private void DrawDecorations(StorageScreenPage page, bool storageAvailable)
+    {
+        if (!CanShowDecorations()) return;
+        var external = _services.Decorations.EvaluatePage(page, storageAvailable, FindOwnedPreviewSample);
+        var decorations = _host.Pipeline.DecoratePage(page, _host.Context, external);
+        for (var index = 0; index < decorations.Count; index++) _decorations.Set(index, decorations[index]);
+    }
+
+    private GameItem? FindOwnedPreviewSample(ItemKey key)
+    {
+        var sample = _services.FindPreviewSample(key);
+        return sample != null && GeneralHelper.IsItemOwned(sample) ? sample : null;
+    }
+
     private void Refresh()
     {
-        if (_container == null)
-        {
-            return;
-        }
+        if (_container == null) return;
 
         var text = _services.Text;
         var page = _screen.GetPage();
         for (var index = 0; index < page.Slots.Count; index++)
         {
             var slot = page.Slots[index];
-            _decorations.Set(index, slot.Decorations);
             if (slot.Entry == null)
             {
                 _grid.SetEmpty(index);
@@ -1201,6 +1249,7 @@ internal sealed class StorageTerminalView : ITerminalView
             _grid.SetEntry(index, available ? _pictures.Get(slot.Entry.Key) : null, available, available, slot.QuantityBadge);
         }
 
+        _decorationRefresh.SetDisplayedPage(page, !_storageUnavailable);
         _dragController?.SynchronizePage();
         _status?.SetText(_messageKey == null && _storageUnavailable
             ? text.Get("terminal_storage_unavailable")

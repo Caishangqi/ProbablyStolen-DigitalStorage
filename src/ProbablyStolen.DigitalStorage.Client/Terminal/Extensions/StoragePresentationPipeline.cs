@@ -79,6 +79,34 @@ public sealed class StoragePresentationPipeline
         return IdentityProjection.Project(entries);
     }
 
+    /// <summary>Collects overlays in slot order, with external overlays above the registered rules.</summary>
+    /// <param name="page">The exact page whose slots are being decorated.</param>
+    /// <param name="context">The current terminal context.</param>
+    /// <param name="external">One list per slot, or null when no external results are available.</param>
+    public IReadOnlyList<IReadOnlyList<SlotDecoration>> DecoratePage(StorageScreenPage page, TerminalContext? context,
+        IReadOnlyList<IReadOnlyList<SlotDecoration>>? external = null)
+    {
+        if (page == null) throw new ArgumentNullException(nameof(page));
+        if (external != null && external.Count != page.Slots.Count)
+            throw new ArgumentException("External decorations must align with the page slots.", nameof(external));
+
+        var result = new IReadOnlyList<SlotDecoration>[page.Slots.Count];
+        foreach (var slot in page.Slots)
+        {
+            if (slot.Group is not { Total: > 0 } group)
+            {
+                result[slot.Index] = Array.Empty<SlotDecoration>();
+                continue;
+            }
+
+            var builtIn = Decorate(group, context);
+            var added = external?[slot.Index];
+            result[slot.Index] = added is not { Count: > 0 } ? builtIn
+                : builtIn.Count == 0 ? added : builtIn.Concat(added).ToArray();
+        }
+        return result;
+    }
+
     /// <summary>Collects the overlays of one slot, bottom first: decorators by order, each in the order it added them.</summary>
     public IReadOnlyList<SlotDecoration> Decorate(DisplayEntry entry, TerminalContext? context)
     {

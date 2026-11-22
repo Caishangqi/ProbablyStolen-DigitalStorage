@@ -102,19 +102,6 @@ public sealed class GroupPresentationTests
     }
 
     [Test]
-    public void PageCarriesDecorationsOnlyForFilledSlots()
-    {
-        var screen = new StorageScreen(2, 1);
-        screen.SetDecorator(group => new[] { new SlotDecoration("mark", group.Members.Count) });
-        screen.SetEntriesInOrder(new[] { new DisplayEntry("g", new[] { Entry("a#1", "A", 1), Entry("a#2", "A", 1) }) });
-
-        var page = screen.GetPage();
-
-        Assert.That(page.Slots[0].Decorations.Single().TintRgb, Is.EqualTo(2));
-        Assert.That(page.Slots[1].Decorations, Is.Empty);
-    }
-
-    [Test]
     public void GroupInteraction_TakesMembersInOrderUntilTheRequestIsMet()
     {
         var menu = MenuWith(("bottle#full", "Bottle", 4), ("bottle#half", "Bottle", 5), ("bottle#empty", "Bottle", 2));

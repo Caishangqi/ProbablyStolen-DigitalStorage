@@ -400,6 +400,15 @@ stacking_field_container_content,Container content
 stacking_field_container_content_desc,The items inside a container.
 stacking_field_feature,Feature: {0}
 stacking_field_feature_desc,The visible item feature {0}.
+integration_client_demand_section,Client Demand Highlight
+integration_client_demand_label,Show highlights in the terminal
+integration_client_demand_tooltip,Outline items the current customer wants. During inspections, outline only stolen items and contraband. The companion mod's hotkey, delay and ignore list apply to its own outlines.
+integration_client_demand_normal,Normal demand
+integration_client_demand_normal_desc,Use a green outline for ordinary items the customer wants to buy or trade for.
+integration_client_demand_stolen,Stolen items
+integration_client_demand_stolen_desc,Use an amber outline for stolen items the customer wants and for stolen items during inspections.
+integration_client_demand_contraband,Contraband
+integration_client_demand_contraband_desc,Use a red outline for contraband the customer wants and for contraband during inspections. An item that is both stolen and contraband uses only the red outline.
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,Keep Item Details clear of Digital Storage tooltips
 integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. This option defaults on when Item Details is running.

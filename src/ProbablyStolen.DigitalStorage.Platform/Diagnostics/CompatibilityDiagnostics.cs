@@ -20,8 +20,13 @@ internal sealed class CompatibilityDiagnostics
     {
         LogField.Of("plugin_id", notice.PluginId), LogField.Of("mod_id", notice.ModId),
         LogField.Of("version", notice.Version), LogField.Of("state", notice.State.ToString()),
-        LogField.Of("verified", notice.Verified), LogField.Of("reason", notice.Reason)
+        LogField.Of("verified", notice.Verified), LogField.Of("reason", notice.Reason),
+        LogField.Of("decoration_id", notice.DecorationId)
     }, exceptionType: notice.ExceptionType);
+
+    internal void ReportDecorationNotificationFailure(string exceptionType) =>
+        _log.Write(_category, LogVerbosity.Error, "decoration_notification_failed",
+            "Could not queue a terminal decoration refresh.", exceptionType: exceptionType);
 
     internal void ReportLoreFailure(string exceptionType)
     {

@@ -6,7 +6,9 @@ using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api;
 using ProbablyStolen.DigitalStorage.Api.Integration;
 using ProbablyStolen.DigitalStorage.Api.Networking;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Api.Storage;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Compat.BrewingExpansion;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 
@@ -35,6 +37,9 @@ public sealed class IntegrationHostTests
 
     private IntegrationHost Host(params IIntegrationPlugin[] plugins) =>
         new(plugins, _environment, _patcher, _settings, new FakeRuntime(), _log.Add);
+
+    private IntegrationHost HostWithDecorations(IntegrationDecorationCatalog catalog, params IIntegrationPlugin[] plugins) =>
+        new(plugins, _environment, _patcher, _settings, new FakeRuntime(), _log.Add, catalog, _ => true);
 
     private IntegrationHost Started(IIntegrationPlugin plugin)
     {
@@ -75,6 +80,322 @@ public sealed class IntegrationHostTests
         Assert.That(changes, Has.Count.EqualTo(2));
         Assert.That(changes[1].Locked, Is.False);
         Assert.That(changes[1].LabelState, Is.Null);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void DecorationCatalog_WithdrawsStoppedDependencyWithoutSettingsApply(bool loaderNotified)
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        var plugin = new FakePlugin
+        {
+            Patch = registration => ((ITerminalDecorationRegistration)registration).AddSlotDecoration(
+                "marker", "demand_border", _ => new int?[] { 0x654321 })
+        };
+        var host = HostWithDecorations(catalog, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        var samples = new GameItem[] { null! };
+
+        Assert.That(catalog.Evaluate(samples)[0], Is.Empty, "Registration alone does not activate decorations.");
+        host.OnGameLoaded();
+        Assert.That(catalog.Evaluate(samples)[0].Single().TintRgb, Is.EqualTo(0x654321));
+
+        _settings.Values[Uid] = false;
+        host.OnSettingsApplied();
+        Assert.That(catalog.Evaluate(samples)[0], Is.Empty);
+        Assert.That(plugin.Calls, Does.Contain("unavailable"));
+
+        _settings.Values[Uid] = true;
+        host.OnSettingsApplied();
+        Assert.That(catalog.Evaluate(samples)[0].Single().TintRgb, Is.EqualTo(0x654321));
+        _environment.Running.Remove("other_mod");
+        if (loaderNotified) host.OnDependenciesChanged();
+        var screen = new StorageScreen(1, 1);
+        screen.SetEntriesInOrder(new[] { new TerminalEntry(new ItemKey("apple"), 1, "Apple", "sprite") });
+        var sampleLookups = 0;
+        var external = catalog.EvaluatePage(screen.GetPage(), true, _ =>
+        {
+            sampleLookups++;
+            return null;
+        });
+        Assert.That(external, Is.Null);
+        Assert.That(sampleLookups, Is.Zero);
+        Assert.That(catalog.Evaluate(samples)[0], Is.Empty);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.NotRunning));
+        Assert.That(plugin.Calls.Count(call => call == "unavailable"), Is.EqualTo(2));
+        host.Dispose();
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void FreshGame_ActivatesDecorationsWithNoPreviousSaveLoad(bool enabledAtStart)
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        _settings.Values[Uid] = enabledAtStart;
+        var plugin = new FakePlugin
+        {
+            Patch = registration => ((ITerminalDecorationRegistration)registration).AddSlotDecoration(
+                "marker", "test_border", _ => new int?[] { 0x123456 })
+        };
+        using var host = HostWithDecorations(catalog, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnNewGameStarted("test_scenario");
+
+        Assert.That(catalog.HasActive, Is.EqualTo(enabledAtStart));
+        if (!enabledAtStart)
+        {
+            _settings.Values[Uid] = true;
+            host.OnSettingsApplied();
+        }
+
+        Assert.That(catalog.Evaluate(new GameItem[] { null! })[0].Single().TintRgb, Is.EqualTo(0x123456));
+    }
+
+    [Test]
+    public void InvalidationCallbacks_FollowRuntimeAndRegistrationAndIsolateThrowingSubscribers()
+    {
+        var notifications = new List<long>();
+        var subscriberErrors = new List<string>();
+        var catalog = new IntegrationDecorationCatalog(notificationFailed: subscriberErrors.Add);
+        catalog.Changed += () => throw new InvalidOperationException();
+        catalog.Changed += () => notifications.Add(catalog.Revision);
+        ITerminalDecorationRegistration? registration = null;
+        var runtimeCallbacks = new List<Action>();
+        var plugin = new FakePlugin
+        {
+            Patch = value =>
+            {
+                registration = (ITerminalDecorationRegistration)value;
+                registration.AddSlotDecoration("marker", "test_border", _ => new int?[] { 1 });
+            },
+            RuntimeAttach = () => runtimeCallbacks.Add(registration!.InvalidateSlotDecorations)
+        };
+        using var host = HostWithDecorations(catalog, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        var beforeLoad = registration!.InvalidateSlotDecorations;
+        beforeLoad();
+        Assert.That(catalog.Revision, Is.Zero);
+
+        host.OnNewGameStarted("test_scenario");
+        beforeLoad();
+        runtimeCallbacks[0]();
+        host.OnGameLoaded();
+        runtimeCallbacks[0]();
+        runtimeCallbacks[1]();
+        host.OnSettingsApplied();
+
+        _settings.Values[Uid] = false;
+        host.OnSettingsApplied();
+        runtimeCallbacks[1]();
+        _settings.Values[Uid] = true;
+        host.OnSettingsApplied();
+        runtimeCallbacks[0]();
+        runtimeCallbacks[1]();
+        runtimeCallbacks[2]();
+
+        host.Dispose();
+        runtimeCallbacks[2]();
+        Assert.That(notifications, Is.EqualTo(Enumerable.Range(1, 11).Select(value => (long)value)));
+        Assert.That(subscriberErrors, Has.Count.EqualTo(notifications.Count));
+        Assert.That(_log.Any(notice => notice.State == IntegrationState.Faulted), Is.False);
+    }
+
+    [Test]
+    public void SceneUnload_RevokesRuntimeUntilANewGameLoads()
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        ITerminalDecorationRegistration? registration = null;
+        var callbacks = new List<Action>();
+        var plugin = new FakePlugin
+        {
+            Patch = value =>
+            {
+                registration = (ITerminalDecorationRegistration)value;
+                registration.Patch(Target, postfix: Prefix);
+                registration.AddSlotDecoration("marker", "test_border", _ => new int?[] { 1 });
+            },
+            RuntimeAttach = () => callbacks.Add(registration!.InvalidateSlotDecorations)
+        };
+        using var host = HostWithDecorations(catalog, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnGameLoaded();
+        host.OnGameUnloaded();
+        host.OnGameUnloaded();
+
+        var afterUnload = catalog.Revision;
+        callbacks[0]();
+        Assert.That(catalog.Revision, Is.EqualTo(afterUnload));
+        Assert.That(catalog.HasActive, Is.False);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Active));
+        Assert.That(_patcher.Applied, Has.Count.EqualTo(1));
+        Assert.That(plugin.Calls.Count(call => call == "unavailable"), Is.EqualTo(1));
+
+        _settings.Values[Uid] = false;
+        host.OnSettingsApplied();
+        _settings.Values[Uid] = true;
+        host.OnSettingsApplied();
+        Assert.That(callbacks, Has.Count.EqualTo(1));
+        Assert.That(catalog.HasActive, Is.False);
+
+        host.OnNewGameStarted("test_scenario");
+        Assert.That(callbacks, Has.Count.EqualTo(2));
+        Assert.That(catalog.HasActive, Is.True);
+        var afterReopen = catalog.Revision;
+        callbacks[0]();
+        callbacks[1]();
+        Assert.That(catalog.Revision, Is.EqualTo(afterReopen + 1));
+    }
+
+    [Test]
+    public void RuntimeAttachFailure_RevokesItsCallbackAndRollsBackPatches()
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        Action? invalidate = null;
+        ITerminalDecorationRegistration? registration = null;
+        var plugin = new FakePlugin
+        {
+            Patch = value =>
+            {
+                registration = (ITerminalDecorationRegistration)value;
+                registration.Patch(Target, postfix: Prefix);
+                registration.AddSlotDecoration("marker", "test_border", _ => new int?[] { 1 });
+            },
+            RuntimeAttach = () =>
+            {
+                invalidate = registration!.InvalidateSlotDecorations;
+                throw new InvalidOperationException();
+            }
+        };
+        using var host = HostWithDecorations(catalog, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnGameLoaded();
+        invalidate!();
+
+        Assert.That(catalog.Revision, Is.Zero);
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Faulted));
+        Assert.That(_patcher.Applied, Is.Empty);
+        Assert.That(_log.Last().Reason, Is.EqualTo("runtime_attach_failed"));
+    }
+
+    [Test]
+    public void MissingOverlay_RejectsAllOfOwningPluginsRegistrationBeforeApplyingPatches()
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        var broken = new FakePlugin
+        {
+            Uid = "digital_storage:broken",
+            Patch = registration =>
+            {
+                registration.Patch(Target, Prefix);
+                var decorations = (ITerminalDecorationRegistration)registration;
+                decorations.AddSlotDecoration("valid", "test_border", _ => new int?[] { 1 });
+                decorations.AddSlotDecoration("missing", "missing_border", _ => new int?[] { 2 });
+            }
+        };
+        var healthy = new FakePlugin
+        {
+            Uid = "digital_storage:healthy",
+            Patch = registration => ((ITerminalDecorationRegistration)registration).AddSlotDecoration(
+                "valid", "test_border", _ => new int?[] { 3 })
+        };
+        using var host = new IntegrationHost(new[] { broken, healthy }, _environment, _patcher, _settings,
+            new FakeRuntime(), _log.Add, catalog, key => key == "test_border");
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnGameLoaded();
+
+        Assert.That(_patcher.Applied, Is.Empty);
+        Assert.That(host.StateOf(broken.Uid), Is.EqualTo(IntegrationState.Incompatible));
+        Assert.That(host.StateOf(healthy.Uid), Is.EqualTo(IntegrationState.Active));
+        Assert.That(catalog.Evaluate(new GameItem[] { null! })[0].Single().TintRgb, Is.EqualTo(3));
+        Assert.That(_log.Single(notice => notice.PluginId == broken.Uid).DecorationId, Is.EqualTo(broken.Uid + "/missing"));
+    }
+
+    [Test]
+    public void DecorationCatalog_AbsenceDoesNotActivateOrLog()
+    {
+        _environment.Enabled.Clear();
+        var catalog = new IntegrationDecorationCatalog();
+        var plugin = new FakePlugin();
+        var host = HostWithDecorations(catalog, plugin);
+
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnGameLoaded();
+
+        Assert.That(catalog.Evaluate(new GameItem[] { null! })[0], Is.Empty);
+        Assert.That(_log, Is.Empty);
+        Assert.That(plugin.Calls, Is.Empty);
+        host.Dispose();
+    }
+
+    [Test]
+    public void EvaluatorExceptionFaultsAndWithdrawsOnlyItsPlugin()
+    {
+        var catalog = new IntegrationDecorationCatalog();
+        catalog.Changed += () => throw new InvalidOperationException("view callback");
+        var broken = new FakePlugin
+        {
+            Uid = "digital_storage:broken",
+            Patch = registration =>
+            {
+                registration.Patch(Target, postfix: Prefix);
+                ((ITerminalDecorationRegistration)registration).AddSlotDecoration(
+                    "marker", "broken_border", _ => throw new NotSupportedException("test details"));
+            }
+        };
+        var healthy = new FakePlugin
+        {
+            Uid = "digital_storage:healthy",
+            Patch = registration =>
+            {
+                registration.Patch(Target, prefix: Prefix);
+                ((ITerminalDecorationRegistration)registration).AddSlotDecoration(
+                    "marker", "healthy_border", _ => new int?[] { 0x123456 });
+            }
+        };
+        var host = HostWithDecorations(catalog, broken, healthy);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        host.OnGameLoaded();
+
+        var result = catalog.Evaluate(new GameItem[] { null! });
+
+        Assert.That(host.StateOf(broken.PluginUid), Is.EqualTo(IntegrationState.Faulted));
+        Assert.That(host.StateOf(healthy.PluginUid), Is.EqualTo(IntegrationState.Active));
+        Assert.That(_patcher.Applied.Single().Prefix, Is.SameAs(Prefix));
+        Assert.That(_patcher.Removed.Single().Postfix, Is.SameAs(Prefix));
+        Assert.That(broken.Calls.Count(call => call == "unavailable"), Is.EqualTo(1));
+        Assert.That(result[0].Select(decoration => decoration.TintRgb), Is.EqualTo(new[] { 0x123456 }));
+        var fault = _log.Single(notice => notice.PluginId == broken.PluginUid && notice.State == IntegrationState.Faulted);
+        Assert.That(fault.Reason, Is.EqualTo("decoration_evaluate_failed"));
+        Assert.That(fault.ExceptionType, Is.EqualTo(nameof(NotSupportedException)));
+        Assert.That(fault.DecorationId, Is.EqualTo(broken.Uid + "/marker"));
+        host.Dispose();
+    }
+
+    [Test]
+    public void Registration_RejectsInvalidIdsDuplicateIdsInvalidOverlaysAndNullCallbacks()
+    {
+        var registration = new IntegrationRegistration("1.0.0", new FakeRuntime(), Uid);
+        Assert.Throws<ArgumentException>((Action)(() => registration.AddSlotDecoration("Bad", "digital_storage:key", _ => Array.Empty<int?>())));
+        Assert.Throws<ArgumentException>((Action)(() => registration.AddSlotDecoration("valid", "digital_storage:key", _ => Array.Empty<int?>())));
+        Assert.Throws<ArgumentNullException>((Action)(() => registration.AddSlotDecoration("valid", "valid_key", null!)));
+        registration.AddSlotDecoration("valid", "client_demand_border", _ => Array.Empty<int?>());
+        Assert.Throws<ArgumentException>((Action)(() => registration.AddSlotDecoration("valid", "client_demand_border", _ => Array.Empty<int?>())));
     }
 
     [Test]
@@ -506,6 +827,8 @@ public sealed class IntegrationHostTests
 
         internal Func<bool>? DefaultProbe { get; set; }
 
+        internal Action? RuntimeAttach { get; set; }
+
         internal List<string> Calls { get; } = new();
 
         public override string PluginUid => Uid;
@@ -534,7 +857,11 @@ public sealed class IntegrationHostTests
             Patch?.Invoke(registration);
         }
 
-        public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime) => Calls.Add("available");
+        public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime)
+        {
+            Calls.Add("available");
+            RuntimeAttach?.Invoke();
+        }
 
         public override void OnRuntimeUnavailable() => Calls.Add("unavailable");
     }

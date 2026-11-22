@@ -63,10 +63,20 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Api\StorageOutcomes.cs" Link="Api\StorageOutcomes.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoreAdmission.cs" Link="Storage\StoreAdmission.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IExternalAccess.cs" Link="Api\IExternalAccess.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\DiagnosticLogger.cs" Link="Common\Diagnostics\DiagnosticLogger.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogCategories.cs" Link="Common\Diagnostics\LogCategories.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogCategory.cs" Link="Common\Diagnostics\LogCategory.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogField.cs" Link="Common\Diagnostics\LogField.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogFormatter.cs" Link="Common\Diagnostics\LogFormatter.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogVerbosity.cs" Link="Common\Diagnostics\LogVerbosity.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\CompatibilityDiagnostics.cs" Link="Diagnostics\CompatibilityDiagnostics.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationDecorationCatalog.cs" Link="Integration\IntegrationDecorationCatalog.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\Terminal\Features\StorageTerminal\TerminalDecorationRefresh.cs" Link="Client\TerminalDecorationRefresh.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationHost.cs" Link="Integration\IntegrationHost.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationNotice.cs" Link="Integration\IntegrationNotice.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Integration\IIntegrationVersionPolicy.cs" Link="Api\IIntegrationVersionPolicy.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Client\Tooltips\TerminalTooltipScope.cs" Link="Api\TerminalTooltipScope.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\ClientDemandHighlight\DemandClassifier.cs" Link="Compat\DemandClassifier.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingExpansionPlugin.cs" Link="Compat\BrewingExpansionPlugin.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingExpansionVersions.cs" Link="Compat\BrewingExpansionVersions.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\BrewingExpansion\BrewingTooltipTarget.cs" Link="Compat\BrewingTooltipTarget.cs" />

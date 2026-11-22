@@ -97,6 +97,37 @@ public sealed class StackingFeatureTests
     }
 
     [Test]
+    public void DecoratePage_ComposesExternalAboveStackingAndLeavesTheLayoutUntouched()
+    {
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), new[] { new MixedGroupDecorator() },
+            Array.Empty<IEntryTooltipContributor>(), Array.Empty<TooltipPanelDefinition>(), _ => { });
+        var screen = new StorageScreen(3, 1);
+        screen.SetEntriesInOrder(new[]
+        {
+            new DisplayEntry("mixed", new[] { Bottle(1, 1), Bottle(2, 1) }),
+            DisplayEntry.Single(Bottle(3, 0))
+        });
+        var page = screen.GetPage();
+        var context = Context(new MemoryData(), Installed);
+        var external = new[]
+        {
+            new[] { new SlotDecoration("external_bottom", 1), new SlotDecoration("external_top", 2) },
+            new[] { new SlotDecoration("zero", 3) },
+            new[] { new SlotDecoration("empty", 4) }
+        };
+
+        var composed = pipeline.DecoratePage(page, context, external);
+
+        Assert.That(composed[0].Select(item => item.OverlayKey),
+            Is.EqualTo(new[] { MixedGroupDecorator.OverlayKey, "external_bottom", "external_top" }));
+        Assert.That(composed[1], Is.Empty);
+        Assert.That(composed[2], Is.Empty);
+        Assert.That(pipeline.DecoratePage(page, context)[0].Single().OverlayKey, Is.EqualTo(MixedGroupDecorator.OverlayKey));
+        Assert.That(screen.GetPage(), Is.SameAs(page));
+        Assert.Throws<ArgumentException>((Action)(() => pipeline.DecoratePage(page, context, external.Take(1).ToArray())));
+    }
+
+    [Test]
     public void UnitTotalTooltip_AddsTheUnitCountOnlyWhenPiecesHoldSeveralUnits()
     {
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),

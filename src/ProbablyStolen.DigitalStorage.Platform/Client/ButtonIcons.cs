@@ -60,6 +60,8 @@ internal sealed class ButtonIcons : IDisposable
     /// </summary>
     internal Sprite? Overlay(string key) => Ready && TryCreate(key, out var sprite) ? sprite : null;
 
+    internal bool HasOverlay(string key) => Ready && TryCreate(key, out _, reportFailure: false);
+
     /// <summary>
     /// Gets a nine-slice frame image with <paramref name="border"/> pixels on each side, drawn with point sampling;
     /// null when the texture is missing.
@@ -90,7 +92,7 @@ internal sealed class ButtonIcons : IDisposable
         return created;
     }
 
-    private bool TryCreate(string key, out Sprite? sprite)
+    private bool TryCreate(string key, out Sprite? sprite, bool reportFailure = true)
     {
         if (_sprites.TryGetValue(key, out sprite)) return true;
         Sprite? created = null;
@@ -116,7 +118,7 @@ internal sealed class ButtonIcons : IDisposable
         catch (Exception error)
         {
             if (created != null) UnityEngine.Object.Destroy(created);
-            if (_reported.Add(key)) _error($"Digital Storage: button icon {key} unavailable ({error.Message}).");
+            if (reportFailure && _reported.Add(key)) _error($"Digital Storage: button icon {key} unavailable ({error.Message}).");
             sprite = null;
             return false;
         }

@@ -132,3 +132,23 @@ public interface IIntegrationRegistration
     /// </summary>
     void Verify(Func<string?> check);
 }
+
+/// <summary>Registers batch slot decorations owned by one integration plugin.</summary>
+public interface ITerminalDecorationRegistration : IIntegrationRegistration
+{
+    /// <summary>
+    /// Gets the main-thread invalidation callback for the current runtime. Obtain it in
+    /// <see cref="IIntegrationPlugin.OnRuntimeAvailable"/> for each game. Earlier callbacks become permanent no-ops
+    /// when that runtime or registration ends.
+    /// </summary>
+    Action InvalidateSlotDecorations { get; }
+
+    /// <summary>
+    /// Registers a stable decoration identifier and a local texture key from Digital Storage's loaded assets during
+    /// the plugin's register phase. An unavailable texture rejects the plugin's registration.
+    /// The evaluator runs synchronously on the main thread. It receives borrowed samples in visible slot order and
+    /// must not modify or retain them. Return one value per sample: null for no overlay or a 24-bit 0xRRGGBB tint.
+    /// </summary>
+    void AddSlotDecoration(string id, string overlayKey,
+        Func<IReadOnlyList<GameItem>, IReadOnlyList<int?>> evaluate);
+}

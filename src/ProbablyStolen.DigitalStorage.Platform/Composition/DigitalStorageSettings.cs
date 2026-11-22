@@ -44,6 +44,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly Dictionary<string, IntegrationSwitchState> _integrationStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (LogSetting Setting, ConfigEntry<LogVerbosity> Verbosity, ConfigEntry<bool> Enabled)> _logSettings = new(StringComparer.Ordinal);
     private readonly List<KeyValuePair<ConfigEntry, string>> _sections = new();
+    private readonly Dictionary<ConfigEntry, object> _builtInValues = new();
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
@@ -163,6 +164,21 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
         }
 
+        foreach (var pair in _sections) _builtInValues.Add(pair.Key, pair.Key.BoxedValue);
+    }
+
+    /// <summary>Checks built-in settings separately from plugin options, which only invalidate decorations.</summary>
+    internal bool ReadBuiltInChanges()
+    {
+        var changed = false;
+        foreach (var pair in _sections)
+        {
+            var entry = pair.Key;
+            if (!_builtInValues.TryGetValue(entry, out var previous) || Equals(previous, entry.BoxedValue)) continue;
+            _builtInValues[entry] = entry.BoxedValue;
+            changed = true;
+        }
+        return changed;
     }
 
     /// <summary>
@@ -180,7 +196,13 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
 
     internal bool GetTerminalKeepOpen() => _terminalKeepOpen.Value;
 
-    internal void SetTerminalKeepOpen(bool value) => _terminalKeepOpen.Set(value);
+    internal void SetTerminalKeepOpen(bool value) => SetTerminalOption(_terminalKeepOpen, value);
+
+    private void SetTerminalOption<T>(ConfigEntry<T> entry, T value)
+    {
+        entry.Set(value);
+        _builtInValues[entry] = entry.BoxedValue;
+    }
 
     internal SearchConfiguration GetSearchConfiguration(string? confirmedLocale, Action<string>? warning = null)
     {
@@ -391,25 +413,25 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     public TerminalSortOrder SortOrder
     {
         get => TerminalViewPolicy.Normalize(_sortOrder.Value);
-        set => _sortOrder.Set(value);
+        set => SetTerminalOption(_sortOrder, value);
     }
 
     public TerminalSortDirection SortDirection
     {
         get => TerminalViewPolicy.Normalize(_sortDirection.Value);
-        set => _sortDirection.Set(value);
+        set => SetTerminalOption(_sortDirection, value);
     }
 
     public TerminalSize Size
     {
         get => TerminalViewPolicy.Normalize(_size.Value);
-        set => _size.Set(value);
+        set => SetTerminalOption(_size, value);
     }
 
     public TerminalSize PartitionSize
     {
         get => TerminalViewPolicy.Normalize(_partitionSize.Value, TerminalSize.Medium);
-        set => _partitionSize.Set(value);
+        set => SetTerminalOption(_partitionSize, value);
     }
 
     /// <summary>Reads a terminal rail setting from the global config entry of the same name.</summary>

@@ -30,6 +30,8 @@ internal sealed class IntegrationHost : IDisposable
     private readonly IIntegrationSettings _settings;
     private readonly IDigitalStorageRuntime _runtime;
     private readonly Action<IntegrationNotice> _log;
+    private readonly IntegrationDecorationCatalog? _decorations;
+    private readonly Func<string, bool>? _overlayAvailable;
     private bool _initialized;
     private bool _enabled;
     private bool _registered;
@@ -37,7 +39,9 @@ internal sealed class IntegrationHost : IDisposable
     private bool _disposed;
 
     internal IntegrationHost(IEnumerable<IIntegrationPlugin> plugins, IIntegrationEnvironment environment,
-        IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime, Action<IntegrationNotice> log)
+        IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime,
+        Action<IntegrationNotice> log, IntegrationDecorationCatalog? decorations = null,
+        Func<string, bool>? overlayAvailable = null)
     {
         _entries = (plugins ?? throw new ArgumentNullException(nameof(plugins))).Select(plugin => new Entry(plugin)).ToList();
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -45,6 +49,8 @@ internal sealed class IntegrationHost : IDisposable
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _decorations = decorations;
+        _overlayAvailable = overlayAvailable;
     }
 
     /// <summary>
@@ -87,6 +93,7 @@ internal sealed class IntegrationHost : IDisposable
     internal void Initialize()
     {
         if (_initialized || _disposed) return;
+        _decorations?.BindHost(OnDependenciesChanged, FaultDecoration);
         _initialized = true;
         foreach (var entry in _entries)
         {
@@ -121,12 +128,16 @@ internal sealed class IntegrationHost : IDisposable
         if (_enabled) RegisterAll();
     }
 
-    /// <summary>Runs the runtime phases for a newly loaded game.</summary>
+    /// <summary>Starts the same integration runtime scope for a freshly created game.</summary>
+    internal void OnNewGameStarted(string _) => OnGameLoaded();
+
+    /// <summary>Runs the runtime phases for a new or loaded game.</summary>
     internal void OnGameLoaded()
     {
         if (_disposed) return;
         foreach (var entry in _entries.Where(entry => entry.State == IntegrationState.Active))
         {
+            if (!CheckRunning(entry)) continue;
             if (entry.RuntimeAvailable) RuntimeUnavailable(entry);
             if (entry.State == IntegrationState.Active) RuntimeAvailable(entry);
         }
@@ -134,10 +145,28 @@ internal sealed class IntegrationHost : IDisposable
         _gameLoaded = true;
     }
 
+    /// <summary>Ends the run and releases its callbacks while keeping plugin registrations.</summary>
+    internal void OnGameUnloaded()
+    {
+        if (_disposed || !_gameLoaded) return;
+        _gameLoaded = false;
+        foreach (var entry in _entries)
+            if (entry.RuntimeAvailable) RuntimeUnavailable(entry);
+    }
+
+    /// <summary>Withdraws integrations whose dependencies the loader has stopped.</summary>
+    internal void OnDependenciesChanged()
+    {
+        if (_disposed || !_registered) return;
+        foreach (var entry in _entries)
+            if (entry.State == IntegrationState.Active) CheckRunning(entry);
+    }
+
     /// <summary>Applies a changed settings switch: registers newly enabled plugins and removes disabled ones.</summary>
     internal void OnSettingsApplied()
     {
         if (_disposed || !_registered) return;
+        OnDependenciesChanged();
         foreach (var entry in _entries)
         {
             if (entry.Switch == null) continue;
@@ -153,6 +182,7 @@ internal sealed class IntegrationHost : IDisposable
                 if (entry.State == IntegrationState.Disabled) Report(entry, "disabled_in_settings");
             }
         }
+        _decorations?.OnSettingsApplied();
     }
 
     /// <inheritdoc />
@@ -223,17 +253,21 @@ internal sealed class IntegrationHost : IDisposable
 
     private bool CheckRunning(Entry entry)
     {
-        if (_environment.IsModRunning(entry.ModId)) return true;
-        entry.State = IntegrationState.NotRunning;
-        Report(entry, "dependency_not_running", IntegrationSeverity.Warning);
-        return false;
+        if (!_environment.IsModRunning(entry.ModId))
+        {
+            if (entry.State == IntegrationState.Active) Deactivate(entry, IntegrationState.NotRunning);
+            else entry.State = IntegrationState.NotRunning;
+            Report(entry, "dependency_not_running", IntegrationSeverity.Warning);
+            return false;
+        }
+        return true;
     }
 
     private void TryRegister(Entry entry)
     {
         if (!entry.Supported || !CheckRunning(entry)) return;
 
-        var registration = new IntegrationRegistration(entry.Version, _runtime);
+        var registration = new IntegrationRegistration(entry.Version, _runtime, entry.Uid ?? string.Empty);
         if (!Call(entry, "register", () => entry.Plugin.Register(registration))) return;
         if (registration.Failure != null)
         {
@@ -245,6 +279,17 @@ internal sealed class IntegrationHost : IDisposable
                 _ => "registration_rejected"
             };
             Report(entry, reason, IntegrationSeverity.Warning);
+            return;
+        }
+
+        var decorations = registration.Decorations.ToArray();
+        foreach (var decoration in decorations)
+        {
+            var available = false;
+            if (!Call(entry, "decoration_overlay", () => available = _overlayAvailable?.Invoke(decoration.OverlayKey) == true)) return;
+            if (available) continue;
+            entry.State = IntegrationState.Incompatible;
+            Report(entry, "decoration_overlay_unavailable", IntegrationSeverity.Warning, decorationId: decoration.Id);
             return;
         }
 
@@ -289,6 +334,8 @@ internal sealed class IntegrationHost : IDisposable
             return;
         }
 
+        entry.Registration = registration;
+        entry.Decorations = decorations;
         entry.State = IntegrationState.Active;
         Report(entry, entry.Verified ? "enabled" : "enabled_unverified");
     }
@@ -298,12 +345,20 @@ internal sealed class IntegrationHost : IDisposable
 
     private void RuntimeAvailable(Entry entry)
     {
-        if (Call(entry, "runtime_attach", () => entry.Plugin.OnRuntimeAvailable(_runtime))) entry.RuntimeAvailable = true;
+        var registration = entry.Registration!;
+        var pluginId = entry.Uid!;
+        if (_decorations != null && entry.Decorations.Count > 0)
+            registration.BeginDecorationScope(() => _decorations.Invalidate(pluginId));
+        if (!Call(entry, "runtime_attach", () => entry.Plugin.OnRuntimeAvailable(_runtime))) return;
+        entry.RuntimeAvailable = true;
+        _decorations?.Activate(pluginId, entry.Decorations);
     }
 
     private void RuntimeUnavailable(Entry entry)
     {
         entry.RuntimeAvailable = false;
+        entry.Registration?.EndDecorationScope();
+        _decorations?.Withdraw(entry.Uid ?? string.Empty);
         Call(entry, "runtime_detach", entry.Plugin.OnRuntimeUnavailable);
     }
 
@@ -311,6 +366,8 @@ internal sealed class IntegrationHost : IDisposable
     {
         if (entry.RuntimeAvailable) RuntimeUnavailable(entry);
         if (entry.State == IntegrationState.Active) entry.State = state;
+        entry.Registration = null;
+        entry.Decorations = Array.Empty<IntegrationDecorationCatalog.Contribution>();
         RemovePatches(entry);
     }
 
@@ -328,12 +385,31 @@ internal sealed class IntegrationHost : IDisposable
         }
     }
 
-    private void Fault(Entry entry, string phase, Exception error)
+    private void Fault(Entry entry, string phase, Exception error) =>
+        Fail(entry, phase + "_failed", error.GetType().Name);
+
+    private void Fail(Entry entry, string reason, string? exceptionType, string? decorationId = null)
     {
-        entry.RuntimeAvailable = false;
-        if (!RemovePatches(entry)) return;
+        entry.Registration?.EndDecorationScope();
+        entry.Registration = null;
+        entry.Decorations = Array.Empty<IntegrationDecorationCatalog.Contribution>();
+        _decorations?.Withdraw(entry.Uid ?? string.Empty);
+        if (entry.RuntimeAvailable)
+        {
+            entry.RuntimeAvailable = false;
+            try
+            {
+                entry.Plugin.OnRuntimeUnavailable();
+            }
+            catch (Exception error)
+            {
+                Emit(entry, "runtime_detach_failed", IntegrationSeverity.Error, error);
+            }
+        }
+
         entry.State = IntegrationState.Faulted;
-        Report(entry, phase + "_failed", IntegrationSeverity.Error, error);
+        Report(entry, reason, IntegrationSeverity.Error, exceptionType: exceptionType, decorationId: decorationId);
+        RemovePatches(entry);
     }
 
     // A failed removal stays recorded so Dispose can retry it.
@@ -360,6 +436,13 @@ internal sealed class IntegrationHost : IDisposable
         return false;
     }
 
+    private void FaultDecoration(string pluginId, string decorationId, string reason, string? errorType)
+    {
+        var entry = _entries.FirstOrDefault(value => value.Uid == pluginId);
+        if (entry == null || entry.State != IntegrationState.Active) return;
+        Fail(entry, reason, errorType, decorationId);
+    }
+
     private bool ReadSwitch(Entry entry)
     {
         try
@@ -384,7 +467,7 @@ internal sealed class IntegrationHost : IDisposable
     };
 
     private void Report(Entry entry, string reason, IntegrationSeverity severity = IntegrationSeverity.Info,
-        Exception? error = null)
+        Exception? error = null, string? exceptionType = null, string? decorationId = null)
     {
         try
         {
@@ -401,7 +484,8 @@ internal sealed class IntegrationHost : IDisposable
         var status = (entry.State, reason);
         if (entry.LastStatus == status) return;
         entry.LastStatus = status;
-        Emit(entry, reason, severity, error);
+        _log(new IntegrationNotice(severity, entry.Uid ?? "unknown", entry.ModId, entry.Version,
+            entry.State, entry.Verified, reason, exceptionType ?? error?.GetType().Name, decorationId));
     }
 
     private void Emit(Entry entry, string reason, IntegrationSeverity severity, Exception? error) =>
@@ -439,5 +523,8 @@ internal sealed class IntegrationHost : IDisposable
         internal bool RuntimeAvailable { get; set; }
 
         internal List<PatchRequest> Applied { get; } = new();
+        internal IntegrationRegistration? Registration { get; set; }
+        internal IReadOnlyList<IntegrationDecorationCatalog.Contribution> Decorations { get; set; } =
+            Array.Empty<IntegrationDecorationCatalog.Contribution>();
     }
 }
