@@ -38,14 +38,24 @@ internal static class TerminalButtonView
         image.rectTransform.sizeDelta = new Vector2(iconSize, iconSize);
         image.raycastTarget = false;
         image.sprite = icons.Get(key);
-        if (selected)
-        {
-            AddBorder(element.root.transform, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -1f), Vector2.zero);
-            AddBorder(element.root.transform, Vector2.zero, new Vector2(1f, 0f), Vector2.zero, new Vector2(0f, 1f));
-            AddBorder(element.root.transform, Vector2.zero, new Vector2(0f, 1f), Vector2.zero, new Vector2(1f, 0f));
-            AddBorder(element.root.transform, new Vector2(1f, 0f), Vector2.one, new Vector2(-1f, 0f), Vector2.zero);
-        }
+        if (selected) AddSelectionFrame(element.root.transform);
         return element;
+    }
+
+    /// <summary>Adds the one-pixel frame that marks a selected button; toggle the returned object to show or hide it.</summary>
+    internal static GameObject AddSelectionFrame(Transform parent)
+    {
+        var frame = new GameObject("selection_frame", typeof(RectTransform)).GetComponent<RectTransform>();
+        frame.SetParent(parent, false);
+        frame.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+        frame.anchorMin = Vector2.zero;
+        frame.anchorMax = Vector2.one;
+        frame.offsetMin = frame.offsetMax = Vector2.zero;
+        AddBorder(frame, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -1f), Vector2.zero);
+        AddBorder(frame, Vector2.zero, new Vector2(1f, 0f), Vector2.zero, new Vector2(0f, 1f));
+        AddBorder(frame, Vector2.zero, new Vector2(0f, 1f), Vector2.zero, new Vector2(1f, 0f));
+        AddBorder(frame, new Vector2(1f, 0f), Vector2.one, new Vector2(-1f, 0f), Vector2.zero);
+        return frame.gameObject;
     }
 
     private static void AddBorder(Transform parent, Vector2 min, Vector2 max, Vector2 offsetMin, Vector2 offsetMax)

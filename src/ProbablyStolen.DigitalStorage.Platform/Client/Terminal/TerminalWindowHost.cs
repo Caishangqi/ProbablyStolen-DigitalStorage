@@ -128,6 +128,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     protected virtual int HostHeight => TerminalWindowMetrics.GetHeight(_rows);
 
+    protected virtual float HostWidth => TerminalWindowMetrics.Width;
+
     protected virtual GameItem? PositionOwner => _terminal;
 
     protected virtual ICurrentTerminalStore CreateCurrentTerminalStore() => new TerminalTags(Terminal);
@@ -147,6 +149,11 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     }
 
     protected virtual void OnHostClosed(bool actualClose)
+    {
+    }
+
+    /// <summary>Runs once a newly built window is visible, when its layout can be measured.</summary>
+    protected virtual void OnHostShown()
     {
     }
 
@@ -229,6 +236,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _dock?.RebuildNow();
         _window.Show();
         _window.frame?.dragHandle?.MoveFront();
+        OnHostShown();
     }
 
     private void Build()
@@ -240,7 +248,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         if (builder == null) return;
 
         builder.SetDraggable(true).SetCloseOnEscape(false)
-            .SetSize(TerminalWindowMetrics.Width, HostHeight)
+            .SetSize(HostWidth, HostHeight)
             .OnClose(ClearControls);
         builder.BeginColumn(spacing: 0f);
         _viewHost = builder.CurrentContainer;
@@ -252,6 +260,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         builder.End();
 
         _window = builder.GetWindow();
+        _subHost.gameObject.AddComponent<SubScreenFitWatcher>().Initialize(_subHost, FitSubScreen);
         _subHost.gameObject.SetActive(false);
         AttachToNativeWindowLayer();
         WindowPositionMemory.Restore(PositionOwner, _window);
@@ -510,13 +519,17 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         var baseline = _sizeBeforeSubScreen ?? _window.Rect.sizeDelta;
         _sizeBeforeSubScreen = baseline;
         _window.SetSize(baseline.x, baseline.y);
+        // A refit starts from a window the previous fit enlarged; lay the frame out at the baseline first, or the content
+        // root still reports the enlarged size and the frame chrome comes out too small or negative.
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_window.Rect);
         LayoutRebuilder.ForceRebuildLayoutImmediate(_subHost);
         var content = _window.ContentRoot.rect.size;
         var needed = new Vector2(LayoutUtility.GetPreferredWidth(_subHost), LayoutUtility.GetPreferredHeight(_subHost));
-        var chrome = _window.Rect.rect.size - content;
+        var chrome = Vector2.Max(Vector2.zero, _window.Rect.rect.size - content);
         var width = SubScreenMetrics.GetLength(baseline.x, needed.x, chrome.x, _subScreen?.FitsContent == true);
         var height = SubScreenMetrics.GetLength(baseline.y, needed.y, chrome.y, _subScreen?.FitsContent == true);
         _window.SetSize(width, height);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_window.Rect);
     }
 
     /// <inheritdoc />
@@ -601,6 +614,28 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         finally
         {
             _closing = false;
+        }
+    }
+
+    // A borrowed native panel can settle its size a frame after the page was fitted, without any callback. While the
+    // page is shown, refit whenever its measured size changes; the measure reads Unity's cached layout values.
+    private sealed class SubScreenFitWatcher : MonoBehaviour
+    {
+        private RectTransform? _content;
+        private Action? _fit;
+        private Vector2 _fitted;
+
+        internal void Initialize(RectTransform content, Action fit) => (_content, _fit) = (content, fit);
+
+        private void OnEnable() => _fitted = Vector2.negativeInfinity;
+
+        private void LateUpdate()
+        {
+            if (_content == null || _fit == null) return;
+            var size = new Vector2(LayoutUtility.GetPreferredWidth(_content), LayoutUtility.GetPreferredHeight(_content));
+            if (Mathf.Approximately(size.x, _fitted.x) && Mathf.Approximately(size.y, _fitted.y)) return;
+            _fitted = size;
+            _fit();
         }
     }
 }
