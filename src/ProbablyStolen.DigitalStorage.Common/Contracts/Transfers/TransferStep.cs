@@ -1,6 +1,16 @@
+using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+
+/// <summary>A verified failure before any root movement was attempted.</summary>
+public class RootTransferNotStartedException : InvalidOperationException
+{
+    /// <summary>Creates a failure that permits cancellation of the current operation fee.</summary>
+    public RootTransferNotStartedException(string message) : base(message) { }
+
+    internal RootTransferNotStartedException(string message, Exception cause) : base(message, cause) { }
+}
 
 /// <summary>How one root transfer step ended.</summary>
 public enum TransferOutcome

@@ -12,6 +12,9 @@ internal static class ItemPrices
     /// <summary>The drive with fourteen cell bays.</summary>
     internal const long Drive = 350;
 
+    /// <summary>The IO Port.</summary>
+    internal const long IoPort = 300;
+
     /// <summary>The terminal.</summary>
     internal const long Terminal = 250;
 

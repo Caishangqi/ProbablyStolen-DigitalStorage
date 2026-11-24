@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests
@@ -10,9 +11,9 @@ namespace ProbablyStolen.DigitalStorage.IntegrationTests
         [TestCase(true)]
         public void LiquidUpdate_StoredBottle_ResumesAfterLeavingCell(bool nested)
         {
-            var cell = NativeCellResolverTests.CompleteCell();
-            var page = new GameGridInventory { Owner = cell, overrideLockInsert = true };
-            cell.StoragePages.Add(page);
+            var cell = CellInventoryFixture.Create();
+            Assert.That(CellPages.TryAppendStripPage(cell, PageGeometry.Strip(new BoundingSize(1, 2), 16)), Is.True);
+            var page = CellInventoryFixture.Tabs(cell).GetTabInventory(1)!;
             var bottle = new GameItem("bottled_water");
             if (nested)
             {

@@ -5,7 +5,7 @@ namespace ProbablyStolen.DigitalStorage.Api.Networking;
 /// <summary>Network lookups must run on the main thread.</summary>
 public interface IGridHelper
 {
-    /// <summary>Finds the network of a terminal, drive or controller item.</summary>
+    /// <summary>Finds the grid that contains a network machine.</summary>
     /// <returns>False when the item is not a network machine.</returns>
     bool TryGetNode(GameItem item, out IGridNode? node);
 

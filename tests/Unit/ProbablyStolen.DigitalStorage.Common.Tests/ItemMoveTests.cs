@@ -48,6 +48,21 @@ public sealed class ItemMoveTests
     }
 
     [Test]
+    public void Run_RemovalCallbackFillsOutput_ReturnsWithoutOverwritingIt()
+    {
+        var port = new FakePort();
+        port.AfterDetach = () => port.TargetOccupied = true;
+
+        var result = ItemMove.Run(port);
+
+        Assert.That(result.Outcome, Is.EqualTo(ItemMoveOutcome.Returned));
+        Assert.That(port.TargetOccupied, Is.True);
+        Assert.That(port.AttachCalls, Is.Zero);
+        Assert.That(port.Location, Is.EqualTo("source"));
+        Assert.That(port.ReturnCalls, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Run_AttachThrowsAfterAcceptance_DoesNotReturnAgain()
     {
         var port = new FakePort { AttachErrorAfterAcceptance = true };
@@ -115,6 +130,9 @@ public sealed class ItemMoveTests
         internal bool AttachRefused { get; set; }
         internal bool AttachError { get; set; }
         internal bool AttachErrorAfterAcceptance { get; set; }
+        internal Action? AfterDetach { get; set; }
+        internal bool TargetOccupied { get; set; }
+        internal int AttachCalls { get; private set; }
         internal bool ReturnRefused { get; set; }
         internal bool ReturnError { get; set; }
         internal string? Location { get; set; } = "source";
@@ -126,12 +144,16 @@ public sealed class ItemMoveTests
             if (DetachError && !DetachErrorAfterRemoval) throw new InvalidOperationException();
             if (DetachRefused) return false;
             Location = null;
+            AfterDetach?.Invoke();
             if (DetachError) throw new InvalidOperationException();
             return true;
         }
 
+        public bool CanAttach() => !TargetOccupied && Location == null;
+
         public void Attach()
         {
+            AttachCalls++;
             if (AttachError) throw new InvalidOperationException();
             if (AttachRefused) return;
             Location = "target";

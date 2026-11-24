@@ -15,7 +15,7 @@ public enum CellRemovalFailure
     /// <summary>The component is locked in place.</summary>
     STUCK,
 
-    /// <summary>The cell is mounted in a drive.</summary>
+    /// <summary>The cell is installed in a Drive or IO Port bay.</summary>
     MOUNTED,
 
     /// <summary>The digital storage component contains items and must be emptied first.</summary>

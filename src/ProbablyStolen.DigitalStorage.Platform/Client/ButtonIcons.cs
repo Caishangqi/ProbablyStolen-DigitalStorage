@@ -10,6 +10,14 @@ internal sealed class ButtonIcons : IDisposable
     internal const string Placeholder = "button_placeholder";
     internal const string Add = "button_add";
     internal const string SampleAttributes = "button_sample_attributes";
+    internal const string IoStart = "button_io_start";
+    internal const string IoPause = "button_io_pause";
+    internal const string IoCancel = "button_io_cancel";
+    internal const string ToLeft = "button_to_left";
+    internal const string ToRight = "button_to_right";
+    internal const string IoFinishEmpty = "button_io_finish_empty";
+    internal const string IoFinishFull = "button_io_finish_full";
+    internal const string IoFinishDone = "button_io_finish_done";
     private readonly Action<string> _error;
     private readonly Dictionary<string, Sprite> _sprites = new(StringComparer.Ordinal);
     private readonly HashSet<string> _reported = new(StringComparer.Ordinal);
@@ -34,6 +42,7 @@ internal sealed class ButtonIcons : IDisposable
             "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
             "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_stack",
             "button_keep_open_off", "button_keep_open_on",
+            IoStart, IoPause, IoCancel, ToLeft, ToRight, IoFinishEmpty, IoFinishFull, IoFinishDone,
             Add, SampleAttributes
         }) TryCreate(key, out _);
     }

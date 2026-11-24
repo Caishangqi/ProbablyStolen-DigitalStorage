@@ -41,6 +41,8 @@ public sealed class TypeLimitModuleTooltipBridgeTests
             var tags = new Dictionary<string, TagState>(state.dict);
             var storedEffect = state.dict[Effect].GetString();
             var writes = item.TagWrites;
+            var row = new MachineryPanelRow();
+            item.contentWindow = new PixelWindow { childElement = row };
             foreach (var (translate, expected) in new (Func<string, string?>, string)[]
                 { (TranslateEnglish, English), (TranslateChinese, Chinese), (TranslateEnglish, English) })
             {
@@ -60,8 +62,7 @@ public sealed class TypeLimitModuleTooltipBridgeTests
             Assert.That(TypeLimitRolls.Price(roll), Is.EqualTo(80));
             Assert.That(CellTypeLimit.Calculate(StorageCellTier.All[0], UpgradeInventory.Empty.With(InstalledModule.TypeLimit(roll))),
                 Is.EqualTo((352, 142)));
-            var spy = CellPages.Spy(item);
-            Assert.That((spy.LayoutChecks, spy.CachedReads, spy.LiveReads), Is.EqualTo((0, 0, 0)));
+            Assert.That(row.PagesPanelReads, Is.Zero);
         }
         Assert.That(errors, Is.Empty);
     }

@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network.Pathing;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
+using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Content;
@@ -140,6 +142,49 @@ public sealed class NativeNetworkScannerTests
         Assert.That(bay.childItem, Is.Not.Null);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Capture_IoPortJoinsControllerGridWithoutContributingStorage(bool includeDrive)
+    {
+        var grid = new GameGridInventory();
+        var controller = new GameItem(ControllerItem.ItemId);
+        var ioPort = new GameItem("digital_storage.io_port");
+        grid.Place(controller);
+        grid.Place(ioPort);
+        grid.Touch(controller, ioPort);
+        ioPort.Slots.Add(new GameSlotInventory
+        {
+            identifier = CellContentWindow.BayPrefix + "0",
+            childItem = new GameItem("digital_storage.item_storage_cell_1k")
+        });
+        var drive = new GameItem(DriveItem.ItemId);
+        if (includeDrive)
+        {
+            grid.Place(drive);
+            grid.Touch(ioPort, drive);
+        }
+
+        var resolved = new List<GameItem>();
+        var scanner = new NativeNetworkScanner(new PowerSettings(), storageCellResolver: machine =>
+        {
+            resolved.Add(machine);
+            return Array.Empty<IStorageCell>();
+        });
+        var snapshot = scanner.Capture(controller);
+        var component = snapshot.FindGrid(ioPort);
+        var node = snapshot.FindNode(ioPort);
+
+        Assert.That(component, Is.SameAs(snapshot.FindGrid(controller)));
+        Assert.That(component.GetPathingService().GetControllerState(), Is.EqualTo(ControllerState.Online));
+        Assert.That(component.DriveCount, Is.EqualTo(includeDrive ? 1 : 0));
+        Assert.That(component.TotalPowerUsage, Is.EqualTo(includeDrive ? 5 : 3));
+        Assert.That(node.Kind, Is.EqualTo(GridNodeKind.IoPort));
+        Assert.That(node.PowerUsage, Is.Zero);
+        Assert.That(node.StorageCells, Is.Empty);
+        Assert.That(node.OccupiedDriveSlots, Is.Zero);
+        Assert.That(resolved, Is.EqualTo(includeDrive ? new[] { drive } : Array.Empty<GameItem>()));
+    }
+
     private static (GameGridInventory Grid, GameItem[] Machines) CreateChain()
     {
         var grid = new GameGridInventory();
@@ -168,6 +213,7 @@ public sealed class NativeNetworkScannerTests
             GridNodeKind.Controller => 3,
             GridNodeKind.Drive => DriveUsage,
             GridNodeKind.Terminal => 1,
+            GridNodeKind.IoPort => 0,
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
     }

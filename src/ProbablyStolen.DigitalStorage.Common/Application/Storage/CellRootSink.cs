@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
@@ -32,10 +33,14 @@ public sealed class CellRootSink : IRootSink
     public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
-        if (_scope == PlanScope.Insert && _view.Partition.Rejection(root.Key) is { } refused)
-            return TransferStep.Rejected(refused);
+        var partitionMark = TransferProfile.Mark();
+        var refused = _scope == PlanScope.Insert ? _view.Partition.Rejection(root.Key) : null;
+        TransferProfile.Add(TransferPart.PartitionCheck, partitionMark);
+        if (refused is { } reason) return TransferStep.Rejected(reason);
 
+        var planMark = TransferProfile.Mark();
         var plan = CellStorePlanner.Plan(_view, root.ToCandidate(), _scope);
+        TransferProfile.Add(TransferPart.StorePlan, planMark);
         if (plan.Rejection is { } rejection) return TransferStep.Rejected(rejection);
         if (mode == Actionable.Simulate) return TransferStep.Moved;
 
@@ -49,10 +54,12 @@ public sealed class CellRootSink : IRootSink
         var step = _pages.MoveInto(root, plan.Page, plan.Slot);
         if (!step.IsMoved) return step;
 
+        var recordMark = TransferProfile.Mark();
         if (_scope == PlanScope.Insert)
             _view.RecordStored(plan.Page, plan.Slot, root.Key, root.Units, root.Size);
         else
             _view.RecordRelocated(root.Page, _view.SlotAt(root.Page, root.X, root.Y), plan.Page, plan.Slot, root.Key);
+        TransferProfile.Add(TransferPart.ViewRecord, recordMark);
         return step;
     }
 }

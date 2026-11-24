@@ -37,7 +37,8 @@ internal sealed class NativeNetworkScanner
         for (var index = 0; index < machines.Count; index++)
         {
             var machine = machines[index];
-            var kind = GetKind(machine);
+            var kind = FindKind(machine.identifier) ??
+                throw new ArgumentException("The item is not a DigitalStorage network machine.", nameof(focus));
             var storageCells = kind == GridNodeKind.Drive
                 ? _storageCellResolver?.Invoke(machine) ?? Array.Empty<IStorageCell>()
                 : Array.Empty<IStorageCell>();
@@ -93,31 +94,17 @@ internal sealed class NativeNetworkScanner
         return result;
     }
 
-    /// <summary>Gets whether an item is a terminal, drive or controller.</summary>
-    internal static bool IsNetworkMachine(GameItem item) =>
-        item.identifier == ControllerItem.ItemId ||
-        item.identifier == DriveItem.ItemId ||
-        item.identifier == TerminalItem.ItemId;
+    /// <summary>Gets whether an item participates in a DigitalStorage grid.</summary>
+    internal static bool IsNetworkMachine(GameItem item) => FindKind(item.identifier) != null;
 
-    private static GridNodeKind GetKind(GameItem item)
+    private static GridNodeKind? FindKind(string? identifier) => identifier switch
     {
-        if (item.identifier == ControllerItem.ItemId)
-        {
-            return GridNodeKind.Controller;
-        }
-
-        if (item.identifier == DriveItem.ItemId)
-        {
-            return GridNodeKind.Drive;
-        }
-
-        if (item.identifier == TerminalItem.ItemId)
-        {
-            return GridNodeKind.Terminal;
-        }
-
-        throw new ArgumentException("The item is not a DigitalStorage network machine.", nameof(item));
-    }
+        ControllerItem.ItemId => GridNodeKind.Controller,
+        DriveItem.ItemId => GridNodeKind.Drive,
+        TerminalItem.ItemId => GridNodeKind.Terminal,
+        IoPortItem.ItemId => GridNodeKind.IoPort,
+        _ => null
+    };
 
     private static int CountOccupiedDriveSlots(GameItem drive)
     {

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
-using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
@@ -20,7 +19,6 @@ namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 [NonParallelizable]
 internal sealed class WorkbenchUsageTests
 {
-    private static readonly StorageCellTier Tier = StorageCellTier.All[0];
     private const string Unavailable = "module_refusal_cellunavailable";
 
     [TestCase(129, 4096L, null)]
@@ -38,7 +36,7 @@ internal sealed class WorkbenchUsageTests
             Assert.That(fixture.Lines(bench.Module), Is.EqualTo(refusal == null ? Array.Empty<string>() : new[] { refusal }));
             Assert.That(bench.Refresh.Refresh(), Is.False);
         }
-        Assert.That((bench.Spy.LayoutChecks, bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((1, 1, 0)));
+        Assert.That((bench.LayoutChecks, bench.RootReads), Is.EqualTo((1, 1)));
         Assert.That(fixture.Errors, Is.Empty);
     }
 
@@ -55,7 +53,7 @@ internal sealed class WorkbenchUsageTests
         Assert.That(summary, Does.Contain("workbench_info_rules: <color=#ABCDEF>0/142</color>"));
         Assert.That(summary, Does.Contain("workbench_info_types: <color=#ABCDEF>129/352</color>"));
         Assert.That(row.ModulePanelReads - before, Is.EqualTo(1));
-        Assert.That((bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((1, 0)));
+        Assert.That(bench.RootReads, Is.EqualTo(1));
     }
 
     [Test]
@@ -64,16 +62,15 @@ internal sealed class WorkbenchUsageTests
         using var fixture = new Fixture();
         var bench = fixture.Workbench(129);
         var row = bench.Cell.contentWindow!.childElement!;
-        var contents = Contents(129);
         var before = row.ModulePanelReads;
-        var withModule = CellPages.ProjectContents(bench.Cell, contents);
+        var withModule = CellPages.ReadCached(bench.Cell, CellWriteState.Writable);
         Assert.That((withModule.StorageTypeLimit, withModule.PartitionRuleLimit), Is.EqualTo((352, 142)));
         Assert.That(withModule.Upgrades.GetInstalledUpgrades(CellModuleKind.TypeLimit), Is.EqualTo(1));
         Assert.That(row.ModulePanelReads - before, Is.EqualTo(1));
 
         bench.Bay.childItems.Clear();
         before = row.ModulePanelReads;
-        var withoutModule = CellPages.ProjectContents(bench.Cell, contents);
+        var withoutModule = CellPages.ReadCached(bench.Cell, CellWriteState.Writable);
         Assert.That((withoutModule.StorageTypeLimit, withoutModule.PartitionRuleLimit), Is.EqualTo((256, 128)));
         Assert.That(withoutModule.Upgrades.GetInstalledUpgrades(CellModuleKind.TypeLimit), Is.Zero);
         Assert.That(withoutModule.Usage, Is.SameAs(withModule.Usage));
@@ -93,14 +90,14 @@ internal sealed class WorkbenchUsageTests
         fixture.Usage.RefreshSummary(bench.Cell);
         Assert.That(bench.SummaryCounts, Is.EqualTo(new int?[] { null, 124 }));
         Assert.That(bench.Refresh.Refresh(), Is.False);
-        Assert.That(bench.Spy.CachedReads, Is.EqualTo(1));
+        Assert.That(bench.RootReads, Is.EqualTo(1));
 
         var row = (MachineryPanelRow)bench.Inventory.parent!;
         row.parent = null;
         Assert.That(fixture.Usage.Find(bench.Cell), Is.Null);
         Assert.That(bench.Refresh.Refresh(), Is.True);
         Assert.That(bench.Refresh.Refresh(), Is.False);
-        Assert.That(bench.Spy.CachedReads, Is.EqualTo(1));
+        Assert.That(bench.RootReads, Is.EqualTo(1));
     }
 
     [Test]
@@ -111,31 +108,37 @@ internal sealed class WorkbenchUsageTests
         var other = fixture.Workbench(260);
         bench.Refresh.Refresh();
         other.Refresh.Refresh();
-        var page = new GameGridInventory { parent = bench.Cell.contentWindow!.childElement };
-        var root = new GameItem("root");
-        CellPages.ObserveRootChanges(page);
-        bench.Spy.ReadCached = () => Contents(268);
+        var page = CellInventoryFixture.Tabs(bench.Cell).GetTabInventory(1)!;
+        var root = new GameItem("temporary_root");
+        var oldSeatedStamp = CellInventoryCache.ContentStamp(bench.Cell);
+        var otherStamp = CellInventoryCache.ContentStamp(other.Cell);
 
         page.Place(root);
         page.onSlotAddItemEndFunc?.Invoke(root, page, null);
+        var addedStamp = CellInventoryCache.ContentStamp(bench.Cell);
+        Assert.That(addedStamp, Is.Not.SameAs(oldSeatedStamp));
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
         Assert.That(fixture.Usage.Find(bench.Cell)?.Status, Is.EqualTo(CellModuleUsage.ReadStatus.Pending));
         Assert.That(fixture.Lines(other.Module), Is.EqualTo(new[] { "module_refusal_typesexceedlimit:4" }));
-        page.childItems.Remove(root);
-        root.parentInventory = null;
+        Assert.That(page.Expel(root), Is.True);
         page.onSlotRemoveItemEndFunc?.Invoke(root, page, null);
+        var removedStamp = CellInventoryCache.ContentStamp(bench.Cell);
+        Assert.That(removedStamp, Is.Not.SameAs(addedStamp));
+        bench.SetContents(268);
         CellPages.NotifyLayoutWritten(bench.Cell);
-        var unseated = new GameItem(Tier.CellId) { parentInventory = bench.Inventory };
+        Assert.That(CellInventoryCache.ContentStamp(bench.Cell), Is.Not.SameAs(removedStamp));
+        var unseated = new GameItem(StorageCellTier.All[0].CellId) { parentInventory = bench.Inventory };
+        var unseatedStamp = CellInventoryCache.ContentStamp(unseated);
         CellPages.NotifyLayoutWritten(unseated);
 
-        Assert.That((bench.Spy.LayoutChecks, bench.Spy.CachedReads, bench.Spy.CacheDrops), Is.EqualTo((1, 1, 3)));
-        Assert.That(CellPages.Spy(unseated).CacheDrops, Is.Zero);
-        Assert.That(other.Spy.CacheDrops, Is.Zero);
+        Assert.That((bench.LayoutChecks, bench.RootReads), Is.EqualTo((1, 1)));
+        Assert.That(CellInventoryCache.ContentStamp(unseated), Is.SameAs(unseatedStamp));
+        Assert.That(CellInventoryCache.ContentStamp(other.Cell), Is.SameAs(otherStamp));
         Assert.That(bench.Refresh.Refresh(), Is.True);
         Assert.That(bench.Refresh.Refresh(), Is.False);
         Assert.That(other.Refresh.Refresh(), Is.False);
         Assert.That(fixture.Lines(bench.Module), Is.EqualTo(new[] { "module_refusal_typesexceedlimit:12" }));
-        Assert.That((bench.Spy.CachedReads, other.Spy.CachedReads), Is.EqualTo((2, 1)));
+        Assert.That((bench.RootReads, other.RootReads), Is.EqualTo((2, 1)));
     }
 
     [Test]
@@ -158,7 +161,7 @@ internal sealed class WorkbenchUsageTests
         CellUpgradeInventory.RaiseModulesChanged(bench.Cell);
         Assert.That(fixture.Lines(added), Is.Empty, "A stale parent alone is insufficient for membership.");
         Assert.That(fixture.Lines(bench.Module), Is.EqualTo(new[] { "module_refusal_typesexceedlimit:5" }));
-        Assert.That((bench.Spy.LayoutChecks, bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((1, 1, 0)));
+        Assert.That((bench.LayoutChecks, bench.RootReads), Is.EqualTo((1, 1)));
     }
 
     [Test]
@@ -194,7 +197,7 @@ internal sealed class WorkbenchUsageTests
         Assert.That(other.SummaryCounts, Is.EqualTo(new int?[] { 258, null }));
         Assert.That(fixture.Lines(other.Module), Is.Empty);
         Assert.That(other.Refresh.Refresh(), Is.False);
-        Assert.That((other.Spy.LayoutChecks, other.Spy.CachedReads, other.Spy.LiveReads), Is.EqualTo((1, 1, 0)));
+        Assert.That((other.LayoutChecks, other.RootReads), Is.EqualTo((1, 1)));
     }
 
     [Test]
@@ -210,7 +213,7 @@ internal sealed class WorkbenchUsageTests
         CellPages.NotifyLayoutWritten(bench.Cell);
         Assert.That(bench.Refresh.Refresh(), Is.False);
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
-        Assert.That(bench.Spy.CachedReads, Is.Zero);
+        Assert.That(bench.RootReads, Is.Zero);
 
         SaveManager.IsDecoding = false;
         Assert.That(bench.Refresh.Refresh(), Is.True);
@@ -230,7 +233,7 @@ internal sealed class WorkbenchUsageTests
         CellPages.NotifyLayoutWritten(bench.Cell);
         Assert.That(fixture.Lines(equal), Is.Empty);
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
-        FailRead(bench.Spy, failure);
+        bench.FailRead(failure);
 
         Assert.That(bench.Refresh.Refresh(), Is.True);
         Assert.That(fixture.Usage.Find(bench.Cell)?.Status, Is.EqualTo(CellModuleUsage.ReadStatus.Unavailable));
@@ -238,12 +241,11 @@ internal sealed class WorkbenchUsageTests
         Assert.That(fixture.Lines(bench.Module), Is.EqualTo(new[] { Unavailable }));
         Assert.That(fixture.Lines(equal), Is.EqualTo(blockEqual ? new[] { Unavailable } : Array.Empty<string>()));
         Assert.That(bench.Refresh.Refresh(), Is.False);
-        Assert.That(bench.Spy.LayoutChecks, Is.EqualTo(2));
-        Assert.That(bench.Spy.LiveReads, Is.Zero);
+        Assert.That(bench.LayoutChecks, Is.EqualTo(2));
         Assert.That(fixture.Errors, Has.Count.EqualTo(failure == "unreadable" ? 1 : 0));
 
-        bench.Spy.Complete = true;
-        bench.Spy.ReadCached = () => Contents(128);
+        bench.RestoreLayout();
+        bench.SetContents(128);
         CellPages.NotifyLayoutWritten(bench.Cell);
         Assert.That(bench.Refresh.Refresh(), Is.True);
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
@@ -258,9 +260,9 @@ internal sealed class WorkbenchUsageTests
         module.RemovalProbe = () => CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, module);
 
         Assert.That(WorkbenchModuleHighlight.MayRemove(module, null), Is.False);
-        Assert.That((bench.Spy.LayoutChecks, bench.Spy.LiveReads), Is.EqualTo((0, 0)));
+        Assert.That((bench.LayoutChecks, bench.RootReads), Is.EqualTo((0, 0)));
         Assert.That(WorkbenchModuleHighlight.MayRemove(module, module), Is.False);
-        Assert.That((bench.Spy.LayoutChecks, bench.Spy.LiveReads), Is.EqualTo((1, 1)));
+        Assert.That((bench.LayoutChecks, bench.RootReads), Is.EqualTo((1, 1)));
 
         var equal = new GameItem(CellUpgradeInventory.EqualDistributionId) { RemovalProbe = () => true };
         bench.Bay.Place(equal);
@@ -281,12 +283,12 @@ internal sealed class WorkbenchUsageTests
         bench.Refresh.Refresh();
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
         Assert.That(CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, bench.Module), Is.True);
-        bench.Spy.ReadLive = () => Contents(256, 4097);
+        bench.SetContents(256, 4097);
         Assert.That(CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, bench.Module), Is.False);
-        bench.Spy.ReadLive = () => Contents(257);
+        bench.SetContents(257);
         Assert.That(CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, bench.Module), Is.False);
         Assert.That(fixture.Lines(bench.Module), Is.Empty);
-        Assert.That((bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((1, 3)));
+        Assert.That(bench.RootReads, Is.EqualTo(4));
     }
 
     [TestCase("incomplete", 0)]
@@ -298,9 +300,9 @@ internal sealed class WorkbenchUsageTests
         using var fixture = new Fixture();
         var bench = fixture.Workbench(0);
         bench.Refresh.Refresh();
-        FailRead(bench.Spy, failure);
+        bench.FailRead(failure);
         Assert.That(CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, bench.Module), Is.False);
-        Assert.That((bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((1, expectedReads)));
+        Assert.That(bench.RootReads, Is.EqualTo(1 + expectedReads));
     }
 
     [Test]
@@ -312,19 +314,7 @@ internal sealed class WorkbenchUsageTests
         bench.Bay.Place(equal);
         Assert.That(CellUpgradeCallbacks.CanInstall(CellUpgradeInventory.InstallationState(bench.Cell), CellModuleKind.TypeLimit).IsAllowed, Is.True);
         Assert.That(CellUpgradeInventory.CanRemove(bench.Cell, bench.Bay, equal), Is.True);
-        Assert.That((bench.Spy.CachedReads, bench.Spy.LiveReads), Is.EqualTo((0, 0)));
-    }
-
-    private static void FailRead(PageReadSpy spy, string failure)
-    {
-        if (failure == "incomplete") spy.Complete = false;
-        else if (failure == "unavailable") spy.Unavailable = true;
-        else
-        {
-            spy.ReadCached = spy.ReadLive = failure == "protected"
-                ? () => Contents(0, protectedPage: true)
-                : () => throw new InvalidOperationException("injected usage read failure");
-        }
+        Assert.That(bench.RootReads, Is.Zero);
     }
 
     private static GameItem TypeModule()
@@ -332,16 +322,6 @@ internal sealed class WorkbenchUsageTests
         var item = new GameItem(CellUpgradeInventory.TypeLimitId);
         ModuleTags.Write(item, new TypeLimitRoll(ModuleQuality.Common, 8, 5));
         return item;
-    }
-
-    private static CellView Contents(int types, long area = 0, bool protectedPage = false)
-    {
-        var usage = new CellUsage();
-        for (var index = 0; index < types; index++)
-            usage.Add(new ItemKey($"fixture_{index}"), 1, index == 0 ? Math.Max(1, area - types + 1) : 1);
-        var pages = new List<PageView> { PageView.Unslotted(PageGeometry.Anchor, 0) };
-        if (protectedPage) pages.Add(PageView.Protected(PageGeometry.Strip(new BoundingSize(1, 1), 16), 1));
-        return new CellView(CellRules.For(Tier), Tier.GetTotalTypes(), CellTypeLimit.BasePartitionRuleLimit, pages, usage, CellPartition.Unfiltered);
     }
 
     private sealed class Fixture : IDisposable
@@ -389,7 +369,8 @@ internal sealed class WorkbenchUsageTests
         internal GameItem Cell => Inventory.childItem!;
         internal GameGridInventory Bay => CellUpgradeInventory.Bay(Cell)!;
         internal GameItem Module => Bay.childItems[0];
-        internal PageReadSpy Spy => CellPages.Spy(Cell);
+        internal int RootReads => CellInventoryFixture.Tabs(Cell).GetTabInventory(0)!.childItems.SnapshotReads;
+        internal int LayoutChecks => Cell.contentWindow!.childElement!.StorageReads;
 
         internal Bench(WorkbenchUsage usage, int types, long area)
         {
@@ -406,20 +387,73 @@ internal sealed class WorkbenchUsageTests
 
         internal void SeatNewCell(int types, long area = 0)
         {
-            if (Inventory.childItem is { } previous) previous.parentInventory = null;
-            var cell = new GameItem(Tier.CellId) { parentInventory = Inventory, contentWindow = new PixelWindow() };
-            Inventory.childItem = cell;
-            cell.contentWindow.parentItems.Add(cell);
-            var bay = new GameGridInventory { identifier = CellUpgradeInventory.BayId };
-            var row = new MachineryPanelRow
+            if (Inventory.childItem is { } previous) Inventory.Expel(previous);
+            var cell = CellInventoryFixture.Create();
+            var tabs = CellInventoryFixture.Tabs(cell);
+            var layout = LayoutDescriptor.AnchorOnly();
+            var strip = PageGeometry.Strip(new BoundingSize(1, 1), 16);
+            // Leave one spare strip so live inventory changes do not require a layout event.
+            var pageCount = (types + strip.SlotCount - 1) / strip.SlotCount + 1;
+            for (var index = 0; index < pageCount; index++)
             {
-                parent = cell.contentWindow,
-                Modules = new MachineryPanel { content = new MachineryIntake { content = bay } }
-            };
-            cell.contentWindow.childElement = row;
-            bay.parent = row;
-            bay.Place(TypeModule());
-            Spy.ReadCached = Spy.ReadLive = () => Contents(types, area);
+                CellPages.AddPage(tabs, strip);
+                layout = layout.WithAppended(strip);
+            }
+            CellTags.WriteLayout(cell, layout);
+            Inventory.Place(cell);
+            Bay.Place(TypeModule());
+            SetContents(types, area);
+        }
+
+        internal void SetContents(int types, long area = 0)
+        {
+            var tabs = CellInventoryFixture.Tabs(Cell);
+            var nextType = 0;
+            for (var index = 1; index < tabs.count; index++)
+            {
+                var page = tabs.GetTabInventory(index)!;
+                while (page.childItems.Count > 0) page.Expel(page.childItems[^1]);
+                for (var x = 0; x < page.inventoryShape.width && nextType < types; x++, nextType++)
+                {
+                    var units = nextType == 0 ? checked((int)Math.Max(1, area - types + 1)) : 1;
+                    page.Place(new GameItem($"fixture_{nextType}")
+                    {
+                        modifiedShape = new GridShape(x, 0, 1, 1),
+                        unitCount = units
+                    });
+                }
+            }
+            if (nextType != types) throw new InvalidOperationException("Not enough fixture slots.");
+        }
+
+        internal void FailRead(string failure)
+        {
+            var page = CellInventoryFixture.Tabs(Cell).GetTabInventory(1)!;
+            switch (failure)
+            {
+                case "incomplete":
+                    page.inventoryShape.width--;
+                    break;
+                case "unavailable":
+                    CellHealth.Set(Cell, new CellHealthState(CellHealthStatus.Unavailable, CellUnavailableReason.InvalidLayout));
+                    break;
+                case "unreadable":
+                    page.childItems.Add(new GameItem("unowned_root"));
+                    break;
+                case "protected":
+                    page.Place(new GameItem("off_grid_root") { modifiedShape = new GridShape(0, 1, 1, 1) });
+                    break;
+                default:
+                    throw new ArgumentException("Unknown fixture failure.", nameof(failure));
+            }
+        }
+
+        internal void RestoreLayout()
+        {
+            var page = CellInventoryFixture.Tabs(Cell).GetTabInventory(1)!;
+            page.inventoryShape.width = 16;
+            page.childItems.RemoveAll(root => root.parentInventory != page);
+            CellHealth.Set(Cell, CellHealthState.Available);
         }
     }
 

@@ -163,7 +163,8 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     internal static bool HasPartitionRules(GameItem host) => CellPartitionTags.HasRules(host);
 
     internal static bool IsMounted(GameItem host) =>
-        host.parentInventory?.identifier?.StartsWith(BayPrefix, StringComparison.Ordinal) == true;
+        host.parentInventory?.identifier?.StartsWith(BayPrefix, StringComparison.Ordinal) == true ||
+        IoPortItem.IsCellInBay(host);
 
     internal static bool CanRemoveComponent(GameItem component, StorageCellDisassemblyRecipe recipe)
     {

@@ -79,6 +79,45 @@ drive_name,Drive
 drive_desc,Holds storage cells and connects them to the network.
 controller_name,Controller
 controller_desc,Powers the storage network.
+io_port_name,IO Port
+io_port_desc,Moves items from storage cells into the network or from the network into cells. Remove all cells and modules before destroying the machine.
+io_direction_cell_to_network,Cell to network
+io_direction_network_to_cell,Network to cell
+io_bank_input,Cells to process
+io_bank_output,Processed cells
+io_finish_button,Eject {0} (click to change)
+io_finish_empty,when the cell is empty
+io_finish_full,when the cell is full
+io_finish_done,when work is complete
+io_start,Start
+io_pause,Pause
+io_cancel,Cancel the current work and pause
+io_status_idle,Idle
+io_status_working,Transferring items
+io_status_paused,Paused
+io_status_completed,Work complete; paused
+io_status_no_eligible_content,No eligible items to transfer
+io_status_no_controller,No connected controller
+io_status_controller_conflict,Multiple controllers on this network
+io_status_unpowered,Waiting for network power
+io_status_operation_fee_unavailable,Waiting for power that can cover the transfer fee
+io_status_waiting_for_capacity,Waiting for a destination that can accept the items
+io_status_storage_unavailable,Storage unavailable
+io_status_unsupported_energy_source,This power source cannot cover transfer fees
+io_status_output_full,Ejection blocked. Remove a processed cell to free an output slot.
+io_status_faulted,IO Port error. Check the log for details.
+io_status_settings_unavailable,Settings unavailable
+io_progress,{0}% complete
+network_power_io_port_name,IO Port power draw
+network_power_io_port_desc,Game power units used by each connected IO Port each night. Transfer fees are charged separately. Default: 0.
+config_section_io_port,IO Port
+io_port_rate_name,IO Port transfer rate
+io_port_rate_desc,How many items each IO Port can move per game second. A whole stack counts as one item. Default: 64.
+io_port_fee_name,Items per power unit
+io_port_fee_desc,How many items an IO Port moves for each game power unit. Counted separately for each input cell. Default: 100.
+io_tooltip_rate,Transfers up to {0} items per second
+io_tooltip_fee,Uses 1 power per {0} items transferred
+io_tooltip_state,{0} · {1}
 item_storage_cell_1k_name,1k Item Storage Cell
 item_storage_cell_1k_desc,A digital cell that stores items.
 item_storage_cell_4k_name,4k Item Storage Cell

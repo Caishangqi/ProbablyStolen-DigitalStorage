@@ -24,7 +24,7 @@ internal sealed class StorageContentRegistration : IDisposable
 
     internal StorageContentRegistration(TerminalItem terminal, DriveItem drive, StorageCellItem cell,
         ControllerItem controller, StorageComponentFactory component, MaterialItem housing,
-        CellWorkbenchItem workbench, CellModuleFactory modules, TerminalModuleFactory terminalModules,
+        CellWorkbenchItem workbench, CellModuleFactory modules, TerminalModuleFactory terminalModules, IoPortItem ioPort,
         ItemContentService service, ModLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -53,6 +53,7 @@ internal sealed class StorageContentRegistration : IDisposable
             Add(tier.ComponentId, createComponent);
             Add(tier.CellId, () => Create(() => cell.Create(tier, createComponent)));
         }
+        Add(IoPortItem.ItemId, () => Create(ioPort.Create));
         _manager.CreateRegistries();
         _manager.RegisterEntries();
         _manager.Freeze();
@@ -157,7 +158,7 @@ internal sealed class StorageContentRegistration : IDisposable
             }
 
             _directory = directory;
-            _log.Log("Digital Storage: fourteen content factories registered.");
+            _log.Log("Digital Storage: content factories registered.");
         }
         catch (Exception error)
         {

@@ -20,10 +20,13 @@ public readonly struct RootSnapshot : IEquatable<RootSnapshot>
     /// <param name="origin">
     /// The source that offered the root. Platform sinks ask it to resolve the native root; Common never does.
     /// </param>
+    /// <param name="physicalIdentity">An optional opaque session-local identity that survives rebuilding the source adapter.</param>
     /// <exception cref="ArgumentOutOfRangeException">The location is negative or the units are not positive.</exception>
-    public RootSnapshot(int page, int x, int y, BoundingSize size, ItemKey key, long units, IRootSource? origin = null)
+    public RootSnapshot(int page, int x, int y, BoundingSize size, ItemKey key, long units, IRootSource? origin = null,
+        object? physicalIdentity = null)
     {
         Origin = origin;
+        PhysicalIdentity = physicalIdentity;
         if (page < 0 || x < 0 || y < 0) throw new ArgumentOutOfRangeException(nameof(page), "A root location is not negative.");
         if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units), units, "A root has positive units.");
         Page = page;
@@ -55,6 +58,14 @@ public readonly struct RootSnapshot : IEquatable<RootSnapshot>
     /// <summary>Gets the source that offered the root, or null for detached snapshots.</summary>
     public IRootSource? Origin { get; }
 
+    /// <summary>Gets the session-local identity token, which must never be a native item or a saved value.</summary>
+    public object? PhysicalIdentity { get; }
+
+    /// <summary>Checks the same physical root at the same position with unchanged contents and shape.</summary>
+    public bool MatchesPhysicalRoot(RootSnapshot other) => PhysicalIdentity != null &&
+        ReferenceEquals(PhysicalIdentity, other.PhysicalIdentity) && Page == other.Page && X == other.X && Y == other.Y &&
+        Size.Equals(other.Size) && Equals(Key, other.Key) && Units == other.Units;
+
     /// <summary>Gets the planner candidate for this root.</summary>
     public StoreCandidate ToCandidate() => new(Size, Key, Units);
 
@@ -69,7 +80,7 @@ public readonly struct RootSnapshot : IEquatable<RootSnapshot>
     /// <inheritdoc />
     public bool Equals(RootSnapshot other) => Page == other.Page && X == other.X && Y == other.Y &&
         Size.Equals(other.Size) && Equals(Key, other.Key) && Units == other.Units &&
-        ReferenceEquals(Origin, other.Origin);
+        ReferenceEquals(Origin, other.Origin) && ReferenceEquals(PhysicalIdentity, other.PhysicalIdentity);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => obj is RootSnapshot other && Equals(other);

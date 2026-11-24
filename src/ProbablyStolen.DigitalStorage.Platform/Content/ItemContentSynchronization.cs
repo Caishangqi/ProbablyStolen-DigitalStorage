@@ -209,6 +209,7 @@ internal static class ItemContentDefinitions
             [TerminalItem.ItemId] = new(TerminalItem.ItemId, TerminalItem.NameKey, TerminalItem.DescriptionKey, ItemPrices.Terminal),
             [DriveItem.ItemId] = new(DriveItem.ItemId, DriveItem.NameKey, DriveItem.DescriptionKey, ItemPrices.Drive),
             [ControllerItem.ItemId] = new(ControllerItem.ItemId, ControllerItem.NameKey, ControllerItem.DescriptionKey, ItemPrices.Controller),
+            [IoPortItem.ItemId] = new(IoPortItem.ItemId, IoPortItem.NameKey, IoPortItem.DescriptionKey, ItemPrices.IoPort),
             [MaterialItem.ItemId] = new(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing),
             [CellWorkbenchItem.ItemId] = new(CellWorkbenchItem.ItemId, CellWorkbenchItem.NameKey, CellWorkbenchItem.DescriptionKey,
                 ItemPrices.Workbench),

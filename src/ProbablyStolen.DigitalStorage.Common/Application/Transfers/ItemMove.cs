@@ -8,6 +8,10 @@ public interface IItemMovePort
     /// <summary>Removes the item from its source. False means nothing changed.</summary>
     bool Detach();
 
+    /// <summary>Gets whether the detached item may still be attached to the planned target.</summary>
+    /// <remarks>The check runs after source callbacks and before unchecked native acceptance.</remarks>
+    bool CanAttach();
+
     /// <summary>Puts the detached item into the target. May throw.</summary>
     void Attach();
 
@@ -86,18 +90,22 @@ public static class ItemMove
             return port.IsSafe() ? new ItemMoveResult(ItemMoveOutcome.Unchanged, error) : Recover(port, error);
         }
 
+        var attachAttempted = false;
         try
         {
-            port.Attach();
+            if (port.CanAttach())
+            {
+                attachAttempted = true;
+                port.Attach();
+            }
         }
         catch (Exception exception)
         {
             error = exception;
         }
 
-        // The outcome follows where the item is, not whether a step threw: a callback that throws after the native
-        // inventory took the item still leaves it moved.
-        return port.IsAtTarget() ? new ItemMoveResult(ItemMoveOutcome.Moved, error) : Recover(port, error);
+        // The outcome follows where the item is, not whether attachment threw.
+        return attachAttempted && port.IsAtTarget() ? new ItemMoveResult(ItemMoveOutcome.Moved, error) : Recover(port, error);
     }
 
     /// <summary>Attempts once to return a free item to its source.</summary>

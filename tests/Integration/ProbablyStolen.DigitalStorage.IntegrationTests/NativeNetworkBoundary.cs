@@ -7,6 +7,8 @@ internal sealed class GameItemShape
 {
     internal int width;
     internal int height;
+    internal int globalWidth => width;
+    internal int globalHeight => height;
 }
 
 internal static class ModHook
@@ -51,13 +53,20 @@ internal static class SaveManager
 public sealed class TagState
 {
     public int valueInt;
-    private string _valueString = string.Empty;
+    public string valueString = string.Empty;
+    public long valueLong = 0;
+    public float valueFloat = 0;
+    public double valueDouble = 0;
+    public bool valueBool = false;
+    public string identifier = string.Empty;
+    public string identifierName = string.Empty;
     public bool valueEnabled;
     public bool GetBool() => valueEnabled;
+    public bool IsEnabled() => valueEnabled;
     public int GetInt() => valueInt;
-    public string GetString() => _valueString;
-    public TagState Clone() => new() { valueInt = valueInt, valueEnabled = valueEnabled, _valueString = _valueString };
-    public TagState SetString(string value) { _valueString = value; return this; }
+    public string GetString() => valueString;
+    public TagState Clone() => (TagState)MemberwiseClone();
+    public TagState SetString(string value) { valueString = value; return this; }
     public TagState Enable() { valueEnabled = true; return this; }
     public TagState SetInt(int value) { valueInt = value; return this; }
 }
@@ -66,6 +75,7 @@ public sealed class TagSystem
 {
     public Dictionary<string, TagState> dict = new();
     public TagSystem Clone() => new() { dict = new Dictionary<string, TagState>(dict) };
+    public void DisableTag(string key) => dict.Remove(key);
     public TagState GetTag(string key)
     {
         if (!dict.TryGetValue(key, out var state)) dict[key] = state = new TagState();
@@ -99,13 +109,15 @@ public class GameItem
     public string flavorText { get; set; } = string.Empty;
     internal TagSystem state;
     internal TagSystem modifiedState = new();
-    internal GameInventory? parentInventory;
+    // The game assembly does not annotate these reference types.
+#nullable disable annotations
+    internal GameInventory parentInventory;
+#nullable restore annotations
     internal PixelWindow? contentWindow;
     internal readonly List<GameSlotInventory> Slots = new();
     internal int unitCount = 1;
     internal GameItemShape shape = new() { width = 1, height = 2 };
     internal bool Stuck = false;
-    internal bool ThrowTooltip = false;
     internal bool ReceivingModuleBonus = false;
     internal bool ContainerTooltip = false;
     internal bool Owned = true;
@@ -113,18 +125,38 @@ public class GameItem
     internal Func<GameItem, GameItem, bool>? mayStackItemFunc;
     internal Func<GameItem, GameItem, int, int>? maxSlotAmountItemFunc;
     internal int TagWrites;
+    internal int uniqueId = 0;
+    internal int GetUniqueID() => uniqueId;
+    internal GridShape modifiedShape = new(0, 0);
+    internal GameSlotInventory? BatterySlot = null;
+    internal Action? AfterPowerDraw = null;
+    internal Action<GameItem, GameInventory>? onOneSecondItemFunc = null;
+    internal Action<GameItem, GameInventory, object?>? onSlotAddItemFunc;
+    internal Action<GameItem, GameInventory, object?>? onSlotRemoveItemFunc;
+    internal string name = string.Empty;
+    internal string identifierName = string.Empty;
+    internal string spriteAtlasPath = string.Empty;
+    internal string spritePath = string.Empty;
+    internal string longDescription = string.Empty;
+    internal IReadOnlyList<string> itemTypes = Array.Empty<string>();
     internal string GetDisplayName(bool preferCustomName) => identifier;
     internal void Destroy() => throw new InvalidOperationException("unexpected item destruction");
-    internal void ModifyTag(string key, Action<TagState> change)
+    internal void ModifyTag(string key, Action<TagState> change, bool skipValidate = false)
     {
         TagWrites++;
         change(state.GetTag(key));
         modifiedState = state.Clone();
     }
+    internal void DisableTag(string tag)
+    {
+        state.DisableTag(tag);
+        modifiedState = state.Clone();
+    }
+
+    internal void ValidateShapeState() => throw new InvalidOperationException("unexpected native shape validation");
     public bool MayRemove() => RemovalProbe?.Invoke() ?? throw new InvalidOperationException("unexpected removal probe");
-    public int MaxNumRemove() => throw new InvalidOperationException("unexpected native removal count");
+    public int MaxNumRemove() => MayRemove() ? unitCount : 0;
     internal readonly List<GameItem> Children = new();
-    internal readonly List<GameGridInventory> StoragePages = new();
 
     internal bool IsTag(string tag) => tag == "CONTAINER_TAG" || tag == "CONTAINER_TOOLTIP_TAG"
         ? ContainerTooltip
@@ -144,32 +176,98 @@ public class GraphNodeStorage
 {
 }
 
+internal sealed class InventoryRoots : List<GameItem>
+{
+    internal int SnapshotReads { get; private set; }
+
+    public new GameItem[] ToArray()
+    {
+        SnapshotReads++;
+        return base.ToArray();
+    }
+}
+
 public class GameInventory : GraphNodeStorage
 {
     internal string identifier = string.Empty;
     internal GameItem? Owner;
     internal GraphNodeStorage? parent;
-    internal readonly List<GameItem> childItems = new();
-    internal GameItem? GetParentItem() => Owner ?? (parent switch
+    internal readonly InventoryRoots childItems = new();
+    internal readonly List<object> parents = new();
+#nullable disable annotations
+    internal GameItem GetParentItem() => Owner ?? (parent switch
     {
         MachineryPanelRow row => (row.parent as PixelWindow)?.parentItems.FirstOrDefault(),
         PixelWindow window => window.parentItems.FirstOrDefault(),
         _ => null
     });
+#nullable restore annotations
+
+    internal Action<GameItem, GameInventory, object?>? onSlotAddItemEndFunc;
+    internal Action<GameItem, GameInventory, object?>? onSlotRemoveItemEndFunc;
+    internal Action<GameItem, GameInventory, object?>? onSlotAddItemFunc = null;
+    internal Action<GameItem>? AfterExpel = null;
+    internal Action<GameItem>? AfterAccept = null;
+    internal bool IsRemoveLocked() => false;
+    internal bool IsInsertLocked() => false;
 
     internal void Place(GameItem item)
     {
-        item.parentInventory?.childItems.Remove(item);
+        if (item.parentInventory is { } previous) previous.Remove(item);
         item.parentInventory = this;
         childItems.Add(item);
+        if (this is GameSlotInventory slot && slot.childItem == null) slot.childItem = item;
+    }
+
+    internal bool Expel(GameItem item)
+    {
+        if (!ReferenceEquals(item.parentInventory, this) || !childItems.Contains(item)) return false;
+        Remove(item);
+        AfterExpel?.Invoke(item);
+        return true;
+    }
+
+    internal void UncheckedAccept(GameItem item)
+    {
+        if (item.parentInventory != null || this is GameSlotInventory { childItem: not null })
+            throw new InvalidOperationException("test inventory requires a detached item and a free slot");
+        Place(item);
+        AfterAccept?.Invoke(item);
+    }
+
+    internal SlotMarker? TryInventorySlot(GameItem item, int count, GridShape shape, TagSystem tags) =>
+        throw new InvalidOperationException("unexpected native inventory search");
+
+    internal SlotMarker? TryInventorySlot(GameItem item, int count, int center, GridShape shape, TagSystem tags) =>
+        throw new InvalidOperationException("unexpected native point placement");
+
+    private void Remove(GameItem item)
+    {
+        childItems.Remove(item);
+        if (this is GameSlotInventory slot && ReferenceEquals(slot.childItem, item)) slot.childItem = null;
+        item.parentInventory = null;
     }
 }
 
 public sealed class GameGridInventory : GameInventory
 {
+    public GameGridInventory() { }
+
+    internal GameGridInventory(int width, int height) => inventoryShape = new GameItemShape { width = width, height = height };
+
+    internal GameGridInventory SetMachineryStyle() => this;
     internal bool overrideLockInsert;
-    internal Action<GameItem, GameInventory, object?>? onSlotAddItemEndFunc;
-    internal Action<GameItem, GameInventory, object?>? onSlotRemoveItemEndFunc;
+    internal GameItemShape inventoryShape = new();
+    internal Func<GameItem, GameInventory, bool>? mayInventoryRemoveItemFunc;
+    internal Func<GameItem, GameInventory, object?, int>? maxSlotRemoveItemFunc;
+    internal Func<GameItem, GameInventory, object?, bool>? mayActivateSlotItemFunc;
+    internal Func<GameItem, GameInventory, object?, bool>? canActivateSlotItemFunc;
+    internal Func<GameItem, bool>? PlacementProbe = null;
+    internal bool CheckShapePlacement(GameItem item, GridShape shape, List<GameItem> ignored) =>
+        PlacementProbe?.Invoke(item) != false && childItems.All(root => ReferenceEquals(root, item) ||
+            root.modifiedShape.minX != shape.minX || root.modifiedShape.minY != shape.minY);
+    internal SlotMarker? TryFindOneValidInventorySlot(GameItem item, bool keepOrientation) =>
+        throw new InvalidOperationException("unexpected native grid search");
     private readonly List<(GameItem First, GameItem Second)> _contacts = new();
 
     internal void Touch(GameItem first, GameItem second) => _contacts.Add((first, second));
@@ -196,16 +294,20 @@ public sealed class GameGridInventory : GameInventory
 internal sealed class GameSlotInventory : GameInventory
 {
     internal GameItem? childItem;
+    internal SlotMarker? TryFindOneValidInventorySlot(GameItem item) => childItem == null ? new SlotMarker(this) : null;
 }
 
 internal static class GeneralHelper
 {
     internal static bool IsItemOwned(GameItem item) => item.Owned;
+    internal static bool MayOwnershipAcceptItem(GameItem item, GameInventory inventory) => item.Owned;
 }
 
 internal static class GraphUtils
 {
-    internal static T? FindParentType<T>(GameInventory inventory) where T : class => inventory.Owner as T;
+    internal static T? FindParentType<T>(GameInventory inventory) where T : class => inventory.GetParentItem() as T;
+    internal static bool FindParentEquals(GameGridInventory inventory, GraphNodeStorage root) =>
+        ReferenceEquals(inventory.parent, root);
 
     internal static List<T> FindAllChildrenType<T>(GameItem item) =>
         item.Slots.OfType<T>().Concat(item.Children.OfType<T>()).ToList();
@@ -233,7 +335,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client
             host.Slots.FirstOrDefault(slot => slot.identifier == SlotId)?.childItem;
 
         internal static bool IsMounted(GameItem host) =>
-            host.parentInventory?.identifier?.StartsWith(BayPrefix, System.StringComparison.Ordinal) == true;
+            host.parentInventory?.identifier?.StartsWith(BayPrefix, System.StringComparison.Ordinal) == true ||
+            ProbablyStolen.DigitalStorage.Platform.Content.IoPortItem.IsCellInBay(host);
 
         internal static ProbablyStolen.DigitalStorage.Common.Contracts.StorageContentsState StorageState(GameItem host) =>
             ProbablyStolen.DigitalStorage.Common.Contracts.StorageContentsState.Unavailable;

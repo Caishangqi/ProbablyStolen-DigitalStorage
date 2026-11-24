@@ -19,6 +19,7 @@ internal sealed class ItemContentSynchronizationTests
             [TerminalItem.ItemId] = 250,
             [DriveItem.ItemId] = 350,
             [ControllerItem.ItemId] = 400,
+            [IoPortItem.ItemId] = 300,
             [MaterialItem.ItemId] = 80,
             [CellWorkbenchItem.ItemId] = 300,
             [CellUpgradeInventory.EqualDistributionId] = 200,
@@ -39,6 +40,7 @@ internal sealed class ItemContentSynchronizationTests
     [TestCase(TerminalItem.ItemId, TerminalItem.NameKey, TerminalItem.DescriptionKey, ItemPrices.Terminal)]
     [TestCase(DriveItem.ItemId, DriveItem.NameKey, DriveItem.DescriptionKey, ItemPrices.Drive)]
     [TestCase(ControllerItem.ItemId, ControllerItem.NameKey, ControllerItem.DescriptionKey, ItemPrices.Controller)]
+    [TestCase(IoPortItem.ItemId, "io_port_name", "io_port_desc", 300L)]
     [TestCase(MaterialItem.ItemId, MaterialItem.NameKey, MaterialItem.DescriptionKey, ItemPrices.CellHousing)]
     [TestCase(StorageComponentFactory.ItemId, StorageComponentFactory.NameKey, StorageComponentFactory.DescriptionKey, ItemPrices.Component1K)]
     [TestCase(StorageCellItem.ItemId, StorageCellItem.NameKey, StorageCellItem.DescriptionKey, ItemPrices.CellHousing)]

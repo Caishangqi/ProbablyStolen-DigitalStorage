@@ -161,6 +161,7 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
             ["digital_storage.storage_terminal"] = ("digital_storage:terminal", "digital_storage:native_standard", 10),
             ["digital_storage.storage_drive"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
             ["digital_storage.storage_network_controller"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
+            ["digital_storage.io_port"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2),
             ["digital_storage.item_storage_cell_1k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
             ["digital_storage.item_storage_cell_4k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 0),
             ["digital_storage.item_storage_cell_16k"] = ("digital_storage:vanilla_standard", "digital_storage:cell", 1),

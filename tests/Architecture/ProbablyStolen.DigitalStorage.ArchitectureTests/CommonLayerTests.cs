@@ -46,6 +46,27 @@ public sealed class CommonLayerTests
         Assert.That(violations, Is.Empty);
     }
 
+    [Test]
+    public void IoPortTypes_AreCoveredByTheCompiledCommonLayerBoundary()
+    {
+        var path = GetBuildMetadata("CommonTargetPath");
+        Assert.That(File.Exists(path), Is.True, $"Build the core projects before running architecture checks: {path}");
+        using var stream = File.OpenRead(path);
+        using var image = new PEReader(stream);
+        var metadata = image.GetMetadataReader();
+        var declarations = metadata.TypeDefinitions.Select(handle =>
+        {
+            var type = metadata.GetTypeDefinition(handle);
+            return (Namespace: NamespaceGraph.NamespaceOf(metadata, handle), Name: metadata.GetString(type.Name));
+        }).ToHashSet();
+
+        Assert.That(declarations, Does.Contain(($"{Root}.Domain.Machines", "IoPortSettings")));
+        Assert.That(declarations, Does.Contain(($"{Root}.Contracts.Transfers", "IoPortProgress")));
+        Assert.That(declarations, Does.Contain(($"{Root}.Application.Transfers", "IoPortTransferService")));
+        Assert.That(declarations, Does.Contain(($"{Root}.Contracts.Transfers", "IoPortDisplaySnapshot")));
+        Assert.That(FindViolations(NamespaceGraph.Read(image, Root), Root), Is.Empty);
+    }
+
     [TestCase("ByCall", "Calls")]
     [TestCase("ByCatch", "Catches")]
     [TestCase("ByAttribute", "Attributes")]

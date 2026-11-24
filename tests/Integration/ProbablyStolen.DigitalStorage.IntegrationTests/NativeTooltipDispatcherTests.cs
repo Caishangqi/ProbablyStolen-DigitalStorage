@@ -62,7 +62,7 @@ public sealed class NativeTooltipDispatcherTests
 
         var cell = new RichTextBuilder();
         ModHook.RaiseTooltip(cell, new GameItem(StorageCellTier.All[0].CellId));
-        Assert.That(cell.Lines, Is.EqualTo(new[] { "cell" }), string.Join("|", cell.Lines));
+        Assert.That(cell.Lines, Is.EqualTo(new[] { "cell_storage_unavailable" }), string.Join("|", cell.Lines));
 
         var component = new RichTextBuilder();
         ModHook.RaiseTooltip(component, new GameItem(StorageCellTier.All[0].ComponentId));
@@ -116,23 +116,21 @@ public sealed class NativeTooltipDispatcherTests
     [Test]
     public void Composition_RendersAllCellLinesWhileActive()
     {
-        var cells = new BasicCellHandler(new ModText()) { TooltipLineCount = 3 };
-        using var composition = Create(new Settings(), new GridNetworkPowerCoordinator(), new List<string>(), cells);
+        using var composition = Create(new Settings(), new GridNetworkPowerCoordinator(), new List<string>());
         composition.Enable();
         var builder = new RichTextBuilder();
-        ModHook.RaiseTooltip(builder, new GameItem(StorageCellTier.All[0].CellId));
-        Assert.That(builder.Lines, Is.EqualTo(new[] { "cell", "cell_2", "cell_3" }));
+        ModHook.RaiseTooltip(builder, CellInventoryFixture.Create());
+        Assert.That(builder.Lines, Is.EqualTo(new[] { "cell_storage_bytes", "cell_storage_types", "cell_storage_schema" }));
     }
 
     [Test]
     public void Composition_DisposalDuringContributionStopsRetainedCallbackAndFollowingHandlers()
     {
-        var cells = new BasicCellHandler(new ModText()) { TooltipLineCount = 3 };
-        var composition = Create(new Settings(), new GridNetworkPowerCoordinator(), new List<string>(), cells);
+        var composition = Create(new Settings(), new GridNetworkPowerCoordinator(), new List<string>());
         composition.Enable();
         var builder = new RichTextBuilder { OnAdd = _ => composition.Dispose() };
-        ModHook.RaiseTooltip(builder, new GameItem(StorageCellTier.All[0].CellId));
-        Assert.That(builder.Lines, Is.EqualTo(new[] { "cell" }));
+        ModHook.RaiseTooltip(builder, CellInventoryFixture.Create());
+        Assert.That(builder.Lines, Is.EqualTo(new[] { "cell_storage_bytes" }));
         Assert.That(ModHook.TooltipSubscriberCount, Is.Zero);
         ModHook.RaiseTooltip(new RichTextBuilder(), new GameItem(ControllerItem.ItemId));
         Assert.That(NetworkPowerTooltipBridge.Begin(new GameItem(ControllerItem.ItemId)), Is.Null);
@@ -249,9 +247,9 @@ public sealed class NativeTooltipDispatcherTests
         var errors = new List<string>();
         using var composition = Create(new Settings(), new GridNetworkPowerCoordinator(), errors);
         composition.Enable();
-        var cell = new GameItem(StorageCellTier.All[0].CellId) { ThrowTooltip = true };
-        ModHook.RaiseTooltip(new RichTextBuilder(), cell);
-        ModHook.RaiseTooltip(new RichTextBuilder(), cell);
+        var cell = new GameItem(StorageCellTier.All[0].CellId);
+        ModHook.RaiseTooltip(new RichTextBuilder { ThrowOn = "cell_storage_unavailable" }, cell);
+        ModHook.RaiseTooltip(new RichTextBuilder { ThrowOn = "cell_storage_unavailable" }, cell);
 
         var item = new GameItem(ControllerItem.ItemId);
         var builder = new RichTextBuilder { ThrowOn = "network_tooltip_total_power:3" };
@@ -280,9 +278,8 @@ public sealed class NativeTooltipDispatcherTests
         Assert.That(calls, Is.Zero);
     }
 
-    private static TooltipComposition Create(Settings settings, GridNetworkPowerCoordinator power, List<string> errors,
-        BasicCellHandler? cells = null) =>
-        new(new NativeNetworkScanner(settings), power, new ModText(), cells ?? new BasicCellHandler(new ModText()),
+    private static TooltipComposition Create(Settings settings, GridNetworkPowerCoordinator power, List<string> errors) =>
+        new(new NativeNetworkScanner(settings), power, new ModText(), new BasicCellHandler(new ModText()),
             _ => null, errors.Add);
 
     private sealed class TestContributor : INativeTooltipContributor

@@ -23,7 +23,8 @@ internal sealed class SingleRootSource : IRootSource
     public bool TryPeekFirst(out RootSnapshot root)
     {
         root = _root;
-        return _roots.Snapshot().Any(candidate => candidate.Equals(_root));
+        // Listing a cell's roots reads every page; a lookup reads only the snapshot's own page.
+        return _roots is IRootLookup lookup ? lookup.Contains(_root) : _roots.Snapshot().Any(candidate => candidate.Equals(_root));
     }
 
     public IEnumerable<RootSnapshot> Snapshot()

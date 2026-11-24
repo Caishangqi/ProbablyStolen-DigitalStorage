@@ -79,6 +79,45 @@ drive_name,驱动器
 drive_desc,容纳存储元件并接入网络.
 controller_name,控制器
 controller_desc,为存储网络供电.
+io_port_name,IO 端口
+io_port_desc,把存储元件中的物品转入网络，或把网络中的物品转入元件。销毁机器前，请取出所有元件和模块。
+io_direction_cell_to_network,元件到网络
+io_direction_network_to_cell,网络到元件
+io_bank_input,待处理元件
+io_bank_output,已处理元件
+io_finish_button,出盘条件：{0}（点击切换）
+io_finish_empty,元件清空时
+io_finish_full,元件满载时
+io_finish_done,本次工作完成时
+io_start,开始
+io_pause,暂停
+io_cancel,取消当前工作并暂停
+io_status_idle,空闲
+io_status_working,正在转移物品
+io_status_paused,已暂停
+io_status_completed,工作完成，已暂停
+io_status_no_eligible_content,没有可转移的物品
+io_status_no_controller,未连接控制器
+io_status_controller_conflict,网络中有多个控制器
+io_status_unpowered,等待网络供电
+io_status_operation_fee_unavailable,等待可支付转移费的电源
+io_status_waiting_for_capacity,等待可接收物品的目标
+io_status_storage_unavailable,存储不可用
+io_status_unsupported_energy_source,当前电源无法支付转移费
+io_status_output_full,出盘受阻。请取出一个已处理元件，腾出出盘槽。
+io_status_faulted,IO 端口出错，请查看日志。
+io_status_settings_unavailable,设置不可用
+io_progress,已完成 {0}%
+network_power_io_port_name,IO 端口耗电
+network_power_io_port_desc,每晚结算时，每台接入网络的 IO 端口消耗的游戏功率单位，不含转移费。默认: 0。
+config_section_io_port,IO 端口
+io_port_rate_name,IO 端口转移速率
+io_port_rate_desc,每台 IO 端口每游戏秒最多转移的物品件数，一整堆算一件。默认: 64。
+io_port_fee_name,每单位电力可转移件数
+io_port_fee_desc,IO 端口每转移这么多件物品消耗 1 个游戏功率单位，每块输入元件分别计数。默认: 100。
+io_tooltip_rate,每秒最多转移 {0} 件物品
+io_tooltip_fee,每转移 {0} 件物品消耗 1 电力
+io_tooltip_state,{0} · {1}
 item_storage_cell_1k_name,1k 物品存储元件
 item_storage_cell_1k_desc,用于存储物品的数字元件.
 item_storage_cell_4k_name,4k 物品存储元件

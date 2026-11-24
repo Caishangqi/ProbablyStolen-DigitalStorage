@@ -9,6 +9,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
@@ -16,6 +17,7 @@ using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
@@ -26,9 +28,11 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 /// and every read clamps the stored value. Each section becomes a header in the order entries are defined.
 /// </summary>
 internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminalViewSettings, IIntegrationSettings,
-    IConfigManager
+    IConfigManager, IIoPortTuning
 {
     internal const int MaximumPowerUsage = 1000;
+    internal const int MaximumIoPortRootsPerSecond = 4096;
+    internal const int MaximumIoPortRootsPerFee = 100_000;
     // The terminal buttons name their settings after these keys, so the rail and the settings panel share one value.
     internal const string SortOrderKey = StorageTerminalFeature.SortByName;
     internal const string SortDirectionKey = StorageTerminalFeature.SortDirectionName;
@@ -48,6 +52,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<int> _controllerPowerUsage;
     private readonly ConfigEntry<int> _drivePowerUsage;
     private readonly ConfigEntry<int> _terminalPowerUsage;
+    private readonly ConfigEntry<int> _ioPortPowerUsage;
+    private readonly ConfigEntry<int> _ioPortRootsPerSecond;
+    private readonly ConfigEntry<int> _ioPortRootsPerFee;
     private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _itemIdentityLog;
     private readonly ConfigEntry<bool> _terminalTestView;
@@ -93,6 +100,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         // The native panel shows the section string as the header, but Init runs before this mod's localization is
         // loaded, so these start as keys and RefreshSectionNames replaces them once the text is available.
         const string power = "config_section_power";
+        const string ioPort = "config_section_io_port";
         const string debug = "config_section_debug";
         const string search = "config_section_terminal_search";
         const string view = "config_section_terminal_view";
@@ -102,6 +110,12 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("network_power_drive_name"), tooltip: () => text.Get("network_power_drive_desc"));
         _terminalPowerUsage = config.Define("terminal_power_usage", 1, power,
             () => text.Get("network_power_terminal_name"), tooltip: () => text.Get("network_power_terminal_desc"));
+        _ioPortPowerUsage = config.Define("io_port_power_usage", 0, power,
+            () => text.Get("network_power_io_port_name"), tooltip: () => text.Get("network_power_io_port_desc"));
+        _ioPortRootsPerSecond = config.Define("io_port_roots_per_second", IoPortTransferService.DefaultRootsPerSecond, ioPort,
+            () => text.Get("io_port_rate_name"), tooltip: () => text.Get("io_port_rate_desc"));
+        _ioPortRootsPerFee = config.Define("io_port_roots_per_power", IoPortTransferService.DefaultRootsPerFee, ioPort,
+            () => text.Get("io_port_fee_name"), tooltip: () => text.Get("io_port_fee_desc"));
         _showCellPages = config.Define("debug_show_cell_pages", false, debug,
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
         _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
@@ -152,7 +166,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("partition_view_size_name"), () => text.Get("partition_view_size_desc"));
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
-            (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power),
+            (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power), (_ioPortPowerUsage, power),
+            (_ioPortRootsPerSecond, ioPort), (_ioPortRootsPerFee, ioPort),
             (_showCellPages, debug), (_terminalDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
@@ -479,8 +494,15 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         GridNodeKind.Controller => _controllerPowerUsage.Value,
         GridNodeKind.Drive => _drivePowerUsage.Value,
         GridNodeKind.Terminal => _terminalPowerUsage.Value,
+        GridNodeKind.IoPort => _ioPortPowerUsage.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     }, 0, MaximumPowerUsage);
+
+    /// <inheritdoc />
+    public int RootsPerSecond => Clamp(_ioPortRootsPerSecond.Value, 1, MaximumIoPortRootsPerSecond);
+
+    /// <inheritdoc />
+    public int RootsPerFee => Clamp(_ioPortRootsPerFee.Value, 1, MaximumIoPortRootsPerFee);
 
     private static int Clamp(int value, int minimum, int maximum) => Math.Max(minimum, Math.Min(maximum, value));
 }

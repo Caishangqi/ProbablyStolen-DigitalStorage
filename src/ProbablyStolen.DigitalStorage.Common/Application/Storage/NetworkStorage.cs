@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
@@ -62,6 +63,13 @@ public sealed class NetworkStorage : IRootStorage
     /// same call. Terminal checks simulate one item at a time.
     /// </remarks>
     public InsertResult Insert(IRootSource roots, Actionable mode, IActionSource source)
+    {
+        var mark = TransferProfile.Mark();
+        try { return InsertRoots(roots, mode, source); }
+        finally { TransferProfile.Add(TransferPart.NetworkInsert, mark); }
+    }
+
+    private InsertResult InsertRoots(IRootSource roots, Actionable mode, IActionSource source)
     {
         if (roots == null) throw new ArgumentNullException(nameof(roots));
         if (source == null) throw new ArgumentNullException(nameof(source));

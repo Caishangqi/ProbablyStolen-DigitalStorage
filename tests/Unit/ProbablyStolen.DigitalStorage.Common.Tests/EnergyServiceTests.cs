@@ -261,7 +261,13 @@ public sealed class EnergyServiceTests
 
         internal int LastDraw { get; private set; }
 
-        public bool CanDraw(int amount) => HasSource && amount >= 0 && amount <= AvailableEnergy;
+        internal int CanDrawCalls { get; private set; }
+
+        public bool CanDraw(int amount)
+        {
+            CanDrawCalls++;
+            return HasSource && amount >= 0 && amount <= AvailableEnergy;
+        }
 
         public bool TryDraw(int amount)
         {

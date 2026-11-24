@@ -62,6 +62,131 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn('_appearance.EnsureReady("item_storage_cell_" + tier.Name)', composition)
         self.assertIn('_appearance.EnsureReady("cell_component_" + tier.Name)', composition)
 
+    def test_io_port_images_are_declared_with_item_and_button_dimensions(self):
+        images = load_layouts()["images"]
+        self.assertEqual(images["io_port"]["path"], "Textures/Items/io_port.png")
+        self.assertEqual(images["io_port"]["source"], [48, 48])
+        self.assertEqual(images["io_port"]["runtime"], [48, 48])
+        for name in ("button_io_start", "button_io_pause", "button_io_cancel", "button_io_finish_empty",
+                     "button_io_finish_full", "button_io_finish_done"):
+            with self.subTest(name=name):
+                self.assertEqual(images[name]["path"], "Textures/" + name + ".png")
+                self.assertEqual(images[name]["source"], [16, 16])
+                self.assertEqual(images[name]["runtime"], [16, 16])
+                self.assertTrue(images[name]["interface"])
+                self.assertTrue(images[name]["visible"])
+        paths = {entry["path"] for entry in self.resource_entries}
+        for removed in ("button_io_network_to_cell", "button_io_cell_to_cell", "button_io_cell_to_network"):
+            self.assertNotIn("Textures/" + removed + ".png", paths)
+
+    def test_io_port_icons_use_shared_loader_keys_and_machine_appearance(self):
+        platform = REPOSITORY / "src/ProbablyStolen.DigitalStorage.Platform"
+        icons = (platform / "Client/ButtonIcons.cs").read_text(encoding="utf-8")
+        window = (platform / "Client/IoPortWindow.cs").read_text(encoding="utf-8")
+        state = (REPOSITORY / "src/ProbablyStolen.DigitalStorage.Client/Machines/IoPort/IoPortPanelState.cs").read_text(encoding="utf-8")
+        machine = (platform / "Content/IoPortItem.cs").read_text(encoding="utf-8")
+        expected = {
+            "IoStart": "button_io_start",
+            "IoPause": "button_io_pause",
+            "IoCancel": "button_io_cancel",
+            "IoFinishEmpty": "button_io_finish_empty",
+            "IoFinishFull": "button_io_finish_full",
+            "IoFinishDone": "button_io_finish_done",
+        }
+        constants = dict(re.findall(r'internal const string (Io\w+)\s*=\s*"([a-z0-9_]+)";', icons))
+        self.assertEqual(constants, expected)
+        loading = re.search(r"foreach \(var key in new\[\]\s*\{(?P<keys>.*?)\}\)\s*TryCreate", icons, re.S)
+        self.assertIsNotNone(loading)
+        for name, key in expected.items():
+            with self.subTest(key=key):
+                self.assertIn(name, loading.group("keys"))
+                # The window binds the run buttons; the rail binds the eject-condition icons by key.
+                self.assertTrue("ButtonIcons." + name in window or '"' + key + '"' in state, key)
+                self.assertIn(key, ASSETS)
+        self.assertIn("_appearance.EnsureReady(SpriteKey);", machine)
+        self.assertIn("_appearance.Apply(machine, SpriteKey, Width, Height);", machine)
+        self.assertIn("PixelArrow.Get(state.ArrowPointsRight ? PixelArrow.Direction.Right : PixelArrow.Direction.Left)", window)
+
+    def test_io_port_feature_does_not_add_public_api_symbols(self):
+        for project in ("ProbablyStolen.DigitalStorage.Api.Core", "ProbablyStolen.DigitalStorage.Api"):
+            source_root = REPOSITORY / "src" / project
+            offenders = [path for path in source_root.rglob("*.cs")
+                         if "IoPort" in path.read_text(encoding="utf-8")]
+            self.assertEqual(offenders, [], project)
+
+    def test_io_port_machine_keeps_native_shape_slots_panel_order_and_battery_lock(self):
+        platform = REPOSITORY / "src/ProbablyStolen.DigitalStorage.Platform"
+        item = (platform / "Content/IoPortItem.cs").read_text(encoding="utf-8")
+        settings = (REPOSITORY / "src/ProbablyStolen.DigitalStorage.Common/Domain/Machines/IoPortSettings.cs").read_text(encoding="utf-8")
+        machine_window = (platform / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
+        self.assertIn("internal const int Width = 3;", item)
+        self.assertIn("internal const int Height = 3;", item)
+        self.assertIn("public const int SlotsPerBank = 6;", settings)
+        self.assertIn("private const int BankColumns = 2;", item)
+        self.assertIn("private const int SlotsPerBank = IoPortSettings.SlotsPerBank;", item)
+        self.assertIn("new GameSlotInventory[SlotsPerBank]", item)
+        self.assertIn("new GameSlotInventory(1, 2)", item)
+        identity = (platform / "Content/IoPortItem.Identity.cs").read_text(encoding="utf-8")
+        self.assertIn('identifier = BayPrefix + (right ? index + SlotsPerBank : index)', item)
+        self.assertIn('private const string BayPrefix = "digital_storage.io_port_bay.";', identity)
+        self.assertIn("bool acceptsBattery = false", machine_window)
+        self.assertIn("grid.AttachPos(bay, index % BankColumns, index / BankColumns)", item)
+        # Save positions: battery 0, modules 1, input bank 2, output bank 3; the IO Port window borrows the banks.
+        attach = item.split("_windows.Attach(machine, additionalPanels: new[]", 1)[1].split("});", 1)[0]
+        self.assertLess(attach.index("IoPortWindow.InputPanelRole"), attach.index("IoPortWindow.OutputPanelRole"))
+        self.assertIn("return !right || _coordinator.IsEjecting(owner, cell, slot);", item)
+        self.assertIn("battery.mayInventoryAddItemFunc = (_, _) => false;", machine_window)
+        self.assertIn("battery.maxSlotAddItemFunc = (_, _, _) => 0;", machine_window)
+        self.assertIn("battery.maxSlotAmountItemFunc = (_, _, _) => 0;", machine_window)
+        self.assertIn("void SyncPowerPanel() => power.SetHidden(battery.childItem == null);", machine_window)
+        for project in ("ProbablyStolen.DigitalStorage.Api.Core", "ProbablyStolen.DigitalStorage.Api"):
+            source_root = REPOSITORY / "src" / project
+            offenders = [path for path in source_root.rglob("*.cs")
+                         if "IoPort" in path.read_text(encoding="utf-8")]
+            self.assertEqual(offenders, [], project)
+
+    def test_io_port_factory_and_run_lifecycle_are_composed(self):
+        platform = REPOSITORY / "src/ProbablyStolen.DigitalStorage.Platform"
+        registration = (platform / "Content/StorageContentRegistration.cs").read_text(encoding="utf-8")
+        content = (platform / "Content/DigitalStorageContentService.cs").read_text(encoding="utf-8")
+        composition = (platform / "Composition/PlatformComposition.cs").read_text(encoding="utf-8")
+        coordinator = (platform / "Network/IoPortCoordinator.cs").read_text(encoding="utf-8")
+        self.assertIn("IoPortItem ioPort", registration)
+        self.assertIn("Add(IoPortItem.ItemId, () => Create(ioPort.Create));", registration)
+        self.assertIn('["digital_storage.io_port"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2)', content)
+        self.assertIn("new IoPortCoordinator(networkScanner, networkPower.Storage, transferDiagnostics, networkEvents,", composition)
+        self.assertIn("IoPortWindow.Create(text, networkPowerSettings, buttonIcons, coordinator", composition)
+        self.assertIn("new IoPortItem(appearance, windows,", composition)
+        self.assertIn("_appearance.EnsureReady(IoPortItem.SpriteKey);", composition)
+        for subscription in (
+            "OnGameLoadedInit += _ioPortCoordinator.EndRun",
+            "OnNewGameStarted += OnIoPortNewGameStarted",
+            "OnGameLoadedLate += StartIoPortRun",
+        ):
+            with self.subTest(subscription=subscription):
+                self.assertIn("ModHook." + subscription + ";", composition)
+                hook, callback = subscription.split(" += ")
+                self.assertIn("ModHook." + hook + " -= " + callback + ";", composition)
+        self.assertIn("_ioPortCoordinator.StartRun(PlayerStore.Instance, StoreStation.Instance);", composition)
+        self.assertIn("_ioPortCoordinator.Dispose();", composition)
+        enable = composition.split("public void Enable()", 1)[1].split("public void Dispose()", 1)[0]
+        dispose = composition.split("public void Dispose()", 1)[1].split("private void ExposeRuntime", 1)[0]
+        self.assertLess(enable.index("SceneManager.sceneUnloaded += OnSceneUnloaded;"),
+                        enable.index("if (_integrations != null)"))
+        self.assertLess(dispose.index("SceneManager.sceneUnloaded -= OnSceneUnloaded;"),
+                        dispose.index("if (_integrations != null)"))
+        scene_handler = composition.split("private void OnSceneUnloaded(Scene scene)", 1)[1].split("private void OnLocaleConfirmed", 1)[0]
+        self.assertIn('if (scene.name != "InventoryScene") return;', scene_handler)
+        self.assertIn("_ioPortCoordinator.EndRun();", scene_handler)
+        self.assertIn("_integrations?.OnGameUnloaded();", scene_handler)
+        self.assertIn("new NativeTransferEnergyPort(snapshot.FindController(grid), grid.TotalPowerUsage, _store!, _station!)", coordinator)
+
+    def test_io_port_content_constants_and_art_resources_match_the_contract(self):
+        check_content(self.root, self.output)
+        self.assertIn("io_port", ASSETS)
+        self.assertTrue({"button_io_start", "button_io_pause", "button_io_cancel", "button_io_finish_empty",
+                         "button_io_finish_full", "button_io_finish_done"} <= set(ASSETS))
+
     def test_tier_catalog_drift_fails(self):
         path = self.root / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs"
         path.write_text(path.read_text(encoding="utf-8").replace('"256k", 256, 1600, 2', '"256k", 256, 1601, 2'), encoding="utf-8")
@@ -307,6 +432,35 @@ class ContentContractTests(unittest.TestCase):
                 with self.assertRaises(ContentValidationError):
                     check_content(self.root, self.output)
 
+    def test_io_port_localization_parameters_match_the_callers_in_both_languages(self):
+        for language in self.localization_paths:
+            values = read_localization(self.output / language)
+            self.assertIn("42%", values["io_progress"].format(42))
+            self.assertIn(values["io_finish_done"], values["io_finish_button"].format(values["io_finish_done"]))
+
+        originals = {self.output / language: (self.output / language).read_text(encoding="utf-8")
+                     for language in self.localization_paths}
+        for key, placeholder, replacement in (
+            ("io_finish_button", "{0}", "unknown"),
+            ("io_status_idle", "", " {0}"),
+            ("workbench_info_count", "{1}", "unknown"),
+        ):
+            with self.subTest(key=key):
+                for path, original in originals.items():
+                    def replace_row(match):
+                        value = match[2]
+                        if placeholder:
+                            value = value.replace(placeholder, replacement)
+                        else:
+                            value += replacement
+                        return match[1] + value
+
+                    changed = re.sub(rf"^({key},)(.*)$", replace_row, original, flags=re.MULTILINE)
+                    self.assertNotEqual(original, changed)
+                    path.write_text(changed, encoding="utf-8")
+                with self.assertRaisesRegex(ContentValidationError, f"IO Port caller: {key}"):
+                    check_content(self.root, self.output)
+
     def test_native_first_comma_quotes_and_literal_newline_decode(self):
         path = self.root / "quotes.csv"
         path.write_text('first,"a,b and ""quoted"" text\\nnext"\nsecond,unquoted,comma\n', encoding="utf-8")
@@ -316,6 +470,8 @@ class ContentContractTests(unittest.TestCase):
             with self.assertRaises(ContentValidationError):
                 read_localization(path)
         self.assertEqual(format_parameters('{{literal}} {0} {0}'), [0, 0])
+        with self.assertRaisesRegex(ContentValidationError, "Only numbered localization placeholders"):
+            format_parameters("{０}")
 
 
 if __name__ == "__main__":

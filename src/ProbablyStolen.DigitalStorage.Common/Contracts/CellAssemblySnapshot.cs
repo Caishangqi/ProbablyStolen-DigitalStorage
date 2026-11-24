@@ -25,7 +25,7 @@ public sealed class CellAssemblySnapshot
     /// <summary>The actual child, or null while the slot is empty.</summary>
     public PhysicalItemSnapshot? Component { get; }
 
-    /// <summary>Whether the host currently belongs to a drive bay.</summary>
+    /// <summary>Whether the host is installed in a Drive or IO Port bay.</summary>
     public bool Mounted { get; }
 
     /// <summary>Whether native decoding is still connecting saved children.</summary>

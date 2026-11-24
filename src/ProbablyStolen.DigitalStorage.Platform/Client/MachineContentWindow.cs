@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Events;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -25,7 +25,7 @@ internal sealed class MachineContentWindow
 
     internal void Attach(GameItem machine, GridPixelElement? cellBays = null,
         bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false,
-        string[]? moduleTypes = null)
+        string[]? moduleTypes = null, IReadOnlyList<MachineryPanel>? additionalPanels = null, int[]? displayOrder = null)
     {
         var battery = new GameSlotInventory();
         var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
@@ -44,7 +44,11 @@ internal sealed class MachineContentWindow
         {
             panels.Add(MachineHelper.Panel(_text.Get("priority_configure"), priority.Content, "priority"));
         }
-        machine.SetContentWindow(MachineHelper.CreateMachineryWindow(true, panels.ToArray()));
+        if (additionalPanels != null) panels.AddRange(additionalPanels);
+        var nativePanels = panels.ToArray();
+        machine.SetContentWindow(displayOrder == null
+            ? MachineHelper.CreateMachineryWindow(true, nativePanels)
+            : MachineHelper.CreateMachineryWindow(true, displayOrder, nativePanels));
         if (priority != null) machine.contentWindow.openCallback += priority.Refresh;
         MachineryHelper.InitMachinery(machine);
         machine.EnableTag(MachineHelper.STANDARD_MACHINE_TAG);

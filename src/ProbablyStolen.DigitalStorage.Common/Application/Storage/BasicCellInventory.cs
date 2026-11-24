@@ -7,6 +7,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 
@@ -98,7 +99,9 @@ public sealed class BasicCellInventory : IStorageCell
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (mode == Actionable.Simulate) return SimulateInsert(roots, source);
 
+        var mark = TransferProfile.Mark();
         var drain = RootTransfer.Drain(roots, new CellRootSink(_view, _pages, PlanScope.Insert), source);
+        TransferProfile.Add(TransferPart.CellInsert, mark);
         return new InsertResult(drain.MovedUnits.Changes.Values.Sum(), drain.LastStep, drain.MovedUnits);
     }
 
@@ -130,6 +133,7 @@ public sealed class BasicCellInventory : IStorageCell
 
         var leaving = new LeavingSink(_view, destination);
         var step = TransferStep.Moved;
+        var extractMark = TransferProfile.Mark();
         while (extracted < amount)
         {
             step = RootTransfer.MoveFirst(stored, leaving, source);
@@ -138,6 +142,7 @@ public sealed class BasicCellInventory : IStorageCell
             changes.Add(what, -leaving.LastUnits);
         }
 
+        TransferProfile.Add(TransferPart.SourceExtract, extractMark);
         return new ExtractResult(extracted, step, changes);
     }
 
@@ -208,6 +213,19 @@ public sealed class BasicCellInventory : IStorageCell
 
     private InsertResult SimulateInsert(IRootSource roots, IActionSource source)
     {
+        // One root never sees an earlier root's effect, and the sink's simulation does not write the view, so the
+        // live view answers it directly. Copying the view would cost more the larger the cell, once per offered root.
+        var first = roots.Snapshot().Take(2).ToArray();
+        if (first.Length == 1)
+        {
+            var root = first[0];
+            var only = new CellRootSink(_view, NoNativePages.Instance, PlanScope.Insert).Accept(root, Actionable.Simulate, source);
+            if (!only.IsMoved) return new InsertResult(0, only, new StorageChangeSet());
+            var single = new StorageChangeSet();
+            single.Add(root.Key, root.Units);
+            return new InsertResult(root.Units, TransferStep.SourceEmpty, single);
+        }
+
         var copy = _view.Clone();
         var changes = new StorageChangeSet();
         long inserted = 0;

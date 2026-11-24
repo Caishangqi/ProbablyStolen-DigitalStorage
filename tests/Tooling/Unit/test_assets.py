@@ -30,7 +30,15 @@ class ContentAssetTests(unittest.TestCase):
         for name, (size, _) in ASSETS.items():
             image = self.Image.new("RGBA", size, (27, 43, 83, 255))
             image.putpixel((0, 0), (93, 3, 7, 0))
-            image.save(self.source / (name + ".png"))
+            if name == "button_io_finish_done":
+                image.save(self.source / (name + ".png"))
+                alternate = self.source / "io-port-artwork"
+                alternate.mkdir()
+                candidate = self.Image.new("RGBA", size, (0, 0, 0, 0))
+                candidate.putpixel((7, 7), (241, 197, 13, 255))
+                candidate.save(alternate / (name + ".png"))
+            else:
+                image.save(self.source / (name + ".png"))
 
     def image(self, predicate):
         return next(name for name, contract in self.image_contracts.items() if predicate(name, contract))
@@ -43,17 +51,40 @@ class ContentAssetTests(unittest.TestCase):
                 for p in self.root.rglob("*") if p.is_file()}
 
     def test_prepare_is_repeatable_preserves_sources_and_check_is_read_only(self):
-        before = {p.name: p.read_bytes() for p in self.source.iterdir()}
+        before = {p.relative_to(self.source).as_posix(): p.read_bytes()
+                  for p in self.source.rglob("*") if p.is_file()}
         prepare_assets(self.source, self.output)
         first = self.snapshot()
         check_assets(self.output)
         self.assertEqual(self.snapshot(), first)
         prepare_assets(self.source, self.output)
         self.assertEqual(self.snapshot(), first)
-        self.assertEqual(before, {p.name: p.read_bytes() for p in self.source.iterdir()})
+        self.assertEqual(before, {p.relative_to(self.source).as_posix(): p.read_bytes()
+                                  for p in self.source.rglob("*") if p.is_file()})
         for name, (source_size, runtime_size) in ASSETS.items():
             if source_size == runtime_size:
-                self.assertEqual(self.runtime(name).read_bytes(), before[name + ".png"])
+                source_path = f"io-port-artwork/{name}.png" if name == "button_io_finish_done" else f"{name}.png"
+                self.assertEqual(self.runtime(name).read_bytes(), before[source_path])
+
+    def test_finish_done_uses_nested_candidate_and_never_falls_back_to_old_source(self):
+        name = "button_io_finish_done"
+        old_source = self.source / (name + ".png")
+        candidate = self.source / "io-port-artwork" / (name + ".png")
+        with self.Image.open(old_source) as old, self.Image.open(candidate) as approved:
+            old_pixel = old.getpixel((7, 7))
+            self.assertNotEqual(old_pixel, approved.getpixel((7, 7)))
+            expected = approved.getpixel((7, 7))
+
+        prepare_assets(self.source, self.output, (name,))
+        with self.Image.open(self.runtime(name)) as result:
+            result_pixel = result.getpixel((7, 7))
+            self.assertEqual(result_pixel, expected)
+            self.assertNotEqual(result_pixel, old_pixel)
+        prepared = self.runtime(name).read_bytes()
+        candidate.unlink()
+        with self.assertRaisesRegex(ContentValidationError, "Could not read source"):
+            prepare_assets(self.source, self.output, (name,))
+        self.assertEqual(self.runtime(name).read_bytes(), prepared)
 
     def test_button_image_requires_visible_pixels_and_rejects_old_sheet(self):
         name = self.image(lambda _, item: item["interface"] and item["runtime"] == [16, 16])

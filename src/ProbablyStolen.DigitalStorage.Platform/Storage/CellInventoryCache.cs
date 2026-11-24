@@ -22,6 +22,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 internal static class CellInventoryCache
 {
     private static readonly ConditionalWeakTable<GameItem, Entry> Entries = new();
+    private static readonly CellContentStamps<GameItem> Stamps = new();
+
+    internal static object ContentStamp(GameItem cell) => Stamps.Read(cell);
 
     /// <summary>Gets the kept contents of a cell when its pages have not changed since they were kept.</summary>
     internal static bool TryGet(GameItem cell, out IReadOnlyList<PageView> pages, out CellUsage usage)
@@ -34,15 +37,38 @@ internal static class CellInventoryCache
         return true;
     }
 
+    /// <summary>
+    /// Gets a number that changes whenever the kept contents of the cell change or are dropped. A view held across
+    /// frames is still the cell's contents only while this number stays the same.
+    /// </summary>
+    internal static long Version(GameItem cell) => Versions.GetValue(cell, _ => new Counter()).Value;
+
     /// <summary>Keeps a view's contents as those of the cell's pages as they are now.</summary>
     internal static void Remember(GameItem cell, CellView view)
     {
+        // Keeping the same pages again, as every read that found them unchanged does, is not a change.
+        var changed = !Entries.TryGetValue(cell, out var previous) || !previous.Footprint.Matches(cell);
         Entries.Remove(cell);
         Entries.Add(cell, new Entry(view.Pages.ToArray(), view.Usage, Footprint.Of(cell)));
+        if (changed) Bump(cell);
     }
 
     /// <summary>Drops a cell's kept contents; the next read reads every root again.</summary>
-    internal static void Forget(GameItem cell) => Entries.Remove(cell);
+    internal static void Forget(GameItem cell)
+    {
+        Entries.Remove(cell);
+        Stamps.Invalidate(cell);
+        Bump(cell);
+    }
+
+    private static readonly ConditionalWeakTable<GameItem, Counter> Versions = new();
+
+    private static void Bump(GameItem cell) => Versions.GetValue(cell, _ => new Counter()).Value++;
+
+    private sealed class Counter
+    {
+        internal long Value;
+    }
 
     private sealed class Entry
     {

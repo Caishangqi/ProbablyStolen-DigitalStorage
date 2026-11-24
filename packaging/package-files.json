@@ -807,6 +807,114 @@
         "openCenters": false,
         "sheetCellSize": null
       }
+    },
+    {
+      "path": "Textures/Items/io_port.png",
+      "image": {
+        "source": [48, 48],
+        "runtime": [48, 48],
+        "interface": false,
+        "visible": false,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_start.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_pause.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_cancel.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_to_left.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_to_right.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_finish_empty.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_finish_full.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_io_finish_done.png",
+      "image": {
+        "source": [16, 16],
+        "runtime": [16, 16],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
     }
   ]
 }

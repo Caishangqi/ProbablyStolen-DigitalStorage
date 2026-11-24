@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import stat
@@ -19,6 +20,7 @@ from unittest.mock import patch
 REPOSITORY = Path(__file__).resolve().parents[3]
 from digital_storage_tools.deployment import *
 from digital_storage_tools.deployment import _REPARSE_POINT
+from digital_storage_tools.package import remember_owned_resources
 from digital_storage_tools.package import DATA_RESOURCE_FILES, PRE_BUTTON_CURRENT_FILES, PRE_DATA_CURRENT_FILES
 from digital_storage_tools.package import PRE_CODE_REGISTRY_CURRENT_FILES, PRE_KEEP_OPEN_CURRENT_FILES
 
@@ -29,6 +31,9 @@ class DeploymentTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name).resolve()
+        owned_patch = patch("digital_storage_tools.package.OWNED_RESOURCES_PATH", self.root / "owned-resources.json")
+        owned_patch.start()
+        self.addCleanup(owned_patch.stop)
         self.game = self.root / "Probably Stolen"
         self.game.mkdir()
         (self.game / "Probably Stolen.exe").write_bytes(b"game executable placeholder")
@@ -406,6 +411,21 @@ class DeploymentTests(unittest.TestCase):
         deploy_package(self.package, self.game, self.target)
         self.assertTrue(all(not (self.target / directory).exists() for directory in dropped_directories))
         self.assertEqual(len(validate_package_directory(self.target)), len(CURRENT_FILES))
+
+    def test_owned_leftover_of_an_unreleased_build_is_removed_on_deploy(self) -> None:
+        self._install_initial_package()
+        leftover = self.target / "Textures" / "button_retired.png"
+        leftover.write_bytes(b"retired icon")
+        with self.assertRaisesRegex(DeploymentError, "not safely owned"):
+            deploy_package(self.package, self.game, self.target)
+        remember_owned_resources([{"name": "Textures/button_retired.png", "size": 12,
+                                   "sha256": hashlib.sha256(b"retired icon").hexdigest()}])
+
+        deploy_package(self.package, self.game, self.target)
+
+        self.assertFalse(leftover.exists())
+        self.assertEqual(len(validate_package_directory(self.target)), len(CURRENT_FILES))
+        self.assertFalse(any(path.name.startswith(".DigitalStorage") for path in self.mods.iterdir()))
 
     def test_failed_upgrade_restores_dropped_resources(self) -> None:
         installed = self._install_layout(PRE_CODE_REGISTRY_CURRENT_FILES, CURRENT_PLATFORM_ASSEMBLY)

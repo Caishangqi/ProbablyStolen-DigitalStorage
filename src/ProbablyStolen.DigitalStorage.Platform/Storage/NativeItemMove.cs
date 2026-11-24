@@ -15,20 +15,29 @@ internal sealed class NativeItemMove : IItemMovePort
     private readonly GridShape _originalShape;
     private readonly GameInventory? _target;
     private readonly GridShape? _targetShape;
+    private readonly Func<GridShape?>? _checkedPlacement;
+    private readonly Func<GridShape?>? _checkedReturnPlacement;
+    private GridShape? _checkedShape;
 
     private NativeItemMove(GameItem item, GameInventory? source, GridShape originalShape, GameInventory? target,
-        GridShape? targetShape)
+        GridShape? targetShape, Func<GridShape?>? checkedPlacement = null, Func<GridShape?>? checkedReturnPlacement = null)
     {
         _item = item ?? throw new ArgumentNullException(nameof(item));
         _source = source;
         _originalShape = originalShape;
         _target = target;
         _targetShape = targetShape;
+        _checkedPlacement = checkedPlacement;
+        _checkedReturnPlacement = checkedReturnPlacement;
     }
 
     /// <summary>A move of an item from its current inventory into a target at a planned shape.</summary>
     internal static NativeItemMove Into(GameItem item, GameInventory target, GridShape targetShape) =>
         new(item, item.parentInventory, item.modifiedShape, target, targetShape);
+
+    internal static NativeItemMove IntoCheckedSlot(GameItem item, GameSlotInventory target,
+        Func<GridShape?> checkedPlacement, Func<GridShape?> checkedReturnPlacement) =>
+        new(item, item.parentInventory, item.modifiedShape, target, null, checkedPlacement, checkedReturnPlacement);
 
     /// <summary>Recovery for an item that left <paramref name="source"/> at <paramref name="originalShape"/>.</summary>
     internal static NativeItemMove ReturnTo(GameItem item, GameInventory? source, GridShape originalShape) =>
@@ -36,10 +45,12 @@ internal sealed class NativeItemMove : IItemMovePort
 
     public bool Detach() => _source == null || _source.Expel(_item);
 
+    public bool CanAttach() => _checkedPlacement == null || (_checkedShape = _checkedPlacement()) != null;
+
     public void Attach()
     {
-        if (_target == null || _targetShape == null) return;
-        _item.modifiedShape = _targetShape;
+        if (_target == null || (_checkedShape ?? _targetShape) is not { } shape) return;
+        _item.modifiedShape = shape;
         _target.UncheckedAccept(_item);
     }
 
@@ -57,9 +68,14 @@ internal sealed class NativeItemMove : IItemMovePort
 
     public void ReturnToSource()
     {
-        if (_source == null || _item.parentInventory != null ||
-            _item is GameItemElement element && element.IsDestroyed()) return;
-        if (_source is GameGridInventory grid)
+        if (_source == null || _item.parentInventory != null || _item is GameItemElement element && element.IsDestroyed()) return;
+        var shape = _originalShape;
+        if (_checkedReturnPlacement != null)
+        {
+            if (_checkedReturnPlacement() is not { } accepted) return;
+            shape = accepted;
+        }
+        else if (_source is GameGridInventory grid)
         {
             if (!grid.CheckShapePlacement(_item, _originalShape, new List<GameItem>())) return;
         }
@@ -68,7 +84,7 @@ internal sealed class NativeItemMove : IItemMovePort
             if (slot.childItem != null) return;
         }
         else return;
-        _item.modifiedShape = _originalShape;
+        _item.modifiedShape = shape;
         _source.UncheckedAccept(_item);
     }
 

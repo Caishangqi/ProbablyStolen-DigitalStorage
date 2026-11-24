@@ -1,10 +1,11 @@
 using System;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
-internal sealed class StoredRootIdentityMismatch : InvalidOperationException
+internal sealed class StoredRootIdentityMismatch : RootTransferNotStartedException
 {
     internal StoredRootIdentityMismatch(string reason, string expectedId, string? actualId, int cellUid, int page, int slot)
         : base($"A stored root on page {page} is no longer of its recorded type.")

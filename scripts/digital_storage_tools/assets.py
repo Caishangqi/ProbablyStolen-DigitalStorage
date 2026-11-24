@@ -42,6 +42,12 @@ def _resource_path(name: str) -> Path:
     return Path(contract["path"])
 
 
+_SOURCE_PATH_OVERRIDES = {
+    # The runtime icon is prepared from the check-mark drawing; the older sketch in rawassets/ is left untouched.
+    "button_io_finish_done": Path("io-port-artwork/button_io_finish_done.png"),
+}
+
+
 def _as_name(item: str) -> str:
     images = _image_contracts()
     name = Path(item).stem if item.lower().endswith(".png") else item
@@ -103,7 +109,7 @@ def validate_write_root(source: Path, output: Path) -> Path:
 
 def source_png(source: Path, name: str):
     Image = image_api()
-    path = plain_path(source / (_resource_path(name).name))
+    path = plain_path(source / _SOURCE_PATH_OVERRIDES.get(name, Path(_resource_path(name).name)))
     try:
         data = path.read_bytes()
         with Image.open(io.BytesIO(data)) as opened:
@@ -269,8 +275,9 @@ def read_localization(path: Path) -> dict[str, str]:
 
 def format_parameters(value: str) -> list[int]:
     remaining = value.replace("{{", "").replace("}}", "")
-    parameters = sorted(int(index) for index in re.findall(r"\{(\d+)\}", remaining))
-    if "{" in re.sub(r"\{\d+\}", "", remaining) or "}" in re.sub(r"\{\d+\}", "", remaining):
+    parameters = sorted(int(index) for index in re.findall(r"\{([0-9]+)\}", remaining))
+    without_parameters = re.sub(r"\{[0-9]+\}", "", remaining)
+    if "{" in without_parameters or "}" in without_parameters:
         raise ContentValidationError("Only numbered localization placeholders such as {0} are supported.")
     return parameters
 
@@ -307,6 +314,18 @@ def check_content(project: Path, output: Path) -> None:
             raise ContentValidationError(f"Content declaration contract mismatch: {class_name}")
         ids.add(values["ItemId"])
         keys.update((values["NameKey"], values["DescriptionKey"]))
+    io_port_source = plain_path(platform / "Content/IoPortItem.cs").read_text(encoding="utf-8")
+    io_port_identity = plain_path(platform / "Content/IoPortItem.Identity.cs").read_text(encoding="utf-8")
+    io_port_contract = {
+        "ItemId": '"digital_storage.io_port"', "SpriteKey": '"io_port"', "Width": "3", "Height": "3",
+        "NameKey": '"io_port_name"', "DescriptionKey": '"io_port_desc"',
+    }
+    declarations = dict(re.findall(r"\bconst\s+(?:string|int)\s+(\w+)\s*=\s*([^;]+);", io_port_source))
+    identity = re.search(r'\bconst\s+string\s+ItemId\s*=\s*("[a-z0-9_.]+");', io_port_identity)
+    declarations["ItemId"] = identity.group(1) if identity else None
+    if {key: declarations.get(key) for key in io_port_contract} != io_port_contract:
+        raise ContentValidationError("Content declaration contract mismatch: IoPortItem")
+    keys.update(("io_port_name", "io_port_desc"))
     catalog = plain_path(project / "src/ProbablyStolen.DigitalStorage.Common/Domain/Storage/StorageCellTier.cs").read_text(encoding="utf-8")
     declarations = re.findall(r'new StorageCellTier\("([a-z0-9]+)", (\d+), (\d+), (\d+)\)', catalog)
     expected_tiers = [("1k", "1", "100", "50"), ("4k", "4", "200", "25"),
@@ -320,6 +339,19 @@ def check_content(project: Path, output: Path) -> None:
         for prefix in ("item_storage_cell_", "cell_component_"):
             keys.update((prefix + tier + "_name", prefix + tier + "_desc"))
     keys.update(("component_panel", "storage_pages_panel", "modules_panel", "cells_panel"))
+    io_port_keys = (
+        "io_port_name", "io_port_desc", "io_direction_cell_to_network", "io_direction_network_to_cell",
+        "io_bank_input", "io_bank_output", "io_finish_button", "io_finish_empty", "io_finish_full", "io_finish_done",
+        "io_start", "io_pause", "io_cancel", "io_status_idle", "io_status_working", "io_status_paused", "io_status_completed",
+        "io_status_no_eligible_content", "io_status_no_controller", "io_status_controller_conflict",
+        "io_status_unpowered", "io_status_operation_fee_unavailable", "io_status_waiting_for_capacity",
+        "io_status_storage_unavailable", "io_status_unsupported_energy_source", "io_status_output_full",
+        "io_status_faulted", "io_status_settings_unavailable", "io_progress",
+        "io_tooltip_rate", "io_tooltip_fee", "io_tooltip_state", "config_section_io_port",
+        "network_power_io_port_name", "network_power_io_port_desc", "io_port_rate_name", "io_port_rate_desc",
+        "io_port_fee_name", "io_port_fee_desc",
+    )
+    keys.update(io_port_keys)
     keys.update((
         "module_equal_distribution_desc",
         "module_equal_distribution_name",
@@ -558,6 +590,16 @@ def check_content(project: Path, output: Path) -> None:
     for key in keys:
         if format_parameters(languages[0][key]) != format_parameters(languages[1][key]):
             raise ContentValidationError(f"Localization format parameters differ: {key}")
+    io_port_parameters = dict.fromkeys(io_port_keys, ())
+    io_port_parameters.update({
+        "io_progress": (0,), "io_finish_button": (0,), "io_tooltip_rate": (0,), "io_tooltip_fee": (0,),
+        "io_tooltip_state": (0, 1), "workbench_info_count": (0, 1),
+        "modules_panel": (), "terminal_dock_title": (), "partition_unknown_value": (),
+        "partition_mode_whitelist": (), "partition_mode_blacklist": (),
+    })
+    for key, parameters in io_port_parameters.items():
+        if tuple(format_parameters(languages[0][key])) != parameters:
+            raise ContentValidationError(f"Localization format parameters do not match the IO Port caller: {key}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

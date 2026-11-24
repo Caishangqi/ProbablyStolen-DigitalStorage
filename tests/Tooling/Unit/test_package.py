@@ -28,6 +28,10 @@ class PackageValidationTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.package_directory = Path(self.temporary_directory.name) / "DigitalStorage"
         self.package_directory.mkdir()
+        self.owned_path = Path(self.temporary_directory.name) / "owned-resources.json"
+        owned_patch = patch("digital_storage_tools.package.OWNED_RESOURCES_PATH", self.owned_path)
+        owned_patch.start()
+        self.addCleanup(owned_patch.stop)
         self._write_valid_package()
 
     def tearDown(self) -> None:
@@ -171,6 +175,44 @@ class PackageValidationTests(unittest.TestCase):
         (self.package_directory / "ProbablyStolen.DigitalStorage.Mod.dll").unlink()
         with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
             validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+
+    def test_earlier_build_with_owned_leftover_resource_is_replaceable(self) -> None:
+        leftover = self.package_directory / "Textures" / "button_retired.png"
+        leftover.write_bytes(b"retired icon")
+        with self.assertRaisesRegex(PackageValidationError, "extra=.*button_retired.png"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+
+        remember_owned_resources([{"name": "Textures/button_retired.png", "size": 12,
+                                   "sha256": hashlib.sha256(b"retired icon").hexdigest()}])
+
+        inventory = validate_package_directory(self.package_directory, False, allow_earlier_build=True)
+        self.assertEqual({item["name"] for item in inventory}, set(CURRENT_FILES) | {"Textures/button_retired.png"})
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory, False)
+        with self.assertRaisesRegex(PackageValidationError, "allowlist mismatch"):
+            validate_package_directory(self.package_directory)
+
+    def test_owned_name_with_other_content_or_assembly_is_still_refused(self) -> None:
+        leftover = self.package_directory / "Textures" / "button_retired.png"
+        leftover.write_bytes(b"player edited")
+        owned = {"Textures/button_retired.png": {hashlib.sha256(b"retired icon").hexdigest()}}
+        with self.assertRaisesRegex(PackageValidationError, "extra=.*button_retired.png"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True, owned_resources=owned)
+        leftover.unlink()
+        foreign = self.package_directory / "Other.dll"
+        foreign.write_bytes(b"assembly")
+        owned = {"Other.dll": {hashlib.sha256(b"assembly").hexdigest()}}
+        with self.assertRaisesRegex(PackageValidationError, "extra=.*Other.dll"):
+            validate_package_directory(self.package_directory, False, allow_earlier_build=True, owned_resources=owned)
+
+    def test_remember_owned_resources_keeps_earlier_hashes_and_skips_code(self) -> None:
+        remember_owned_resources([{"name": "Textures/a.png", "size": 1, "sha256": "1"},
+                                  {"name": "manifest.xml", "size": 1, "sha256": "2"},
+                                  {"name": "X.dll", "size": 1, "sha256": "3"}])
+        remember_owned_resources([{"name": "Textures/a.png", "size": 1, "sha256": "4"}])
+        self.assertEqual(load_owned_resources(), {"Textures/a.png": {"1", "4"}})
+        self.owned_path.write_text("not json", encoding="utf-8")
+        self.assertEqual(load_owned_resources(), {})
 
     def test_earlier_build_needs_this_mods_manifest(self) -> None:
         (self.package_directory / RESOURCE_FILES[-1]).unlink()

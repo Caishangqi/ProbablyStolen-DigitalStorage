@@ -10,6 +10,9 @@ public enum GridNodeKind
     Drive,
 
     /// <summary>A terminal attached to the network.</summary>
-    Terminal
+    Terminal,
+
+    /// <summary>An IO Port attached to the network.</summary>
+    IoPort
 }
 

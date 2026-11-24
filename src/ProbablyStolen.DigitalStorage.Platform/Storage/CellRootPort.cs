@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
@@ -8,6 +9,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Ports;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
@@ -40,7 +42,7 @@ internal sealed class CellRootPort : ICellPagesPort
     /// The view whose slot types locate roots of one type; without one, every root's type is read.
     /// </param>
     /// <param name="storedIdentityChanged">Marks the mounted views stale if native move callbacks change the key of a stored root.</param>
-    /// <param name="operation">Collects native move failures for the terminal operation, when present.</param>
+    /// <param name="operation">Collects native move failures for the operation, when present.</param>
     internal CellRootPort(GameItem cell, Func<GameItem, ItemKey?> identify, CellView? view = null,
         Action? storedIdentityChanged = null, TransferOperation? operation = null)
     {
@@ -62,20 +64,29 @@ internal sealed class CellRootPort : ICellPagesPort
         if (_view?.WriteState == CellWriteState.ExtractOnly)
             return TransferStep.Rejected(StoreRejection.ReadOnly);
         var item = (root.Origin as INativeRootSource)?.Resolve(root)
-            ?? throw new InvalidOperationException($"The root {root} cannot be resolved.");
-        if (!CellTags.TryReadLayout(_cell, out var layout) || page >= layout!.Pages.Count)
-            throw new InvalidOperationException("The target page is not in the cell layout.");
+            ?? throw new RootTransferNotStartedException("The planned root could not be resolved at its source.");
+        var layoutMark = TransferProfile.Mark();
+        var hasLayout = CellTags.TryReadLayout(_cell, out var layout);
+        TransferProfile.Add(TransferPart.LayoutRead, layoutMark);
+        if (!hasLayout || page >= layout!.Pages.Count)
+            throw new RootTransferNotStartedException("The target page is not in the cell layout.");
         var pages = CellPages.Pages(_cell);
-        if (page >= pages.Count) throw new InvalidOperationException("The target page does not exist.");
+        if (page >= pages.Count) throw new RootTransferNotStartedException("The target page does not exist.");
 
         var target = pages[page];
         var (x, y) = StripLayout.SlotOrigin(layout.Pages[page], slot);
         var shape = new GridShapeBuilder(item.modifiedShape).SetPosition(x, y).Build();
         // The native check also applies item state rules; a refusal leaves the item untouched.
-        if (!target.CheckShapePlacement(item, shape, new List<GameItem>())) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+        var placementMark = TransferProfile.Mark();
+        var placeable = target.CheckShapePlacement(item, shape, new List<GameItem>());
+        TransferProfile.Add(TransferPart.PlacementCheck, placementMark);
+        if (!placeable) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
 
         var source = item.parentInventory;
+
+        var moveMark = TransferProfile.Mark();
         var result = ItemMove.Run(NativeItemMove.Into(item, target, shape));
+        TransferProfile.Add(TransferPart.NativeMove, moveMark);
         NativeItemMove.Report(result, item, "store", _operation);
         if (result.Outcome == ItemMoveOutcome.Moved)
         {
@@ -106,8 +117,10 @@ internal sealed class CellRootPort : ICellPagesPort
 /// one its slot records, and only a root about to move has its own type read to confirm it; other types are read and
 /// cached for this source's operation only.
 /// </summary>
-internal sealed class CellRootSource : INativeRootSource
+internal sealed class CellRootSource : INativeRootSource, IRootLookup
 {
+    private static readonly ConditionalWeakTable<GameItem, object> PhysicalIdentities = new();
+
     private readonly GameItem _cell;
     private readonly Func<GameItem, ItemKey?> _identify;
     private readonly ItemKey? _key;
@@ -127,6 +140,13 @@ internal sealed class CellRootSource : INativeRootSource
     }
 
     public bool TryPeekFirst(out RootSnapshot root)
+    {
+        var mark = TransferProfile.Mark();
+        try { return PeekFirst(out root); }
+        finally { TransferProfile.Add(TransferPart.SourcePeek, mark); }
+    }
+
+    private bool PeekFirst(out RootSnapshot root)
     {
         foreach (var (index, page) in AllowedPages())
         {
@@ -148,6 +168,20 @@ internal sealed class CellRootSource : INativeRootSource
         return false;
     }
 
+    /// <summary>The same answer as finding <paramref name="root"/> in <see cref="Snapshot()"/>, reading only its page.</summary>
+    public bool Contains(RootSnapshot root)
+    {
+        if (!ReferenceEquals(root.Origin, this) || root.Key == null) return false;
+        var allowed = AllowedPages().FirstOrDefault(entry => entry.Index == root.Page);
+        if (allowed.Page == null) return false;
+        foreach (var item in allowed.Page.childItems)
+        {
+            if (item.modifiedShape.minX == root.X && item.modifiedShape.minY == root.Y && Matches(root.Page, item) &&
+                Snapshot(root.Page, item).Equals(root)) return true;
+        }
+        return false;
+    }
+
     public IEnumerable<RootSnapshot> Snapshot() => AllowedPages()
         .SelectMany(entry => entry.Page.childItems.Where(item => Matches(entry.Index, item))
             .OrderBy(item => item.modifiedShape.minY).ThenBy(item => item.modifiedShape.minX)
@@ -160,10 +194,11 @@ internal sealed class CellRootSource : INativeRootSource
     public GameItem? Resolve(RootSnapshot root)
     {
         var pages = CellPages.Pages(_cell);
-        var item = root.Page < pages.Count
-            ? pages[root.Page].childItems.FirstOrDefault(candidate =>
-                candidate.modifiedShape.minX == root.X && candidate.modifiedShape.minY == root.Y)
-            : null;
+        var page = root.Page < pages.Count ? pages[root.Page] : null;
+        var item = page?.childItems.FirstOrDefault(candidate =>
+            candidate.modifiedShape.minX == root.X && candidate.modifiedShape.minY == root.Y);
+        if (item != null && root.PhysicalIdentity != null && !ReferenceEquals(root.PhysicalIdentity, PhysicalIdentityOf(item)))
+            return null;
         if (item == null || _types.ContainsKey(item) || !_confirmed.Add(item)) return item;
         // Its type came from the slot record: the one root about to move is read to confirm it.
         var actual = StorageService.Identify(item, out var failure);
@@ -216,8 +251,10 @@ internal sealed class CellRootSource : INativeRootSource
     {
         var key = TypeOf(page, item) ?? throw new InvalidOperationException($"A root on page {page} has no type.");
         return new RootSnapshot(page, item.modifiedShape.minX, item.modifiedShape.minY, CellPages.SizeOf(item), key,
-            item.unitCount, this);
+            item.unitCount, this, PhysicalIdentityOf(item));
     }
+
+    internal static object PhysicalIdentityOf(GameItem item) => PhysicalIdentities.GetValue(item, _ => new object());
 }
 
 /// <summary>Player selected items offered in selection order while they stay where they were.</summary>

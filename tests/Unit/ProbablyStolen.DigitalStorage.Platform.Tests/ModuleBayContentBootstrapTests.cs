@@ -151,6 +151,7 @@ public sealed class ModuleBayContentBootstrapTests
         ("digital_storage.storage_terminal", "terminal", "native_standard", 10),
         ("digital_storage.storage_drive", "vanilla_standard", "native_standard", 2),
         ("digital_storage.storage_network_controller", "vanilla_standard", "native_standard", 2),
+        ("digital_storage.io_port", "vanilla_standard", "native_standard", 2),
         ("digital_storage.item_storage_cell_1k", "vanilla_standard", "cell", 0),
         ("digital_storage.item_storage_cell_4k", "vanilla_standard", "cell", 0),
         ("digital_storage.item_storage_cell_16k", "vanilla_standard", "cell", 1),
@@ -194,6 +195,10 @@ public sealed class ModuleBayContentBootstrapTests
         for (var level = 1; level < terminal.Stages.Count; level++)
             Assert.That(terminal.Stages[level].Layout.ContainsOpenCellsOf(terminal.Stages[level - 1].Layout), Is.True, "stage " + level);
         Assert.That(service.ModuleBays.GetRequired(Identifier.Parse("digital_storage:vanilla_standard")).Stages, Has.Count.EqualTo(3));
+        Assert.That(service.TryBinding("digital_storage.io_port", out var ioPort, out _), Is.True);
+        Assert.That(ioPort!.DefinitionId, Is.EqualTo(Identifier.Parse("digital_storage:vanilla_standard")));
+        Assert.That(ioPort.ProviderId, Is.EqualTo(Identifier.Parse("digital_storage:native_standard")));
+        Assert.That(ioPort.MaximumStage, Is.EqualTo(2));
         foreach (var expected in BuiltinBindings)
         {
             Assert.That(service.TryBinding(expected.Item, out var binding, out _), Is.True, expected.Item);
@@ -211,7 +216,7 @@ public sealed class ModuleBayContentBootstrapTests
         service.Bootstrap(true);
         Assert.That(service.IsUnavailable, Is.False);
         Assert.That(service.ModuleBays.Entries, Has.Count.EqualTo(2));
-        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(9));
+        Assert.That(service.ModuleBayBindings.Entries, Has.Count.EqualTo(10));
         Assert.That(service.GetRegistry<IModuleBayProvider>(DigitalStorageRegistries.ModuleBayProvider.EntryId).Entries, Has.Count.EqualTo(2));
     }
 

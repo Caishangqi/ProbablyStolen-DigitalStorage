@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Diagnostics;
@@ -13,13 +16,68 @@ internal sealed class TransferDiagnostics
     private readonly DiagnosticLogger _log;
     private readonly LogCategory _category;
     private readonly Dictionary<(string Reason, string Expected, string Actual), int> _mismatches = new();
+    private readonly Dictionary<(int Slot, IoPortTransferFault Fault), int> _ioPortFaults = new();
     private int _pairs;
+    private const int IoPortBatchLogSeconds = 5;
+    private long _lastIoPortBatch = long.MinValue / 2;
+    private int _ioPortWarnings;
     private bool _suppressed;
 
     internal TransferDiagnostics(DiagnosticLogger log, LogCategory category) => (_log, _category) = (log, category);
 
     internal TransferOperation Begin(string mode, long requestedPieces) =>
         new(Interlocked.Increment(ref _nextOperationId), mode, requestedPieces);
+
+    /// <summary>
+    /// Logs where one IO Port session spent its time, at most once every few seconds: reading the network once, moving
+    /// roots over its steps, keeping the touched cells' contents between steps and at the end, and compacting.
+    /// </summary>
+    internal void IoPortBatch(int moved, int limit, int steps, long mountTicks, long moveTicks, long keepTicks, long compactTicks)
+    {
+        if (moved == 0 || !_log.IsEnabled(_category, LogVerbosity.Info)) return;
+        var now = Stopwatch.GetTimestamp();
+        if (now - _lastIoPortBatch < Stopwatch.Frequency * IoPortBatchLogSeconds) return;
+        _lastIoPortBatch = now;
+        _log.Write(_category, LogVerbosity.Info, "io_port_batch", "IO Port batch timing.", () => new[]
+        {
+            LogField.Of("moved", moved), LogField.Of("limit", limit), LogField.Of("steps", steps),
+            LogField.Of("mount_ms", Milliseconds(mountTicks)), LogField.Of("move_ms", Milliseconds(moveTicks)),
+            LogField.Of("per_root_ms", Milliseconds(moveTicks / moved)), LogField.Of("keep_ms", Milliseconds(keepTicks)),
+            LogField.Of("compact_ms", Milliseconds(compactTicks)),
+            Part("identify", TransferPart.Identify), Part("native_move", TransferPart.NativeMove)
+        });
+        // The formatter keeps 16 fields per line, so the parts of a root's move get a line of their own. Parts nest:
+        // source_extract holds the whole move from a cell, network_insert and cell_insert the store into the target.
+        _log.Write(_category, LogVerbosity.Info, "io_port_batch_parts", "IO Port batch parts.", () => new[]
+        {
+            Calls("identifies", TransferPart.Identify), Part("placement_check", TransferPart.PlacementCheck),
+            Part("layout_read", TransferPart.LayoutRead), Part("source_peek", TransferPart.SourcePeek),
+            Calls("source_peeks", TransferPart.SourcePeek), Part("store_plan", TransferPart.StorePlan),
+            Calls("store_plans", TransferPart.StorePlan), Part("partition_check", TransferPart.PartitionCheck),
+            Calls("partition_checks", TransferPart.PartitionCheck), Part("view_record", TransferPart.ViewRecord),
+            Part("network_insert", TransferPart.NetworkInsert), Calls("network_inserts", TransferPart.NetworkInsert),
+            Part("cell_insert", TransferPart.CellInsert), Part("source_extract", TransferPart.SourceExtract)
+        });
+    }
+
+    private static LogField Part(string name, TransferPart part) => LogField.Of(name + "_ms", Milliseconds(TransferProfile.TicksOf(part)));
+
+    private static LogField Calls(string name, TransferPart part) => LogField.Of(name, TransferProfile.CallsOf(part));
+
+    private static string Milliseconds(long ticks) =>
+        (ticks * 1000d / Stopwatch.Frequency).ToString("0.###", CultureInfo.InvariantCulture);
+
+    internal void IoPortFault(int slot, IoPortTransferFault fault)
+    {
+        if (_ioPortWarnings >= MaximumPairs || !_log.IsEnabled(_category, LogVerbosity.Warning)) return;
+        var key = (slot, fault);
+        _ioPortFaults.TryGetValue(key, out var count);
+        if (count >= MaximumPairsPerIdentity) return;
+        _ioPortWarnings++;
+        _ioPortFaults[key] = count + 1;
+        _log.Write(_category, LogVerbosity.Warning, "io_port_transfer_fault", "IO Port slot attempt failed.",
+            () => new[] { LogField.Of("slot", slot), LogField.Of("fault", fault.ToString()) });
+    }
 
     internal void Extracted(TransferOperation operation, TerminalExtractionResult result)
     {

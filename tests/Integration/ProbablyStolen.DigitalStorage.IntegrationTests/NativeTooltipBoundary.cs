@@ -21,6 +21,17 @@ internal sealed class RichTextBuilder
     }
 }
 
+internal sealed class CustomUIManager
+{
+    internal const int LAYER_PAPER = 0;
+    internal static CustomUIManager Instance => throw new InvalidOperationException("unexpected restore warning");
+    internal static CustomUIManager Window(string id, string title, int layer) => Instance;
+    internal CustomUIManager AddWarning(string message) => throw new InvalidOperationException("unexpected warning UI");
+    internal CustomUIManager AddCloseButton(Action close) => throw new InvalidOperationException("unexpected warning UI");
+    internal void CloseWindow(string id) => throw new InvalidOperationException("unexpected warning UI");
+    internal void Show() => throw new InvalidOperationException("unexpected warning UI");
+}
+
 internal static class RenderHandler
 {
     internal static class ColorPalette
@@ -34,6 +45,7 @@ internal static class RenderHandler
 internal static class LocHelper
 {
     internal static string GetLocalizedMechanic(string key, params object[] args) => key;
+    internal static string GetLocalizedMechanicOrDefault(string key, string fallback) => fallback;
 }
 
 namespace ProbablyStolen.DigitalStorage.Platform.Localization
@@ -62,24 +74,6 @@ namespace ProbablyStolen.DigitalStorage.Platform.Network
         {
             Calls++;
             return Powered;
-        }
-    }
-}
-
-namespace ProbablyStolen.DigitalStorage.Platform.Storage
-{
-    internal sealed partial class BasicCellHandler
-    {
-        internal int TooltipLineCount { get; set; } = 1;
-        internal BasicCellHandler(Localization.ModText text) { }
-        internal void AddCellInformationToTooltip(RichTextBuilder builder, GameItem item, Func<bool>? isActive = null)
-        {
-            if (item.ThrowTooltip) throw new InvalidOperationException("injected cell failure");
-            for (var index = 0; index < TooltipLineCount; index++)
-            {
-                if (isActive?.Invoke() == false) break;
-                builder.AddLine(index == 0 ? "cell" : "cell_" + (index + 1), true, RenderHandler.ColorPalette.LightBlue);
-            }
         }
     }
 }

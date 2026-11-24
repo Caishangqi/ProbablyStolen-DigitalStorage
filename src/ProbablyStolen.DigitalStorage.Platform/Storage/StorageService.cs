@@ -14,9 +14,9 @@ using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
-using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Identity;
 using ProbablyStolen.DigitalStorage.Platform.Network;
@@ -81,7 +81,9 @@ internal sealed class StorageService
             return null;
         }
 
+        var mark = TransferProfile.Mark();
         var result = NativeItemIdentityReader.Read(item);
+        TransferProfile.Add(TransferPart.Identify, mark);
         if (result.Status == NativeItemIdentityReadStatus.Success)
         {
             return result.Identity;
@@ -240,9 +242,11 @@ internal sealed class StorageService
     internal MountedNetwork Mount(GameItem machine) => GetInventory(machine, migratePending: false);
 
     // Simulations pass false because checking availability must not trigger a migration that moves items.
-    private MountedNetwork GetInventory(GameItem terminal, bool migratePending, TransferOperation? operation = null)
+    private MountedNetwork GetInventory(GameItem terminal, bool migratePending, TransferOperation? operation = null) =>
+        Mount(Connect(terminal), migratePending, operation);
+
+    private MountedNetwork Mount(Network network, bool migratePending, TransferOperation? operation)
     {
-        var network = Connect(terminal);
         var storage = new NetworkStorage();
         var inventories = new List<(GameItem, BasicCellInventory)>();
         if (!network.Online) return new MountedNetwork(network, storage, inventories);
@@ -280,6 +284,55 @@ internal sealed class StorageService
     }
 
     internal BasicCellInventory? ReadCell(GameItem cell) => BasicCellHandler.GetCellInventory(cell, _diagnostics);
+
+    /// <summary>
+    /// Mounts the drives of a grid the IO Port already captured and reads its input cells the same way, so one
+    /// <see cref="Settle(MountedNetwork, IReadOnlyList{ValueTuple{GameItem, BasicCellInventory}})"/> keeps or drops
+    /// every touched cell's contents. Never migrates pending cells.
+    /// </summary>
+    internal MountedNetwork MountCaptured(NativeGridSnapshot snapshot, Grid grid, IReadOnlyList<GameItem> localCells,
+        out IReadOnlyList<(GameItem Cell, BasicCellInventory Inventory)> local)
+    {
+        _contentsUncertain = false;
+        _viewsStale = false;
+        var mounted = Mount(Connect(snapshot, grid), migratePending: false, operation: null);
+        Action storedIdentityChanged = () => _viewsStale = true;
+        var read = new List<(GameItem, BasicCellInventory)>(localCells.Count);
+        foreach (var cell in localCells)
+            if (BasicCellHandler.GetCellInventory(cell, _diagnostics, storedIdentityChanged) is { } inventory)
+                read.Add((cell, inventory));
+        local = read;
+        return mounted;
+    }
+
+    /// <summary>
+    /// Keeps the contents of the cells an IO Port step changed, so its views stay valid into the next frame. Returns
+    /// false, after dropping those cells' contents, when a move of the step was not accounted for; the caller then
+    /// stops using its views. Either way the next step starts with no recorded uncertainty.
+    /// </summary>
+    internal bool Checkpoint(IEnumerable<(GameItem Cell, BasicCellInventory Inventory)> touched)
+    {
+        var certain = !_contentsUncertain && !_viewsStale;
+        foreach (var (cell, inventory) in touched)
+        {
+            if (certain) CellInventoryCache.Remember(cell, inventory.View);
+            else CellInventoryCache.Forget(cell);
+        }
+        _contentsUncertain = false;
+        _viewsStale = false;
+        return certain;
+    }
+
+    /// <summary>Settles the mounted drives and the IO Port's own input cells together.</summary>
+    internal void Settle(MountedNetwork mounted, IReadOnlyList<(GameItem Cell, BasicCellInventory Inventory)> local)
+    {
+        foreach (var (cell, inventory) in local)
+        {
+            if (_contentsUncertain || _viewsStale) CellInventoryCache.Forget(cell);
+            else CellInventoryCache.Remember(cell, inventory.View);
+        }
+        Settle(mounted);
+    }
 
     internal void Compact(GameItem cell) => CellPages.Compact(cell, _diagnostics);
 
@@ -593,7 +646,11 @@ internal sealed class StorageService
     private Network Connect(GameItem terminal)
     {
         var snapshot = _scanner.Capture(terminal);
-        var grid = snapshot.FindGrid(terminal);
+        return Connect(snapshot, snapshot.FindGrid(terminal));
+    }
+
+    private Network Connect(NativeGridSnapshot snapshot, Grid grid)
+    {
         var status = new GridStorage(grid, _isPowered(snapshot, grid)).GetStatus();
         if (status != GridStorageStatus.Online)
         {

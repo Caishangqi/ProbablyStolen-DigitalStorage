@@ -35,7 +35,7 @@ public sealed class StorageCellDisassemblyRecipe
     public bool IsHousing(string? identifier, int count, bool occupied) =>
         string.Equals(identifier, HousingId, StringComparison.Ordinal) && count == 1 && !occupied;
 
-    /// <summary>Requires a complete cell, an unlocked component, and no drive mounting.</summary>
+    /// <summary>Requires a complete cell, an unlocked component, and no machine bay mounting.</summary>
     public bool CanDisassemble(string? cellId, int cellCount, string? componentId, int componentCount,
         bool stuck, bool mounted) => CanDisassemble(cellId, cellCount, componentId, componentCount,
             stuck, mounted, false);

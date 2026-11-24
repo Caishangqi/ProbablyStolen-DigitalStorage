@@ -80,6 +80,7 @@ internal sealed class MemoryCellPages : ICellPagesPort
 
     internal int FailMoveOnCall { get; set; } = -1;
     internal bool RefuseAppend { get; set; }
+    internal bool FailRootSnapshot { get; set; }
     internal int MoveCalls { get; private set; }
     internal IReadOnlyList<PageGeometry> Pages => _pages;
     internal IReadOnlyList<RootSnapshot> Roots => _roots;
@@ -96,7 +97,8 @@ internal sealed class MemoryCellPages : ICellPagesPort
     internal void KeepUnits(RootSnapshot root, long units)
     {
         Remove(root);
-        _roots.Add(new RootSnapshot(root.Page, root.X, root.Y, root.Size, root.Key, units));
+        _roots.Add(new RootSnapshot(root.Page, root.X, root.Y, root.Size, root.Key, units,
+            physicalIdentity: root.PhysicalIdentity));
     }
 
     public bool TryAppendStripPage(PageGeometry page)
@@ -111,7 +113,8 @@ internal sealed class MemoryCellPages : ICellPagesPort
         if (++MoveCalls == FailMoveOnCall) return TransferStep.Returned;
         MemoryInventory.Detach(root);
         var (x, y) = StripLayout.SlotOrigin(_pages[page], slot);
-        _roots.Add(new RootSnapshot(page, x, y, root.Size, root.Key, root.Units));
+        _roots.Add(new RootSnapshot(page, x, y, root.Size, root.Key, root.Units,
+            physicalIdentity: root.PhysicalIdentity ?? new object()));
         return TransferStep.Moved;
     }
 
@@ -138,8 +141,10 @@ internal sealed class MemoryCellPages : ICellPagesPort
 
         public IEnumerable<RootSnapshot> Snapshot()
         {
+            if (Owner.FailRootSnapshot) throw new InvalidOperationException("The source view cannot be read.");
             var ordered = Owner._roots.Where(root => root.Key.Equals(_key))
-                .Select(root => new RootSnapshot(root.Page, root.X, root.Y, root.Size, root.Key, root.Units, this))
+                .Select(root => new RootSnapshot(root.Page, root.X, root.Y, root.Size, root.Key, root.Units, this,
+                    root.PhysicalIdentity))
                 .ToList();
             ordered.Sort(RootSnapshot.CompareOrder);
             return ordered;

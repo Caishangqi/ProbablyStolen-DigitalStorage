@@ -51,10 +51,33 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\LocaleSelectionRouter.cs" Link="Composition\LocaleSelectionRouter.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinLifecycleCoordinator.cs" Link="Composition\PinyinLifecycleCoordinator.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Composition\PinyinDropdownDisplay.cs" Link="Composition\PinyinDropdownDisplay.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\IoPortItem.Identity.cs" Link="Content\IoPortItem.Identity.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeNetworkScanner.cs" Link="NativeNetwork\NativeNetworkScanner.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\IoPortCoordinator.cs" Link="NativeNetwork\IoPortCoordinator.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\IIoPortTuning.cs" Link="NativeNetwork\IIoPortTuning.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Events\NativeNetworkEvents.cs" Link="Events\NativeNetworkEvents.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Energy\NativeTransferEnergyPort.cs" Link="Energy\NativeTransferEnergyPort.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Energy\NativeTransferEnergyReservation.cs" Link="Energy\NativeTransferEnergyReservation.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\CellDiagnostics.cs" Link="Diagnostics\CellDiagnostics.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\TransferDiagnostics.cs" Link="Diagnostics\TransferDiagnostics.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\TransferOperation.cs" Link="Diagnostics\TransferOperation.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\StoredRootIdentityMismatch.cs" Link="Diagnostics\StoredRootIdentityMismatch.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPartitionTags.cs" Link="Storage\CellPartitionTags.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellTags.cs" Link="Storage\CellTags.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\DrivePriorityTag.cs" Link="Storage\DrivePriorityTag.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\NativeItemMove.cs" Link="Storage\NativeItemMove.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellRootPort.cs" Link="Storage\CellRootPort.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StorageService.cs" Link="Storage\StorageService.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\IoPortNativeState.cs" Link="Content\IoPortNativeState.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellInventoryCache.cs" Link="Storage\CellInventoryCache.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellContentStamps.cs" Link="Storage\CellContentStamps.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\BasicCellHandler.cs" Link="Storage\BasicCellHandler.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\BasicCellHandler.Native.cs" Link="Storage\BasicCellHandler.Native.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPages.cs" Link="Storage\CellPages.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellHealth.cs" Link="Storage\CellHealth.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\CellLogFields.cs" Link="Diagnostics\CellLogFields.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoredItemPresence.cs" Link="Storage\StoredItemPresence.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\PageSetSwap.cs" Link="Storage\PageSetSwap.cs" />
@@ -63,12 +86,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Api\StorageOutcomes.cs" Link="Api\StorageOutcomes.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoreAdmission.cs" Link="Storage\StoreAdmission.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IExternalAccess.cs" Link="Api\IExternalAccess.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\DiagnosticLogger.cs" Link="Common\Diagnostics\DiagnosticLogger.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogCategories.cs" Link="Common\Diagnostics\LogCategories.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogCategory.cs" Link="Common\Diagnostics\LogCategory.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogField.cs" Link="Common\Diagnostics\LogField.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogFormatter.cs" Link="Common\Diagnostics\LogFormatter.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Common\Diagnostics\LogVerbosity.cs" Link="Common\Diagnostics\LogVerbosity.cs" />
+
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Diagnostics\CompatibilityDiagnostics.cs" Link="Diagnostics\CompatibilityDiagnostics.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Integration\IntegrationDecorationCatalog.cs" Link="Integration\IntegrationDecorationCatalog.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\Terminal\Features\StorageTerminal\TerminalDecorationRefresh.cs" Link="Client\TerminalDecorationRefresh.cs" />

@@ -22,6 +22,9 @@ EXPECTED_GAME_VERSION = "0.46"
 SOURCE_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "packaging/manifest.xml"
 LAYOUT_PATH = Path(__file__).resolve().parents[2] / "packaging/package-files.json"
 INSTALLED_LAYOUT_PATH = Path(__file__).resolve().parents[2] / "packaging/installed-layouts.json"
+# Every resource of a package this toolchain validated, by name and content hash. Lets replacement accept leftovers of
+# unreleased local builds without listing them in packaging/, while foreign files still fail.
+OWNED_RESOURCES_PATH = Path(__file__).resolve().parents[2] / "artifacts/owned-resources.json"
 MANIFEST_MAX_BYTES = 1_048_576
 EXPECTED_ELEMENTS = (
     "ID", "Name", "Author", "ModVersion", "Description", "GameVersions", "Prerequisites", "Assemblies", "Capabilities"
@@ -328,15 +331,45 @@ def _known_layouts() -> tuple[tuple[str, tuple[str, ...], str], ...]:
     return tuple(layouts)
 
 
-def _earlier_build_of_current(actual_names: set[str]) -> tuple[str, ...] | None:
+def _earlier_build_of_current(actual_names: set[str], is_owned_leftover=lambda name: False) -> tuple[str, ...] | None:
     data = load_installed_layouts()
     current = tuple(load_layouts()["current"])
     required = {"manifest.xml", *data["earlierLocalBuild"]["requiredAssemblies"]}
     released = next(tuple(item["files"]) for item in data["layouts"] if item["id"] == data["lastReleased"])
     allowed = tuple(dict.fromkeys((*current, *(name for name in released if name not in current))))
-    if not required <= actual_names or not actual_names <= set(allowed):
+    leftovers = tuple(sorted(actual_names - set(allowed)))
+    if not required <= actual_names or not all(is_owned_leftover(name) for name in leftovers):
         return None
-    return tuple(name for name in allowed if name in actual_names)
+    return (*(name for name in allowed if name in actual_names), *leftovers)
+
+
+def load_owned_resources(path: Path | None = None) -> dict[str, set[str]]:
+    """Read the resource hashes of earlier validated packages; a missing or unreadable record owns nothing."""
+    try:
+        data = json.loads((path or OWNED_RESOURCES_PATH).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    resources = data.get("resources") if isinstance(data, dict) and data.get("schemaVersion") == 1 else None
+    if not isinstance(resources, dict):
+        return {}
+    return {name: {value for value in hashes if isinstance(value, str)}
+            for name, hashes in resources.items() if isinstance(name, str) and isinstance(hashes, list)}
+
+
+def remember_owned_resources(inventory: Sequence[dict[str, object]], path: Path | None = None) -> None:
+    """Add the resource files of a validated package to the record; assemblies and the manifest are never leftovers."""
+    path = path or OWNED_RESOURCES_PATH
+    owned = load_owned_resources(path)
+    for item in inventory:
+        name = str(item["name"])
+        if name.endswith(".dll") or name == "manifest.xml":
+            continue
+        owned.setdefault(name, set()).add(str(item["sha256"]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"schemaVersion": 1, "resources": {name: sorted(hashes) for name, hashes in sorted(owned.items())}}
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
 
 
 KNOWN_LAYOUTS = _known_layouts()
@@ -372,12 +405,15 @@ def package_directories(names: Sequence[str]) -> set[str]:
 
 
 def validate_package_directory(
-    package_directory: Path, require_current_metadata: bool = True, allow_earlier_build: bool = False
+    package_directory: Path, require_current_metadata: bool = True, allow_earlier_build: bool = False,
+    owned_resources: dict[str, set[str]] | None = None
 ) -> list[dict[str, object]]:
     """Validate the package allowlist and return a size and SHA-256 inventory.
 
     ``allow_earlier_build`` also accepts an earlier local build of the current layout, and is meant only for checking
-    a directory about to be replaced; removal keeps requiring a known layout.
+    a directory about to be replaced; removal keeps requiring a known layout. Such a build may also hold resources an
+    earlier validated package had, matched by name and content against ``owned_resources`` (by default the record at
+    ``OWNED_RESOURCES_PATH``), so the replacement removes them.
     """
     layouts = load_layouts()
     candidate = Path(os.path.abspath(package_directory))
@@ -400,7 +436,8 @@ def validate_package_directory(
     actual_names: set[str] = set()
     actual_directories: set[str] = set()
     # Earlier approved layouts may hold directories the current one dropped, such as the module bay Data/.
-    allowed_directories = package_directories([name for _, names, _ in KNOWN_LAYOUTS for name in names])
+    owned = (load_owned_resources() if owned_resources is None else owned_resources) if allow_earlier_build else {}
+    allowed_directories = package_directories([*(name for _, names, _ in KNOWN_LAYOUTS for name in names), *owned])
     case_names: set[str] = set()
 
     def visit(directory: Path) -> None:
@@ -434,7 +471,13 @@ def validate_package_directory(
                 break
         else:
             if allow_earlier_build:
-                names = _earlier_build_of_current(actual_names) or names
+                def is_owned_leftover(name: str) -> bool:
+                    if name not in owned or name.endswith(".dll") or name == "manifest.xml":
+                        return False
+                    with (candidate / name).open("rb") as stream:
+                        return str(file_inventory_entry(name, stream)["sha256"]) in owned[name]
+
+                names = _earlier_build_of_current(actual_names, is_owned_leftover) or names
     expected_directories = package_directories(names)
     # An installation whose layout dropped a directory may keep it empty; every directory was already checked to
     # belong to an approved layout, and with the file set exact such a leftover holds no files.
@@ -485,6 +528,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Package validation error: {error}", file=sys.stderr)
         return 2
 
+    if not arguments.check_existing:
+        try:
+            remember_owned_resources(inventory)
+        except OSError as error:
+            print(f"Warning: could not record package resources: {error}", file=sys.stderr)
     print("[PASS] Package manifest and file allowlist validated.")
     for item in inventory:
         print(f"[FILE] {item['name']} size={item['size']} sha256={item['sha256']}")

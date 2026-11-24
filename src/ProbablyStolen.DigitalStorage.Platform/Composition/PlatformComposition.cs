@@ -53,6 +53,8 @@ public sealed class PlatformComposition : IDisposable
     private readonly ItemTypeBackfill _typeBackfill;
     private readonly DigitalStorageContentService _contentApi;
     private readonly DigitalStorageRuntime _runtime;
+    private readonly IoPortCoordinator _ioPortCoordinator;
+    private IoPortFrameDriver? _ioPortFrames;
     private readonly CompatibilityDiagnostics _compatibility;
     private readonly IntegrationDecorationCatalog _decorations;
     private IntegrationHost? _integrations;
@@ -72,13 +74,14 @@ public sealed class PlatformComposition : IDisposable
         DigitalStorageSettings settings, StorageVendors vendors, DigitalStorageNetwork network, NetworkSprites networkSprites,
         NativeCustomerCatalog customers,
         TerminalSearchComposition search, CellWorkbenchItem workbench,
-        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, ButtonIcons buttonIcons,
-        CompatibilityDiagnostics compatibility, IntegrationDecorationCatalog decorations)
+        DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, IoPortCoordinator ioPortCoordinator,
+        ButtonIcons buttonIcons, CompatibilityDiagnostics compatibility, IntegrationDecorationCatalog decorations)
     {
         _compatibility = compatibility;
         _decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
         _buttonIcons = buttonIcons;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _ioPortCoordinator = ioPortCoordinator ?? throw new ArgumentNullException(nameof(ioPortCoordinator));
         _contentApi = contentApi ?? throw new ArgumentNullException(nameof(contentApi));
         _events = events;
         _settings = settings;
@@ -229,22 +232,28 @@ public sealed class PlatformComposition : IDisposable
             target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
             PartitionWindow.CloseFor,
             message => log.Log(message));
-        var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, workbench.FindUsage,
-            message => log.Error(message));
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text, message => log.Error(message));
         itemContent.SetModulePresenter(modules.Present);
         var goods = new StorageGoods(modules);
         var networkSprites = new NetworkSprites(log);
         var customers = new NativeCustomerCatalog(log);
+        var coordinator = new IoPortCoordinator(networkScanner, networkPower.Storage, transferDiagnostics, networkEvents,
+            networkPowerSettings, () => UnityEngine.Time.frameCount);
+        var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, workbench.FindUsage,
+            message => log.Error(message),
+            () => new IoPortTooltipContributor(text, networkPowerSettings, coordinator.ReadDisplay));
+        var ioPort = new IoPortItem(appearance, windows,
+            _ => IoPortWindow.Create(text, networkPowerSettings, buttonIcons, coordinator, message => log.Log(message)),
+            coordinator, text);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
-            modules, new TerminalModuleFactory(appearance), itemContent, log);
+            modules, new TerminalModuleFactory(appearance), ioPort, itemContent, log);
         var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
             tooltip, cellHandler, appearance, content, itemContent, cellHealth, recovery, migration, eventBus,
             networkPowerSettings, new StorageVendors(text, log, goods, customers),
             new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
             new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
-                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), buttonIcons, compatibility, decorations);
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), coordinator, buttonIcons, compatibility, decorations);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -283,8 +292,11 @@ public sealed class PlatformComposition : IDisposable
             _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+            ModHook.OnGameLoadedInit += _ioPortCoordinator.EndRun;
             ModHook.OnGameLoadedInit += _itemContent.BeginLoad;
             ModHook.OnNewGameStarted += _itemContent.NewGame;
+            ModHook.OnNewGameStarted += OnIoPortNewGameStarted;
             ModHook.OnGameLoadedNormal += OnGameLoaded;
             // Order matters: audit the restored pages, backfill item types, then migrate pending cells.
             ModHook.OnGameLoadedLate += _health.Run;
@@ -292,6 +304,9 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _migration.Run;
             ModHook.OnGameLoadedLate += _recovery.Run;
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
+            ModHook.OnGameLoadedLate += StartIoPortRun;
+            _ioPortFrames = IoPortFrameDriver.Create(_ioPortCoordinator.OnFrame,
+                error => _log.Error($"Digital Storage: IO Port frame step failed ({error.GetType().Name})."));
             ExposeRuntime(_runtime);
             ExposeTooltipService(_tooltip.Service);
             ExposeContent(_contentApi);
@@ -301,7 +316,6 @@ public sealed class PlatformComposition : IDisposable
             {
                 ModHook.OnGameLoadedInit += _integrations.OnGameLoaded;
                 ModHook.OnNewGameStarted += OnIntegrationNewGameStarted;
-                SceneManager.sceneUnloaded += OnIntegrationSceneUnloaded;
                 ModLoader.OnTrustRefreshed += _integrations.OnDependenciesChanged;
                 _integrations.Enable();
             }
@@ -336,8 +350,11 @@ public sealed class PlatformComposition : IDisposable
         _localeRegistration?.Dispose();
         _localeRegistration = null;
         ModHook.OnModConfigApplied -= OnConfigApplied;
+        SceneManager.sceneUnloaded -= OnSceneUnloaded;
+        ModHook.OnGameLoadedInit -= _ioPortCoordinator.EndRun;
         ModHook.OnGameLoadedInit -= _itemContent.BeginLoad;
         ModHook.OnNewGameStarted -= _itemContent.NewGame;
+        ModHook.OnNewGameStarted -= OnIoPortNewGameStarted;
         ModHook.OnGameLoadedNormal -= OnGameLoaded;
         ModHook.OnGameLoadedLate -= _health.Run;
         _health.Detach();
@@ -345,6 +362,9 @@ public sealed class PlatformComposition : IDisposable
         ModHook.OnGameLoadedLate -= _migration.Run;
         ModHook.OnGameLoadedLate -= _recovery.Run;
         ModHook.OnGameLoadedLate -= _itemContent.FinishLoad;
+        ModHook.OnGameLoadedLate -= StartIoPortRun;
+        _ioPortFrames?.Destroy();
+        _ioPortFrames = null;
         TerminalWindow.CloseCurrent();
         PartitionWindow.CloseCurrent();
         _buttonIcons.Dispose();
@@ -353,7 +373,6 @@ public sealed class PlatformComposition : IDisposable
         {
             ModHook.OnGameLoadedInit -= _integrations.OnGameLoaded;
             ModHook.OnNewGameStarted -= OnIntegrationNewGameStarted;
-            SceneManager.sceneUnloaded -= OnIntegrationSceneUnloaded;
             ModLoader.OnTrustRefreshed -= _integrations.OnDependenciesChanged;
             _integrations.Dispose();
         }
@@ -371,6 +390,7 @@ public sealed class PlatformComposition : IDisposable
         _customers.Dispose();
         _content.Dispose();
         _itemContent.Dispose();
+        _ioPortCoordinator.Dispose();
         _events.Dispose();
         _search.Dispose();
     }
@@ -390,6 +410,19 @@ public sealed class PlatformComposition : IDisposable
         }
     }
 
+    private void OnIoPortNewGameStarted(string scenarioId) => StartIoPortRun();
+
+    private void StartIoPortRun()
+    {
+        if (!_isEnabled || _isDisposed || !PlayerStore.HasInstance || EmporiumEntry.Instance == null)
+        {
+            _ioPortCoordinator.EndRun();
+            return;
+        }
+
+        _ioPortCoordinator.StartRun(PlayerStore.Instance, StoreStation.Instance);
+    }
+
     private void OnGameLoaded()
     {
         TerminalWindow.CloseCurrent();
@@ -402,9 +435,11 @@ public sealed class PlatformComposition : IDisposable
         _integrations?.OnNewGameStarted(scenarioId);
     }
 
-    private void OnIntegrationSceneUnloaded(Scene scene)
+    private void OnSceneUnloaded(Scene scene)
     {
-        if (scene.name == "InventoryScene") _integrations?.OnGameUnloaded();
+        if (scene.name != "InventoryScene") return;
+        _ioPortCoordinator.EndRun();
+        _integrations?.OnGameUnloaded();
     }
 
     private void OnLocaleConfirmed(string? locale, bool settled)
@@ -501,6 +536,7 @@ public sealed class PlatformComposition : IDisposable
             _appearance.EnsureReady(TerminalItem.SpriteKey);
             _appearance.EnsureReady(DriveItem.SpriteKey);
             _appearance.EnsureReady(ControllerItem.SpriteKey);
+            _appearance.EnsureReady(IoPortItem.SpriteKey);
             _appearance.EnsureReady(MaterialItem.SpriteKey);
             foreach (var tier in StorageCellTier.All)
             {
