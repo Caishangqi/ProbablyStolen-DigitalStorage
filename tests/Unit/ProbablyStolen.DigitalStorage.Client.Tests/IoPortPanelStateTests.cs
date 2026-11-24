@@ -4,6 +4,8 @@ using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Client.Machines.IoPort;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.IoPort;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Modules;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
 using ProbablyStolen.DigitalStorage.Client.Tests.Terminal;
@@ -59,15 +61,21 @@ public sealed class IoPortPanelStateTests
     }
 
     [Test]
-    public void CreateRegistry_RegistersTheViewCompletionButtonAndModulePage()
+    public void CreateRegistry_RegistersModulesBeforeCompletionAction()
     {
         var mode = (IoPortCompletionMode?)IoPortCompletionMode.WorkComplete;
         var registry = IoPortTerminalFeature.CreateRegistry(new MemoryConfig(), _ => { }, _ => new object(), _ => new object(),
             _ => mode, (_, next) => mode = next);
 
+        var rail = new VerticalButtonBar(registry,
+            new UniversalTerminalHandler(registry, new MemoryStore(), _ => { }), _ => { });
+        var context = TerminalFixtures.Context(IoPortTerminalFeature.TerminalName);
+
         Assert.That(registry.DefaultTerminal.TerminalName, Is.EqualTo(IoPortTerminalFeature.TerminalName));
         Assert.That(registry.Buttons.Select(button => button.Button.Id),
-            Is.EqualTo(new[] { IoPortTerminalFeature.CompletionActionId, ModulesFeature.ActionId }));
+            Is.EqualTo(new[] { ModulesFeature.ActionId, IoPortTerminalFeature.CompletionActionId }));
+        Assert.That(rail.GetButtons(context).Select(button => button.Id),
+            Is.EqualTo(new[] { ModulesFeature.ActionId, IoPortTerminalFeature.CompletionActionId }));
     }
 
     private static IoPortDisplaySnapshot Snapshot(IoPortSettings settings) =>

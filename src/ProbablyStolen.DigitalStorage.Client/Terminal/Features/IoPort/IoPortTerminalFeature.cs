@@ -38,7 +38,8 @@ public static class IoPortTerminalFeature
 
         var registry = new TerminalRegistry(config, diagnostic, TerminalName);
         registry.AddTerminal(new TerminalDefinition(TerminalName, 0, "io_port_name", _ => true, createView));
-        registry.AddAction(new TerminalAction(CompletionActionId, 0, ActionPlacement.Rail, null,
+        ModulesFeature.Register(registry, createModulesScreen);
+        registry.AddAction(new TerminalAction(CompletionActionId, 1, ActionPlacement.Rail, null,
             context => readCompletion(context).HasValue,
             context => readCompletion(context) is { } mode
                 ? new ButtonAppearance(IoPortPanelState.CompletionIcon(mode), "io_finish_button", IoPortPanelState.CompletionKey(mode))
@@ -47,7 +48,6 @@ public static class IoPortTerminalFeature
             {
                 if (readCompletion(context) is { } mode) setCompletion(context, IoPortPanelState.NextCompletion(mode));
             }));
-        ModulesFeature.Register(registry, createModulesScreen);
         registry.Freeze();
         return registry;
     }
