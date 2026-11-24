@@ -13,7 +13,7 @@ internal static class ItemPrices
     internal const long Drive = 350;
 
     /// <summary>The IO Port.</summary>
-    internal const long IoPort = 300;
+    internal const long IoPort = 1600;
 
     /// <summary>The terminal.</summary>
     internal const long Terminal = 250;

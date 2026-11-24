@@ -11,8 +11,8 @@ internal sealed class NetworkSprites : IDisposable
 {
     internal const string SheetKey = "network_digital";
     private const int IconSize = 36;
-    // Only the first two cells of the sheet have upgrades; the third is reserved for a future tier.
-    private const int IconCount = 2;
+    // The first two upgrade tiers use the left and middle cells; the right cell is the third tier.
+    private const int IconCount = 3;
     private readonly ModLog _log;
     private readonly List<string> _iconKeys = new();
     private readonly List<Sprite> _icons = new();

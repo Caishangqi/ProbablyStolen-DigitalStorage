@@ -100,7 +100,7 @@ class ContentAssetTests(unittest.TestCase):
     def test_icon_sheet_requires_declared_visible_cells(self):
         name = self.image(lambda _, item: item["sheetCells"] > 0)
         width, height = self.image_contracts[name]["runtime"]
-        cell_width = width // (self.image_contracts[name]["sheetCells"] + 1)
+        cell_width = width // self.image_contracts[name]["sheetCells"]
         prepare_assets(self.source, self.output, (name,))
         path = self.runtime(name)
         sheet = self.Image.new("RGBA", (width, height), (0, 0, 0, 0))

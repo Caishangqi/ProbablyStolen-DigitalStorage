@@ -21,7 +21,10 @@ public enum StorageGood
     StackDisplayModule,
 
     /// <summary>A type limit module of <see cref="StorageOffer.Quality"/>.</summary>
-    TypeLimitModule
+    TypeLimitModule,
+
+    /// <summary>An IO Port for item transfers between cells and a network.</summary>
+    IoPort
 }
 
 /// <summary>One good offered for sale.</summary>
@@ -52,6 +55,9 @@ public sealed class StorageOffer
     /// <summary>Gets a stack display module offer.</summary>
     public static StorageOffer StackDisplay { get; } = new(StorageGood.StackDisplayModule, null, ModuleQuality.Common);
 
+    /// <summary>Gets an IO Port offer.</summary>
+    public static StorageOffer IoPort { get; } = new(StorageGood.IoPort, null, ModuleQuality.Common);
+
     /// <summary>Creates a component offer.</summary>
     public static StorageOffer Component(StorageCellTier tier) =>
         new(StorageGood.Component, tier ?? throw new ArgumentNullException(nameof(tier)), ModuleQuality.Common);
@@ -64,6 +70,7 @@ public sealed class StorageOffer
     {
         StorageGood.Component => "Component " + Tier!.Name,
         StorageGood.TypeLimitModule => "TypeLimit " + Quality,
+        StorageGood.IoPort => "IO Port",
         _ => Good.ToString()
     };
 }
@@ -100,7 +107,7 @@ public static class DigitalStorageOffers
                 offers.Add(StorageOffer.TypeLimit(ModuleQuality.Rare));
                 break;
             case 1:
-                offers.Add(StorageOffer.Component(Tier("256k")));
+                offers.Add(StorageOffer.Component(Tier("64k")));
                 offers.Add(StorageOffer.EqualDistribution);
                 offers.Add(StorageOffer.StackDisplay);
                 break;
@@ -113,6 +120,10 @@ public static class DigitalStorageOffers
 
         return offers;
     }
+
+    /// <summary>Gets the additional component and IO Port offered after the third upgrade.</summary>
+    public static IReadOnlyList<StorageOffer> ExpertStock() =>
+        new[] { StorageOffer.Component(Tier("256k")), StorageOffer.IoPort };
 
     /// <summary>
     /// Gets the module and the component Dr. Jackson tries to stock on every visit once the second digital storage

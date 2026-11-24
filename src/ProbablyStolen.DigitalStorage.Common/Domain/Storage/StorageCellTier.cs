@@ -39,6 +39,23 @@ public sealed class StorageCellTier
         }
         throw new InvalidOperationException("Merchant tier weights must total 100.");
     }
+    /// <summary>Selects a merchant tier using only tiers up to <paramref name="maximumMultiplier"/>.</summary>
+    internal static StorageCellTier FromMerchantRoll(int roll, int maximumMultiplier)
+    {
+        var totalWeight = 0;
+        foreach (var tier in Tiers)
+            if (tier.Multiplier <= maximumMultiplier) totalWeight += tier.MerchantWeight;
+        if (roll < 1 || roll > totalWeight) throw new ArgumentOutOfRangeException(nameof(roll));
+        foreach (var tier in Tiers)
+        {
+            if (tier.Multiplier > maximumMultiplier) continue;
+            roll -= tier.MerchantWeight;
+            if (roll <= 0) return tier;
+        }
+
+        throw new InvalidOperationException("Eligible merchant tier weights must be positive.");
+    }
+
     /// <summary>Gets the tier suffix.</summary>
     public string Name { get; }
     /// <summary>Gets the multiplier applied to 1k capacity.</summary>

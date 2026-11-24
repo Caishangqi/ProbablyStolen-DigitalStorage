@@ -48,6 +48,7 @@ internal sealed class StorageGoods
             StorageGood.EqualDistributionModule => DirectoryMaster.Item(CellUpgradeInventory.EqualDistributionId),
             StorageGood.StackDisplayModule => DirectoryMaster.Item(StackingModule.ModuleId),
             StorageGood.TypeLimitModule => CreateTypeLimit(offer.Quality),
+            StorageGood.IoPort => DirectoryMaster.Item(IoPortItem.ItemId),
             _ => throw new ArgumentOutOfRangeException(nameof(offer), offer.Good, "Unknown storage good.")
         };
     }

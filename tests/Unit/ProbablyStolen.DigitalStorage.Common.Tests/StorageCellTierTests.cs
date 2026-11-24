@@ -53,6 +53,33 @@ public sealed class StorageCellTierTests
         Assert.Throws<System.ArgumentOutOfRangeException>((System.Action)(() => StorageCellTier.FromMerchantRoll(roll)));
     }
 
+    [TestCase(1, 4, 1, "1k")]
+    [TestCase(50, 4, 1, "1k")]
+    [TestCase(51, 4, 4, "4k")]
+    [TestCase(75, 4, 4, "4k")]
+    [TestCase(76, 64, 16, "16k")]
+    [TestCase(90, 64, 16, "16k")]
+    [TestCase(91, 64, 64, "64k")]
+    [TestCase(98, 64, 64, "64k")]
+    [TestCase(99, 256, 256, "256k")]
+    [TestCase(100, 256, 256, "256k")]
+    public void MerchantRoll_WithCeilingRenormalizesEligibleWeights(int roll, int ceiling, int multiplier, string name)
+    {
+        var tier = StorageCellTier.FromMerchantRoll(roll, ceiling);
+        Assert.That(tier.Name, Is.EqualTo(name));
+        Assert.That(tier.Multiplier, Is.EqualTo(multiplier));
+        Assert.That(tier.Multiplier, Is.LessThanOrEqualTo(ceiling));
+    }
+
+    [TestCase(4, 76)]
+    [TestCase(64, 99)]
+    [TestCase(256, 101)]
+    public void MerchantRoll_WithCeilingRejectsOutOfRange(int ceiling, int roll)
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>((System.Action)(() =>
+            StorageCellTier.FromMerchantRoll(roll, ceiling)));
+    }
+
     [Test]
     public void Pairing_OnlyMatchingTiersAreComplete()
     {

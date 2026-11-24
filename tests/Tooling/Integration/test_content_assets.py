@@ -46,21 +46,47 @@ class ContentContractTests(unittest.TestCase):
         vendor = (self.platform / "Content/StorageVendors.cs").read_text(encoding="utf-8")
         self.assertIn("RNG.Roll(10)) PlayerStore.Instance.AddDirectSellingItemToTable(DrawTier().ComponentId)", vendor)
         self.assertIn("_goods.OfferOnCounter(StorageOffer.TypeLimit(ModuleQuality.Common))", vendor)
-        self.assertIn("RNG.GetRandomInt(1, 100)", vendor)
-        # No vendor of this mod buys storage goods back; the data scientist only sells.
-        self.assertNotIn("SELLNBUY", vendor)
-        self.assertNotIn("clientBuyingIdList", vendor)
-        self.assertIn("StoreClient.ClientIntent.SELL", vendor)
+        self.assertIn("RNG.GetRandomInt(1, totalWeight)", vendor)
+        self.assertIn("StoreClient.ClientIntent.SELLNBUY", vendor)
+        self.assertIn("client.willAcceptItem = item => DigitalStorageBuybackTerms.CanAccept(", vendor)
+        self.assertIn("client.SetBudget(DigitalStorageBuybackTerms.VisitBudget, 0)", vendor)
+        self.assertIn("client.OverrideBudget(DigitalStorageBuybackTerms.VisitBudget)", vendor)
+        self.assertNotIn("client.OverrideBudget(remainingBudget)", vendor)
+        self.assertIn("client.GetBudget());", vendor)
+        self.assertIn("client.onItemBought += (item, payout) =>", vendor)
+        self.assertIn("GeneralHelper.IsItemOwned(item)", vendor)
+        self.assertIn("RemainingAfterSale(remainingBudget, payout)", vendor)
+        self.assertIn("ItemFeatureList.DiscountSell50()", vendor)
         self.assertIn("DigitalStorageOffers.ScientistStock(", vendor)
         self.assertIn("DigitalStorageOffers.JacksonGuaranteedStock(", vendor)
+        self.assertIn("DigitalStorageOffers.ExpertStock()", vendor)
+        network = (self.platform / "Content/DigitalStorageNetwork.cs").read_text(encoding="utf-8")
+        self.assertIn('ExpertId = "digital_storage.DIGITAL_STORAGE_EXPERT"', network)
+        self.assertIn("ExpertCost = 1398", network)
+        self.assertIn("GrantExpert", network)
+        self.assertIn("prerequisites: new[] { AdvancedId }", network)
+        self.assertIn("NetworkSprites.IconKey(_modId, 3)", network)
+        sprites = (self.platform / "Content/NetworkSprites.cs").read_text(encoding="utf-8")
+        self.assertIn("private const int IconCount = 3", sprites)
+        terms = (REPOSITORY / "src/ProbablyStolen.DigitalStorage.Common/Domain/Commerce/DigitalStorageBuybackTerms.cs").read_text(encoding="utf-8")
+        self.assertIn("VisitBudget = 800", terms)
+        self.assertIn("FromComponentId(itemId) != null", terms)
         definitions = (self.platform / "Content/ItemContentSynchronization.cs").read_text(encoding="utf-8")
         self.assertIn("tier.ComponentValue", definitions)
         self.assertIn('cellKey + "_desc", ItemPrices.CellHousing', definitions)
         prices = (self.platform / "Content/ItemPrices.cs").read_text(encoding="utf-8")
+        self.assertRegex(prices, r"IoPort\s*=\s*1600")
         self.assertRegex(prices, r"CellHousing\s*=\s*80")
         composition = (REPOSITORY / "src" / self.platform.name / "Composition/PlatformComposition.cs").read_text(encoding="utf-8")
         self.assertIn('_appearance.EnsureReady("item_storage_cell_" + tier.Name)', composition)
         self.assertIn('_appearance.EnsureReady("cell_component_" + tier.Name)', composition)
+
+    def test_network_upgrade_sheet_has_three_visible_cells(self):
+        sheet = load_layouts()["images"]["network_digital"]
+        self.assertEqual(sheet["source"], [108, 36])
+        self.assertEqual(sheet["sheetCellSize"], [36, 36])
+        self.assertEqual(sheet["sheetCells"], 3)
+        check_image(REPOSITORY / "packaging/resources", "network_digital")
 
     def test_io_port_images_are_declared_with_item_and_button_dimensions(self):
         images = load_layouts()["images"]
@@ -105,7 +131,7 @@ class ContentContractTests(unittest.TestCase):
                 self.assertIn(key, ASSETS)
         self.assertIn("_appearance.EnsureReady(SpriteKey);", machine)
         self.assertIn("_appearance.Apply(machine, SpriteKey, Width, Height);", machine)
-        self.assertIn("PixelArrow.Get(state.ArrowPointsRight ? PixelArrow.Direction.Right : PixelArrow.Direction.Left)", window)
+        self.assertIn("state.ArrowPointsRight ? _arrowRight : _arrowLeft", window)
 
     def test_io_port_feature_does_not_add_public_api_symbols(self):
         for project in ("ProbablyStolen.DigitalStorage.Api.Core", "ProbablyStolen.DigitalStorage.Api"):

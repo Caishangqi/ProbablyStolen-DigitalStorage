@@ -526,6 +526,7 @@ def check_content(project: Path, output: Path) -> None:
         "network_tab_digital_storage", "network_card_digital_storage",
         "network_digital_storage_starter_title", "network_digital_storage_starter_desc",
         "network_digital_storage_advanced_title", "network_digital_storage_advanced_desc",
+        "network_digital_storage_expert_title", "network_digital_storage_expert_desc",
         "data_scientist_name", "data_scientist_greet_1", "data_scientist_greet_2",
         "integration_customerstocking_section", "integration_state_incompatible", "integration_state_not_running",
         "integration_state_failed", "integration_state_failed_label", "integration_state_not_running_label",

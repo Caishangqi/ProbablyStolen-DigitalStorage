@@ -13,11 +13,8 @@ using ProbablyStolen.DigitalStorage.Platform.Localization;
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
-/// Puts the mod's items on sale through the game's own vendor paths:
-/// Dr. Jackson's visiting stock (<c>ModHook.OnPlaceInventorInventoryItemLate</c>, filled with
-/// <c>PlayerStore.AddDirectSellingItemToTable</c> like his vanilla goods), and the data scientist, a mod customer
-/// queued from <c>ModHook.OnGenerateCustomerLate</c> on the retired farmer's day once the first digital storage
-/// network upgrade is unlocked. The data scientist only sells; no vendor of this mod buys storage goods back.
+/// The data scientist buys and sells approved digital storage goods. The game queues her on the retired farmer's day
+/// once the starter digital storage upgrade is unlocked. Dr. Jackson stocks on his regular visits.
 /// </summary>
 internal sealed class StorageVendors : IDisposable
 {
@@ -62,8 +59,8 @@ internal sealed class StorageVendors : IDisposable
 
     /// <summary>
     /// Dr. Jackson brings each machine while the player owns none, and otherwise 25% of the time, as he does with his
-    /// storage bay; a housing 40% and a storage component 10% of the time. After the advanced network upgrade he also
-    /// tries one module and one high-capacity component on every visit, as far as the counter has room.
+    /// storage bay. A housing appears 40% of the time and a component 10% of the time. Advanced upgrades raise the
+    /// component ceiling, while the third adds guaranteed 256k and IO Port stock.
     /// </summary>
     private void AddInventorStock(List<GameItem> ownedItems)
     {
@@ -81,6 +78,8 @@ internal sealed class StorageVendors : IDisposable
             if (RNG.Roll(25)) _goods.OfferOnCounter(StorageOffer.TypeLimit(ModuleQuality.Common));
             if (DigitalStorageNetwork.IsAdvancedUnlocked())
                 Offer("Dr. Jackson", DigitalStorageOffers.JacksonGuaranteedStock(StoreStation.GetDayCounter()));
+            if (DigitalStorageNetwork.IsExpertUnlocked())
+                Offer("Dr. Jackson", DigitalStorageOffers.ExpertStock());
         }
         catch (Exception error)
         {
@@ -118,9 +117,24 @@ internal sealed class StorageVendors : IDisposable
             identifier = CustomerIdentity.ToNativeId(ScientistId),
             nonShootable = true,
             displayName = _text.Get("data_scientist_name"),
-            clientIntent = StoreClient.ClientIntent.SELL
+            clientIntent = StoreClient.ClientIntent.SELLNBUY
         };
         StoreClientFactionSetup.InitUpperLevelCitizen(client);
+        client.SetBudget(DigitalStorageBuybackTerms.VisitBudget, 0);
+        client.OverrideBudget(DigitalStorageBuybackTerms.VisitBudget);
+        var remainingBudget = DigitalStorageBuybackTerms.VisitBudget;
+        client.willAcceptItem = item => DigitalStorageBuybackTerms.CanAccept(
+            item.identifier, item.GetNegociatedValue(), remainingBudget, client.GetBudget());
+        client.onItemBought += (item, payout) =>
+        {
+            if (!GeneralHelper.IsItemOwned(item)) return;
+            remainingBudget = DigitalStorageBuybackTerms.RemainingAfterSale(remainingBudget, payout);
+        };
+        client.onItemAddedToCounters += item =>
+        {
+            if (GeneralHelper.IsItemOwned(item) && DigitalStorageBuybackTerms.Accepts(item.identifier))
+                item.AddItemFeature(ItemFeatureList.DiscountSell50());
+        };
         var name = client.displayName;
         client.mainDialogue.SetText(name, _text.Get("data_scientist_greet_1")).NextDialogue()
             .SetText(name, _text.Get("data_scientist_greet_2"))
@@ -134,8 +148,11 @@ internal sealed class StorageVendors : IDisposable
     {
         try
         {
-            Offer("the data scientist", DigitalStorageOffers.ScientistStock(StoreStation.GetDayCounter(),
-                DigitalStorageNetwork.IsAdvancedUnlocked()));
+            var offers = DigitalStorageOffers.ScientistStock(StoreStation.GetDayCounter(),
+                DigitalStorageNetwork.IsAdvancedUnlocked()).ToList();
+            if (DigitalStorageNetwork.IsExpertUnlocked())
+                offers.AddRange(DigitalStorageOffers.ExpertStock());
+            Offer("the data scientist", offers);
         }
         catch (Exception error)
         {
@@ -150,5 +167,12 @@ internal sealed class StorageVendors : IDisposable
             _log.Log($"Digital Storage: {vendor} could not place {string.Join(", ", skipped)}; the counter is full.");
     }
 
-    private static StorageCellTier DrawTier() => StorageCellTier.FromMerchantRoll(RNG.GetRandomInt(1, 100));
+    private static StorageCellTier DrawTier()
+    {
+        var maximumMultiplier = DigitalStorageNetwork.IsExpertUnlocked() ? 256 :
+            DigitalStorageNetwork.IsAdvancedUnlocked() ? 64 : 4;
+        var eligible = StorageCellTier.All.Where(tier => tier.Multiplier <= maximumMultiplier).ToArray();
+        var totalWeight = eligible.Sum(tier => tier.MerchantWeight);
+        return StorageCellTier.FromMerchantRoll(RNG.GetRandomInt(1, totalWeight), maximumMultiplier);
+    }
 }

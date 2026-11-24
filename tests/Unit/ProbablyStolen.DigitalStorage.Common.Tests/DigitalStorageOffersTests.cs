@@ -33,13 +33,30 @@ public sealed class DigitalStorageOffersTests
     }
 
     [TestCase(5, new[] { "Component 64k", "TypeLimit Rare" })]
-    [TestCase(12, new[] { "Component 256k", "EqualDistributionModule", "StackDisplayModule" })]
+    [TestCase(12, new[] { "Component 64k", "EqualDistributionModule", "StackDisplayModule" })]
     [TestCase(19, new[] { "Component 16k", "Component 16k", "TypeLimit Epic" })]
     [TestCase(26, new[] { "Component 64k", "TypeLimit Rare" })]
     public void ScientistStock_AfterAdvancedUpgrade_AddsTheWeeklyRotation(int day, string[] rotation)
     {
         var basic = Names(DigitalStorageOffers.ScientistStock(day, advanced: false));
         Assert.That(Names(DigitalStorageOffers.ScientistStock(day, advanced: true)), Is.EqualTo(basic.Concat(rotation)));
+    }
+
+    [Test]
+    public void ScientistStock_AfterAdvancedUpgrade_NeverExceeds64k()
+    {
+        for (var day = 0; day <= 27; day++)
+        {
+            var components = DigitalStorageOffers.ScientistStock(day, advanced: true)
+                .Where(offer => offer.Good == StorageGood.Component);
+            Assert.That(components.All(offer => offer.Tier!.Multiplier <= 64), Is.True, $"day {day}");
+        }
+    }
+
+    [Test]
+    public void ExpertStock_OffersTheHighestComponentAndIoPort()
+    {
+        Assert.That(Names(DigitalStorageOffers.ExpertStock()), Is.EqualTo(new[] { "Component 256k", "IO Port" }));
     }
 
     [TestCase(5, "EqualDistributionModule", "Component 16k")]

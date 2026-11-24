@@ -9,15 +9,17 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
 /// The digital storage tab of Wild's network. The first upgrade grants a working starter network and brings the data
-/// scientist; the second grants the workbench and modules and widens both vendors' stock.
+/// scientist; the second grants the workbench and modules; the third grants an IO Port and unlocks the highest vendor stock.
 /// </summary>
 internal sealed class DigitalStorageNetwork : IDisposable
 {
     // Saves record purchases by these ids; renaming one forgets the purchase.
     internal const string StarterId = "digital_storage.DIGITAL_STORAGE_STARTER";
     internal const string AdvancedId = "digital_storage.DIGITAL_STORAGE_ADVANCED";
+    internal const string ExpertId = "digital_storage.DIGITAL_STORAGE_EXPERT";
     internal const int StarterCost = 598;
     internal const int AdvancedCost = 998;
+    internal const int ExpertCost = 1398;
     private const string Tab = "digital_storage";
     private const string Card = "DigitalStorage";
     private const string StarterBatteryId = "energy_credit";
@@ -38,6 +40,8 @@ internal sealed class DigitalStorageNetwork : IDisposable
     internal static bool IsStarterUnlocked() => ModHelper.IsNetworkUpgradeUnlocked(StarterId);
 
     internal static bool IsAdvancedUnlocked() => ModHelper.IsNetworkUpgradeUnlocked(AdvancedId);
+
+    internal static bool IsExpertUnlocked() => ModHelper.IsNetworkUpgradeUnlocked(ExpertId);
 
     /// <summary>
     /// Registers the upgrades for every run. <c>NetworkUpgrade.RegisterModUpgrade</c> reads <c>PlayerStore.Instance</c>,
@@ -70,8 +74,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
     private void OnNewGameStarted(string scenario) => Register();
 
     /// <summary>
-    /// A save keeps each upgrade's price, and registration does not replace an upgrade the save already has. Neither
-    /// upgrade repeats, so an unpurchased one has no raised price to keep and takes the current price instead.
+    /// A save keeps each unlocked upgrade by ID. Locked, non-repeatable upgrades take the current registered price.
     /// </summary>
     private void SyncCosts()
     {
@@ -79,6 +82,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
         {
             SyncCost(StarterId, StarterCost);
             SyncCost(AdvancedId, AdvancedCost);
+            SyncCost(ExpertId, ExpertCost);
         }
         catch (Exception error)
         {
@@ -94,7 +98,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
         upgrade.cost = cost;
     }
 
-    /// <summary>Registers both upgrades; repeated registration replaces the earlier definitions.</summary>
+    /// <summary>Registers all three upgrades; repeated registration replaces their definitions.</summary>
     private void Register()
     {
         if (!PlayerStore.HasInstance) return;
@@ -110,6 +114,12 @@ internal sealed class DigitalStorageNetwork : IDisposable
                 () => _text.Get("network_digital_storage_advanced_desc"),
                 GrantAdvanced, tab: Tab, iconKey: NetworkSprites.IconKey(_modId, 2),
                 prerequisites: new[] { StarterId },
+                subtitleLabel: () => _text.Get("network_card_digital_storage"));
+            ModHelper.AddNetworkUpgrade(_modId, ExpertId, ExpertCost, Card,
+                () => _text.Get("network_digital_storage_expert_title"),
+                () => _text.Get("network_digital_storage_expert_desc"),
+                GrantExpert, tab: Tab, iconKey: NetworkSprites.IconKey(_modId, 3),
+                prerequisites: new[] { AdvancedId },
                 subtitleLabel: () => _text.Get("network_card_digital_storage"));
         }
         catch (Exception error)
@@ -135,6 +145,11 @@ internal sealed class DigitalStorageNetwork : IDisposable
         StorageGoods.Grant(_goods.Create(StorageOffer.EqualDistribution));
         StorageGoods.Grant(_goods.Create(StorageOffer.StackDisplay));
         StorageGoods.Grant(_goods.Create(StorageOffer.TypeLimit(ModuleQuality.Common)));
+    });
+
+    private void GrantExpert() => Grant("expert", () =>
+    {
+        StorageGoods.Grant(_goods.Create(StorageOffer.IoPort));
     });
 
     private void Grant(string name, Action grant)

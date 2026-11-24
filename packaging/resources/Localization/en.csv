@@ -220,10 +220,12 @@ network_card_digital_storage,Storage Network
 network_digital_storage_starter_title,Digital Storage Basics
 network_digital_storage_starter_desc,"Get a starter digital storage set right away: a controller with a battery, a drive, a terminal and an empty 1k storage cell. A data scientist will visit your store regularly."
 network_digital_storage_advanced_title,Advanced Data Management
-network_digital_storage_advanced_desc,"Get a Cell Workbench, an Equal Distribution Module, a Stack Display Module and a Type Limit Module right away. From then on Dr. Jackson stocks storage modules and high-capacity storage components, and the data scientist also sells advanced modules and components."
+network_digital_storage_advanced_desc,"Get a Cell Workbench, an Equal Distribution Module, a Stack Display Module and a Type Limit Module. Afterward, Dr. Jackson's storage components top out at 64k, and the data scientist rotates through higher-capacity components and advanced modules."
+network_digital_storage_expert_title,Expert Data Management
+network_digital_storage_expert_desc,"Get an IO Port. From then on, Dr. Jackson and the data scientist each try to stock a 256k storage component and an IO Port whenever they visit."
 data_scientist_name,Data Scientist
 data_scientist_greet_1,"The lab upstairs ordered too much storage hardware again. I'd rather it go to someone who uses it."
-data_scientist_greet_2,"Housings, components, modules. Take what you need. I'm only selling, though; I have no room to take anything back."
+data_scientist_greet_2,"I sell storage gear and buy back standalone storage components at a discount. I can spend up to 800 per visit. No assembled cells, housings, IO Ports, or modules."
 priority_configure,Priority
 priority_title,Drive Priority
 priority_desc,Items go into higher-priority drives first and come out of lower-priority drives first. Range {0} to {1}.
