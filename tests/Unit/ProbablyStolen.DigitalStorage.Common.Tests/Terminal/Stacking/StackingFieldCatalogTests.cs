@@ -11,15 +11,13 @@ namespace ProbablyStolen.DigitalStorage.Common.Tests.Terminal.Stacking;
 public sealed class StackingFieldCatalogTests
 {
     [Test]
-    public void FixedFields_CoverTheResearchedFieldsButNotItemType()
+    public void FixedFields_ListTheBuiltInAttributes()
     {
         var ids = StackingFieldCatalog.FixedFields.Select(field => field.Id).ToArray();
         Assert.That(ids, Is.EquivalentTo(new[]
         {
             "appraised_value", "price_composition", "container_content"
         }));
-        foreach (var retired in new[] { "metal_purity", "legality", "stolen", "heat", "type" })
-            Assert.That(StackingFieldCatalog.Find(retired), Is.Null);
     }
 
     [Test]
@@ -84,11 +82,11 @@ public sealed class StackingFieldCatalogTests
     public void Discover_KeepsSavedFieldsThatNoItemHasAndMarksThem()
     {
         var options = StackingFieldCatalog.Discover(Array.Empty<ItemKey>(),
-            new[] { "feature:gone", "container_content", "metal_purity" }, includeHidden: true);
+            new[] { "feature:gone", "container_content", "unknown_field" }, includeHidden: true);
         var saved = options.Single(option => option.Field.Id == "feature:gone");
         Assert.That(saved.AbsentFromInventory, Is.True);
         Assert.That(options.Count(option => option.Field.Id == "container_content"), Is.EqualTo(1));
-        Assert.That(options.Any(option => option.Field.Id == "metal_purity"), Is.False);
+        Assert.That(options.Any(option => option.Field.Id == "unknown_field"), Is.False);
     }
 
     [Test]
@@ -102,7 +100,7 @@ public sealed class StackingFieldCatalogTests
     }
 
     [Test]
-    public void Discover_OffersPreviouslyMappedTagsWithoutLocalizedAliases()
+    public void Discover_UsesRawIdentifiersForGameTags()
     {
         var keys = new[] { "STOLEN_TAG", "STOLEN_VALUE_INT", "INGOT_PURITY_TAG", "CONTRABAND_LEVEL", "BOUGHT_PRICE_TAG" };
         var item = Plain("watch", tags: keys.Select(key => new CanonicalIdentityTag(key, enabled: true)));

@@ -24,7 +24,7 @@ public sealed class StackingProjector : IStorageEntryProjector
 
     private readonly Action<string> _diagnostic;
     private readonly Func<bool> _explainSplits;
-    private readonly HashSet<string> _explained = new(StringComparer.Ordinal);
+    private readonly HashSet<(StackingItemRule Rule, bool Advanced)> _explained = new();
 
     /// <summary>Creates the projector.</summary>
     /// <param name="diagnostic">Receives split explanations.</param>
@@ -123,15 +123,14 @@ public sealed class StackingProjector : IStorageEntryProjector
             left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var value) && value == pair.Value);
     }
 
-    // Logs, once per item and settings, which identity parts still keep entries of one item in separate groups. Only
-    // section, tag and feature names are written, never their values.
+    // Logs the fields that keep an item apart under its active rule. Unrelated rule edits leave this log alone.
     private void ExplainSplits(IReadOnlyList<StackingGroupKey> order,
         IReadOnlyDictionary<StackingGroupKey, List<TerminalEntry>> buckets, StackingConfig config, EntryAttributes attributes)
     {
         foreach (var item in order.GroupBy(key => key.Identifier).Where(group => group.Count() > 1))
         {
-            var marker = item.Key + "|" + StackingConfigCodec.Encode(config);
-            if (!_explained.Add(marker)) continue;
+            var rule = config.Find(item.Key);
+            if (rule?.IsActive != true || !_explained.Add((rule, config.Advanced))) continue;
             var first = buckets[item.First()][0];
             var second = buckets[item.Skip(1).First()][0];
             var reason = StackingProjection.Explain(first.Key, new StackingAttributes(attributes.For(first.Key)),

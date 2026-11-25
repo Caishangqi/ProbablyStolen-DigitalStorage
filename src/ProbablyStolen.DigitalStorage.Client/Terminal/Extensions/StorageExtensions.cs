@@ -81,7 +81,7 @@ public interface ITerminalFeatureData
     /// <summary>Reads a value, or null when the terminal has none.</summary>
     string? Read(string key);
 
-    /// <summary>Writes a value; false when the terminal can no longer be written, for example after a load.</summary>
+    /// <summary>Writes a value or clears it with an empty string. Returns false when the terminal is no longer writable.</summary>
     bool TryWrite(string key, string value);
 }
 

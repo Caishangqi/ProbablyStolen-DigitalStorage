@@ -34,25 +34,6 @@ public sealed class StackingConfigCodecTests
         Assert.That(StackingConfigCodec.Encode(config), Is.EqualTo("v4\nmarker\t#B37FEB\nadvanced\t1\nitem\tYQ==\t1\nrule\tYg==\tignore"));
     }
 
-    [TestCase("v3\nenabled\t1\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore")]
-    [TestCase("v3\nenabled\t0\nmarker\t#B37FEB")]
-    public void ValidV3_KeepsTheMarkerAndStartsWithoutItemRules(string text)
-    {
-        var result = StackingConfigCodec.Decode(text);
-        Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Reset));
-        Assert.That(result.Config, Is.EqualTo(StackingConfig.Default.WithMarker(new StackingMarker(0xB37FEB))));
-        Assert.That(result.Config!.Advanced, Is.True, "The advanced option starts on.");
-    }
-
-    [TestCase("v1\nenabled\t0\nrule\tc3RvbGVu\tignore")]
-    [TestCase("v2\nenabled\t0\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore")]
-    public void ValidV1AndV2_ResetToDefaults(string text)
-    {
-        var result = StackingConfigCodec.Decode(text);
-        Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Reset));
-        Assert.That(result.Config, Is.EqualTo(StackingConfig.Default));
-    }
-
     [TestCase("#4cd964", 0x4CD964)]
     [TestCase("#ABC", 0xAABBCC)]
     [TestCase(" #fff ", 0xFFFFFF)]
@@ -102,6 +83,7 @@ public sealed class StackingConfigCodecTests
     }
 
     [TestCase("v5\nmarker\t#4CD964\nadvanced\t0", "unknown_version")]
+    [TestCase("v03\nmarker\t#4CD964", "unknown_version")]
     [TestCase("v4", "bad_marker")]
     [TestCase("v4\nmarker\t#4cd964\nadvanced\t0", "bad_marker")]
     [TestCase("v4\nmarker\t#4CD964", "bad_advanced")]
@@ -115,15 +97,6 @@ public sealed class StackingConfigCodecTests
     [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrule\t!!!\tmatch", "bad_field")]
     [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrule\tcHJpY2U=\tmatch\nrule\tcHJpY2U=\tignore", "duplicate_field")]
     [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrow\tcHJpY2U=\tmatch", "bad_line")]
-    [TestCase("v3\nenabled\t1", "bad_marker")]
-    [TestCase("v3\nenabled\t1\nmarker\t#4CD964\nrule\tcHJpY2U=", "bad_line")]
-    [TestCase("v2\nenabled\t1\nmarker\t#4cd964", "bad_marker")]
-    [TestCase("v2\nenabled\t1\nrule\tcHJpY2U=\tmatch", "bad_marker")]
-    [TestCase("v1", "bad_switch")]
-    [TestCase("v1\nenabled\tyes", "bad_switch")]
-    [TestCase("v1\nenabled\t1\nrule\t!!!\tmatch", "bad_field")]
-    [TestCase("v1\nenabled\t1\nrule\tcHJpY2U=\tdefault", "bad_mode")]
-    [TestCase("v1\nenabled\t1\nrule\tcHJpY2U=\tmatch\nrule\tcHJpY2U=\tignore", "duplicate_field")]
     public void DamagedText_IsUnreadableAndKept(string text, string reason)
     {
         var result = StackingConfigCodec.Decode(text);

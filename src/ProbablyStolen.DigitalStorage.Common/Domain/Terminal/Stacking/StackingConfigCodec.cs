@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
@@ -10,14 +11,8 @@ public enum StackingConfigStatus
     /// <summary>The text was read.</summary>
     Ok,
 
-    /// <summary>The terminal has no tag; the default configuration applies.</summary>
+    /// <summary>No current settings are stored.</summary>
     Missing,
-
-    /// <summary>
-    /// Valid settings from a retired version. The terminal starts without item rules; a v3 marker color is kept. Nothing is
-    /// written until the next successful edit.
-    /// </summary>
-    Reset,
 
     /// <summary>The text cannot be read; it is kept as it is and grouping stays off.</summary>
     Unreadable
@@ -37,7 +32,7 @@ public sealed class StackingConfigReadResult
     /// <summary>Gets the status.</summary>
     public StackingConfigStatus Status { get; }
 
-    /// <summary>Gets the current configuration or defaults for missing or retired settings. Null when unreadable.</summary>
+    /// <summary>Gets the current settings, the defaults if missing, or null if unreadable.</summary>
     public StackingConfig? Config { get; }
 
     /// <summary>Gets the unreadable text, kept so it is never overwritten by accident.</summary>
@@ -50,9 +45,6 @@ public sealed class StackingConfigReadResult
 
     internal static StackingConfigReadResult Missing() => new(StackingConfigStatus.Missing, StackingConfig.Default, null, null);
 
-    internal static StackingConfigReadResult Reset(StackingMarker marker) =>
-        new(StackingConfigStatus.Reset, StackingConfig.Default.WithMarker(marker), null, null);
-
     internal static StackingConfigReadResult Unreadable(string raw, string reason) =>
         new(StackingConfigStatus.Unreadable, null, raw, reason);
 }
@@ -63,7 +55,8 @@ public static class StackingConfigCodec
     /// <summary>The longest text accepted.</summary>
     public const int MaxLength = 16384;
 
-    private const string Version = "v4";
+    private const int Version = 4;
+    private static readonly string VersionHeader = "v" + Version.ToString(CultureInfo.InvariantCulture);
     private const string MarkerPrefix = "marker\t";
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
@@ -72,7 +65,7 @@ public static class StackingConfigCodec
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
         var builder = new StringBuilder();
-        builder.Append(Version).Append('\n').Append(MarkerPrefix).Append(config.Marker.Format())
+        builder.Append(VersionHeader).Append('\n').Append(MarkerPrefix).Append(config.Marker.Format())
             .Append('\n').Append("advanced\t").Append(config.Advanced ? '1' : '0');
         foreach (var item in config.Items)
         {
@@ -89,23 +82,30 @@ public static class StackingConfigCodec
         return text;
     }
 
-    /// <summary>Decodes a tag value; null or empty text means the terminal has no configuration.</summary>
+    /// <summary>Reads the current format. Earlier numbered formats expire without reading their settings.</summary>
     public static StackingConfigReadResult Decode(string? text)
     {
         if (string.IsNullOrEmpty(text)) return StackingConfigReadResult.Missing();
-        if (text!.Length > MaxLength) return StackingConfigReadResult.Unreadable(text, "too_long");
-        var lines = text.Split('\n');
-        return lines[0] switch
+        var end = text!.IndexOf('\n');
+        var header = end < 0 ? text.AsSpan() : text.AsSpan(0, end);
+        if (header.SequenceEqual(VersionHeader.AsSpan()))
         {
-            Version => DecodeV4(text, lines),
-            "v3" => DecodeRetired(text, lines, hasMarker: true),
-            "v2" => DecodeRetired(text, lines, hasMarker: true),
-            "v1" => DecodeRetired(text, lines, hasMarker: false),
-            _ => StackingConfigReadResult.Unreadable(text, "unknown_version")
-        };
+            return text.Length <= MaxLength
+                ? DecodeItems(text, text.Split('\n'))
+                : StackingConfigReadResult.Unreadable(text, "too_long");
+        }
+
+        return IsEarlierVersion(header)
+            ? StackingConfigReadResult.Missing()
+            : StackingConfigReadResult.Unreadable(text, "unknown_version");
     }
 
-    private static StackingConfigReadResult DecodeV4(string text, string[] lines)
+    private static bool IsEarlierVersion(ReadOnlySpan<char> header) => header.Length > 1 && header[0] == 'v' &&
+        int.TryParse(header.Slice(1), NumberStyles.None, CultureInfo.InvariantCulture, out var number) &&
+        number > 0 && number < Version &&
+        header.Slice(1).SequenceEqual(number.ToString(CultureInfo.InvariantCulture).AsSpan());
+
+    private static StackingConfigReadResult DecodeItems(string text, string[] lines)
     {
         if (lines.Length < 2 || !lines[1].StartsWith(MarkerPrefix, StringComparison.Ordinal) ||
             !TryReadMarker(lines[1].Substring(MarkerPrefix.Length), out var marker))
@@ -158,34 +158,6 @@ public static class StackingConfigCodec
 
         if (itemId != null) items.Add(new StackingItemRule(itemId, enabled, rules));
         return StackingConfigReadResult.Ok(new StackingConfig(items, marker, advanced));
-    }
-
-    /// <summary>Validates a retired version completely, so damage is still reported as unreadable.</summary>
-    private static StackingConfigReadResult DecodeRetired(string text, string[] lines, bool hasMarker)
-    {
-        if (lines.Length < 2 || lines[1] != "enabled\t1" && lines[1] != "enabled\t0")
-            return StackingConfigReadResult.Unreadable(text, "bad_switch");
-        var marker = StackingMarker.Default;
-        var first = 2;
-        if (hasMarker)
-        {
-            if (lines.Length < 3 || !lines[2].StartsWith(MarkerPrefix, StringComparison.Ordinal) ||
-                !TryReadMarker(lines[2].Substring(MarkerPrefix.Length), out marker))
-                return StackingConfigReadResult.Unreadable(text, "bad_marker");
-            first = 3;
-        }
-
-        if (lines.Length - first > StackingItemRule.MaxRules) return StackingConfigReadResult.Unreadable(text, "too_many_rules");
-        var fields = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = first; i < lines.Length; i++)
-        {
-            var parts = lines[i].Split('\t');
-            if (parts.Length != 3 || parts[0] != "rule") return StackingConfigReadResult.Unreadable(text, "bad_line");
-            if (!TryReadRule(parts, out var rule, out var reason)) return StackingConfigReadResult.Unreadable(text, reason);
-            if (!fields.Add(rule.FieldId)) return StackingConfigReadResult.Unreadable(text, "duplicate_field");
-        }
-
-        return StackingConfigReadResult.Reset(lines[0] == "v3" ? marker : StackingMarker.Default);
     }
 
     private static bool TryReadRule(string[] parts, out StackingRule rule, out string reason)

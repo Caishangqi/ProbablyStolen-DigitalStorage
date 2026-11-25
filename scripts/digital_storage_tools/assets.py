@@ -552,7 +552,7 @@ def check_content(project: Path, output: Path) -> None:
         "stacking_remove_rule_tip",
         "stacking_add_rule",
         "stacking_clear_rules",
-        "stacking_search", "stacking_rule_search", "stacking_rule_search_empty", "stacking_rules_reset",
+        "stacking_search", "stacking_rule_search", "stacking_rule_search_empty",
         "stacking_field_absent",
         "stacking_mode_match",
         "stacking_mode_ignore",

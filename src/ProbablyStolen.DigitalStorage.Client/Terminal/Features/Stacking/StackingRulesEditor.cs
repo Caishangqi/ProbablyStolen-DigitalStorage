@@ -34,9 +34,6 @@ public sealed class StackingRulesEditor
     /// <summary>Gets whether the saved settings can be read; edits are refused otherwise.</summary>
     public bool IsEditable => _store.Read().Status != StackingConfigStatus.Unreadable;
 
-    /// <summary>Gets whether the saved settings come from a retired version whose rules no longer apply.</summary>
-    public bool WasReset => _store.Read().Status == StackingConfigStatus.Reset;
-
     /// <summary>Gets the settings shown on the page; the default while unreadable.</summary>
     public StackingConfig Config => _store.Effective() ?? StackingConfig.Default;
 

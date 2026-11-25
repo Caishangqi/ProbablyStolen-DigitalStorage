@@ -70,7 +70,6 @@ internal sealed class StackingRulesScreen : SubScreen
             return true;
         }
 
-        if (_editor.WasReset) builder.AddWarning(text.Get("stacking_rules_reset"));
         var config = _editor.Config;
         BuildMarker(builder, config);
         builder.AddToggle(text.Get("stacking_advanced"), config.Advanced, on => Edit(() => _editor.SetAdvanced(on)));

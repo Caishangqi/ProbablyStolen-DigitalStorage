@@ -67,6 +67,30 @@ public sealed class StackingFeatureTests
     }
 
     [Test]
+    public void Projector_LogsSplitsOnlyForTheActiveItemRule()
+    {
+        var data = new MemoryData();
+        var configured = StackingConfig.Default.WithItem(new StackingItemRule("water_tablet_container", true,
+            new[] { new StackingRule(StackingFieldCatalog.ContainerContent, StackingMode.Ignore) }));
+        Save(data, configured);
+        var full = Bottle(9, 1);
+        var empty = Bottle(0, 1);
+        var otherA = Tagged("scrap_metal", Tag("A"));
+        var otherB = Tagged("scrap_metal", Tag("B"));
+        var entries = new[] { full, empty, otherA, otherB };
+        var attributes = Values((full, 55), (empty, 1), (otherA, 10), (otherB, 10));
+        var logs = new List<string>();
+        var projector = new StackingProjector(logs.Add, () => true);
+
+        projector.Project(entries, Context(data, Installed), attributes);
+        Save(data, configured.WithItem(new StackingItemRule("ore", true,
+            new[] { new StackingRule("tag:grade", StackingMode.Ignore) })));
+        projector.Project(entries, Context(data, Installed), attributes);
+
+        Assert.That(logs, Is.EqualTo(new[] { "stacking_split item=water_tablet_container groups=2 differs=derived" }));
+    }
+
+    [Test]
     public void Projector_SplitsAGroupWhosePieceCountWouldOverflow()
     {
         var data = new MemoryData();
@@ -399,22 +423,24 @@ public sealed class StackingFeatureTests
         Assert.That(data.Values[StackingModule.ConfigTag], Is.EqualTo("v9"));
     }
 
-    [Test]
-    public void Editor_KeepsTheV3MarkerAndWritesV4OnlyOnTheFirstEdit()
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Store_ExpiresEarlierSettingsAndAcceptsNewItemRules(bool refuseClear)
     {
-        const string legacy = "v3\nenabled\t1\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore";
-        var data = new MemoryData();
-        data.Values[StackingModule.ConfigTag] = legacy;
-        var editor = new StackingRulesEditor(new StackingConfigStore(data), () => { });
+        const string expired = "v3\nunused payload";
+        var data = new MemoryData { RefuseWrites = refuseClear };
+        data.Values[StackingModule.ConfigTag] = expired;
+        var store = new StackingConfigStore(data);
 
-        Assert.That(editor.WasReset, Is.True);
-        Assert.That(editor.Config.Items, Is.Empty);
-        Assert.That(editor.Config.Marker.Rgb, Is.EqualTo(0xB37FEB));
-        Assert.That(data.Values[StackingModule.ConfigTag], Is.EqualTo(legacy), "Opening the page writes nothing.");
-        Assert.That(editor.Apply(new StackingItemRule("fruit", true, new[] { new StackingRule("tag:X", StackingMode.Ignore) })),
-            Is.True);
-        Assert.That(data.Values[StackingModule.ConfigTag], Does.StartWith("v4\nmarker\t#B37FEB\n"));
-        Assert.That(editor.WasReset, Is.False);
+        Assert.That(store.Read().Status, Is.EqualTo(StackingConfigStatus.Missing));
+        Assert.That(store.Effective(), Is.EqualTo(StackingConfig.Default));
+        Assert.That(data.Values[StackingModule.ConfigTag], Is.EqualTo(refuseClear ? expired : string.Empty));
+
+        data.RefuseWrites = false;
+        var config = StackingConfig.Default.WithItem(new StackingItemRule("fruit", true,
+            new[] { new StackingRule("tag:X", StackingMode.Ignore) }));
+        Assert.That(store.TryCommit(config), Is.True);
+        Assert.That(new StackingConfigStore(data).Effective(), Is.EqualTo(config));
     }
 
     [Test]

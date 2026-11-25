@@ -22,7 +22,7 @@ terminal_storage_whole_stack_only,Drag a whole stack. The selected portion was n
 terminal_diagnostics_name,Terminal diagnostics
 terminal_diagnostics_desc,Log UI layout and drag events to Player.log with a limit on log volume. Item names and saved state are excluded.
 debug_item_identity_log_name,Item identity log
-debug_item_identity_log_desc,"For debugging. Clicking a terminal slot logs the full identity of its items to Player.log, including tags and feature values. Also logs why items of the same kind stay separate under the stack rules. Produces a lot of logs; leave off during normal play."
+debug_item_identity_log_desc,"Click a terminal slot to log its items' full identities, including tags and feature values, to Player.log. The log also explains why items with the same ID stay separate under their active rule."
 terminal_storage_search_placeholder,Search items
 config_section_terminal_search,Terminal search
 terminal_search_keyboard_name,Pinyin keyboard
@@ -424,7 +424,6 @@ stacking_clear_rules,Delete all
 stacking_search,Search attributes...
 stacking_rule_search,Search tag keys or attribute names...
 stacking_rule_search_empty,No matching rules.
-stacking_rules_reset,Terminal-wide rules from the previous version no longer apply. Add rules per item instead.
 stacking_field_absent,No stored item has this attribute now
 stacking_mode_match,Match
 stacking_mode_ignore,Ignore

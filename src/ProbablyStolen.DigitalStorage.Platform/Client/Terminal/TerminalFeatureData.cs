@@ -32,7 +32,12 @@ internal sealed class TerminalFeatureData : ITerminalFeatureData
     {
         if (string.IsNullOrEmpty(key) || value == null || !_isCurrent()) return false;
         if (_terminal is GameItemElement element && element.IsDestroyed()) return false;
-        _terminal.ModifyTag(key, state => state.Enable().SetString(value));
+        _terminal.ModifyTag(key, state =>
+        {
+            state.SetString(value);
+            if (value.Length == 0) state.Disable();
+            else state.Enable();
+        });
         return true;
     }
 }

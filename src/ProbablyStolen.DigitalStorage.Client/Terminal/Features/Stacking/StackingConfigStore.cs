@@ -5,8 +5,8 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 
 /// <summary>
-/// Reads and writes one terminal's stacking settings. A write counts only when reading the tag back yields the same
-/// settings, so a failed or refused write never changes what is in effect.
+/// Reads and writes one terminal's stacking settings. Changes are accepted only when the stored tag reads back as the
+/// requested configuration.
 /// </summary>
 public sealed class StackingConfigStore
 {
@@ -17,17 +17,20 @@ public sealed class StackingConfigStore
     /// <summary>Creates a store over a terminal's data.</summary>
     public StackingConfigStore(ITerminalFeatureData data) => _data = data ?? throw new ArgumentNullException(nameof(data));
 
-    /// <summary>Reads the settings; the same text is decoded once.</summary>
+    /// <summary>Reads the current settings and clears an expired format on first access.</summary>
     public StackingConfigReadResult Read()
     {
         var raw = _data.Read(StackingModule.ConfigTag);
         if (_cached != null && raw == _cachedRaw) return _cached;
+        var result = StackingConfigCodec.Decode(raw);
         _cachedRaw = raw;
-        _cached = StackingConfigCodec.Decode(raw);
-        return _cached;
+        _cached = result;
+        if (!string.IsNullOrEmpty(raw) && result.Status == StackingConfigStatus.Missing)
+            _data.TryWrite(StackingModule.ConfigTag, string.Empty);
+        return result;
     }
 
-    /// <summary>Gets the settings in effect, including defaults for missing or retired settings.</summary>
+    /// <summary>Gets the settings in effect, or null when the tag is unreadable.</summary>
     public StackingConfig? Effective() => Read().Config;
 
     /// <summary>Writes a candidate; false leaves the previous settings in effect.</summary>
