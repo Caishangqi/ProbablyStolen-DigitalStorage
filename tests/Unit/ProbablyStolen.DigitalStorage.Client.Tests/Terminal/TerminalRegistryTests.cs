@@ -37,7 +37,7 @@ public sealed class TerminalRegistryTests
         Assert.That(registry.AddTerminal(View("a")), Is.False);
         Assert.That(registry.AddAction(Action("x")), Is.True);
         Assert.That(registry.AddAction(Action("x")), Is.False);
-        Assert.That(registry.AddSetting(ShadeSetting("x"), 0, ActionPlacement.Rail, null), Is.False);
+        Assert.That(registry.AddSetting(ShadeSetting("x"), 0, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews), Is.False);
 
         Assert.That(registry.Terminals, Has.Count.EqualTo(1));
         Assert.That(registry.Buttons, Has.Count.EqualTo(1));
@@ -89,6 +89,7 @@ public sealed class TerminalRegistryTests
     public void Freeze_RequiresConfiguredDefaultAndClosesRegistration()
     {
         var registry = new TerminalRegistry(new MemoryConfig(), _log.Add, "partition");
+        registry.AddDock(DockSide.Left, "left_title");
         registry.AddTerminal(Storage());
         Assert.Throws<InvalidOperationException>(new Action(registry.Freeze));
         registry.AddTerminal(View("partition"));
@@ -102,14 +103,15 @@ public sealed class TerminalRegistryTests
     public void AddSetting_WrapsTheSettingInAToggleWithItsNameAsId()
     {
         var registry = New();
-        registry.AddSetting(ShadeSetting(), 3, ActionPlacement.Picker, "storage");
+        registry.AddSetting(ShadeSetting(), 3, DockSide.Right, ActionPlacement.Picker, ActionScope.View("storage"));
         var entry = registry.Buttons.Single();
 
         Assert.That(entry.Button, Is.InstanceOf<SettingToggleButton<Shade>>());
         Assert.That(entry.Button.Id, Is.EqualTo("shade"));
         Assert.That(entry.Order, Is.EqualTo(3));
         Assert.That(entry.Placement, Is.EqualTo(ActionPlacement.Picker));
-        Assert.That(entry.TerminalId, Is.EqualTo("storage"));
+        Assert.That(entry.Side, Is.EqualTo(DockSide.Right));
+        Assert.That(entry.Scope, Is.EqualTo(ActionScope.View("storage")));
     }
 
     [Test]
@@ -129,5 +131,73 @@ public sealed class TerminalRegistryTests
         Assert.That(registry.Buttons.Select(entry => entry.Button.Id), Is.EqualTo(new[] { "a.b", "a_b" }));
     }
 
-    private TerminalRegistry New() => new(new MemoryConfig(), _log.Add);
+    [Test]
+    public void Docks_OnePerSideWithTitles()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+
+        Assert.That(registry.AddDock(DockSide.Right, "actions"), Is.True);
+        Assert.That(registry.AddDock(DockSide.Left, "functions"), Is.True);
+        Assert.That(registry.AddDock(DockSide.Right, "again"), Is.False);
+
+        Assert.That(registry.Docks.Select(dock => (dock.Side, dock.TitleKey)),
+            Is.EqualTo(new[] { (DockSide.Left, "functions"), (DockSide.Right, "actions") }));
+        Assert.That(_log.Single(), Does.Contain("refused=dock"));
+    }
+
+    [Test]
+    public void DockTitles_OverrideTheDockTitleWhileTheirScopeApplies()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        registry.AddDock(DockSide.Left, "functions");
+        Assert.That(registry.AddDockTitle(DockSide.Left, ActionScope.Screen("editor"), "actions"), Is.True);
+        Assert.That(registry.AddDockTitle(DockSide.Left, ActionScope.Screen("editor"), "again"), Is.False);
+        var left = registry.FindDock(DockSide.Left)!;
+
+        Assert.That(registry.DockTitleKey(left, Context()), Is.EqualTo("functions"));
+        Assert.That(registry.DockTitleKey(left, ScreenContext("editor")), Is.EqualTo("actions"));
+        Assert.That(registry.DockTitleKey(left, ScreenContext("other")), Is.EqualTo("functions"));
+        Assert.That(_log.Single(), Does.Contain("refused=dock_title"));
+    }
+
+    [Test]
+    public void Freeze_RequiresADockForEveryTitleSide()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        registry.AddDock(DockSide.Left, "functions");
+        registry.AddTerminal(Storage());
+        registry.AddDockTitle(DockSide.Right, ActionScope.AllViews, "actions");
+
+        Assert.Throws<InvalidOperationException>(new Action(registry.Freeze));
+    }
+
+    [Test]
+    public void Freeze_RequiresADockForEveryButtonSide()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        registry.AddDock(DockSide.Left, "functions");
+        registry.AddTerminal(Storage());
+        registry.AddAction(Action("orphan", side: DockSide.Right));
+
+        Assert.Throws<InvalidOperationException>(new Action(registry.Freeze));
+    }
+
+    [Test]
+    public void ActionScope_MatchesViewsAndScreens()
+    {
+        var overStorage = Context();
+        var overTest = Context("test");
+        var onEditor = ScreenContext("editor");
+
+        Assert.That(ActionScope.AllViews.Includes(overStorage), Is.True);
+        Assert.That(ActionScope.AllViews.Includes(onEditor), Is.False);
+        Assert.That(ActionScope.View("storage").Includes(overStorage), Is.True);
+        Assert.That(ActionScope.View("storage").Includes(overTest), Is.False);
+        Assert.That(ActionScope.View("storage").Includes(onEditor), Is.False);
+        Assert.That(ActionScope.Screen("editor").Includes(onEditor), Is.True);
+        Assert.That(ActionScope.Screen("editor").Includes(overStorage), Is.False);
+        Assert.That(ActionScope.Screen("list").Includes(onEditor), Is.False);
+    }
+
+    private TerminalRegistry New() => Registry(log: _log.Add);
 }

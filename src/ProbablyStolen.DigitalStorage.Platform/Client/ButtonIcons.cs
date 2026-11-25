@@ -41,6 +41,7 @@ internal sealed class ButtonIcons : IDisposable
             "button_sort_name", "button_sort_amount", "button_sort_ascending", "button_sort_descending",
             "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
             "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_stack",
+            "button_edit",
             "button_keep_open_off", "button_keep_open_on",
             IoStart, IoPause, IoCancel, ToLeft, ToRight, IoFinishEmpty, IoFinishFull, IoFinishDone,
             Add, SampleAttributes

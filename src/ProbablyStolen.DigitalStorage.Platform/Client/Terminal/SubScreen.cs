@@ -1,15 +1,16 @@
 using System;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 
 /// <summary>
-/// A page that temporarily replaces the terminal body and returns to the view it came from: a back
-/// <see cref="TabButton"/> at the top left, then the page content. The window's back key also returns here; only the
-/// terminal window itself closes the window.
+/// A page on the terminal window's sub-screen stack: a back <see cref="TabButton"/> at the top left, then the page
+/// content. A page pushed above it hides it without removing its controls, so it comes back as it was; the back
+/// button and the window's back key return one page. Only the terminal window itself closes the window.
 /// </summary>
-internal abstract class SubScreen : ITerminalBackHandler
+internal abstract class SubScreen : ITerminalBackHandler, ITerminalScreen
 {
     /// <summary>The message shown when a page cannot be opened and names no message of its own.</summary>
     internal const string DefaultUnavailableKey = "terminal_page_unavailable";
@@ -21,6 +22,9 @@ internal abstract class SubScreen : ITerminalBackHandler
         Window = window ?? throw new ArgumentNullException(nameof(window));
     }
 
+    /// <inheritdoc />
+    public virtual string ScreenId => GetType().Name;
+
     /// <summary>The status message key shown on the view when this page cannot be opened.</summary>
     internal virtual string UnavailableKey => DefaultUnavailableKey;
 
@@ -30,8 +34,8 @@ internal abstract class SubScreen : ITerminalBackHandler
     protected TerminalWindowHost Window { get; }
 
     /// <summary>
-    /// Builds the page into <paramref name="container"/>. Returns false when the page cannot be shown; the window then
-    /// returns to the view at once.
+    /// Builds the page into its own <paramref name="container"/>. Returns false when the page cannot be shown; the
+    /// window then keeps the page or view below.
     /// </summary>
     internal bool Show(RectTransform container)
     {
@@ -47,11 +51,22 @@ internal abstract class SubScreen : ITerminalBackHandler
     /// <summary>Builds the content below the back button; false when the page cannot be shown.</summary>
     protected abstract bool BuildContent(CustomUIBuilder builder);
 
-    protected virtual bool AddBackButton => true;
+    /// <summary>Whether the page draws its own back button; none when the window's dock holds one for it.</summary>
+    protected virtual bool AddBackButton => !Window.HasDockedBack(ScreenId);
 
-    protected virtual void ReturnToParent() => Window.ReturnToParent();
+    protected virtual void ReturnToParent() => Window.PopScreen();
 
     public virtual bool HandleBack() => false;
+
+    /// <summary>Runs when another page is pushed above this one; its controls stay and are only hidden.</summary>
+    internal virtual void OnCovered()
+    {
+    }
+
+    /// <summary>Runs when the page above returns; refresh anything that page may have changed.</summary>
+    internal virtual void OnRevealed()
+    {
+    }
 
     internal void RefreshContent()
     {

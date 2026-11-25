@@ -17,10 +17,7 @@ using UnityEngine.UI;
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 
 /// <summary>
-/// The terminal window, which replaces the terminal's native machinery window. It is the only lifecycle owner: the
-/// body shows the current terminal view or a sub-screen, and the dock on the left shows the rail and selection panel,
-/// so all of them open, move, come forward and close together. View and sub-screen switching is decided by
-/// <see cref="TerminalHost"/>; this class carries it out on Unity objects.
+/// Owns the terminal's Unity window. The active view, stacked pages and sidebars share its lifetime and input layer.
 /// </summary>
 internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 {
@@ -42,10 +39,10 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private int _rows = TerminalWindowMetrics.Rows;
     private RectTransform? _viewHost;
     private RectTransform? _subHost;
-    private DockView? _dock;
+    private readonly List<DockView> _docks = new();
+    private readonly List<ScreenPage> _pages = new();
     private TerminalHost? _host;
     private ITerminalView? _currentView;
-    private SubScreen? _subScreen;
     private GameGridInventory? _bay;
     private IDisposable? _configSubscription;
     private Vector2? _sizeBeforeSubScreen;
@@ -119,7 +116,6 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     /// <summary>Writes one diagnostic line to the mod log.</summary>
     internal void WriteDiagnostic(string message) => _writeDiagnostic(message);
 
-    /// <summary>Creates the storage view for this window; registered as the storage terminal's view factory.</summary>
     protected virtual string HostWindowId => WindowId;
 
     protected virtual string HostTitleKey => "terminal_storage_title";
@@ -164,12 +160,20 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     internal virtual ITerminalView CreateStorageView() => throw new InvalidOperationException("This window has no storage view.");
 
-    /// <summary>Returns from the open sub-screen to the view, as the back button does.</summary>
-    internal void SwitchToScreen(SubScreen screen) => _host?.SwitchToScreen(screen);
+    /// <summary>Opens a page above the view or the top page.</summary>
+    internal void PushScreen(SubScreen screen) => _host?.PushScreen(screen);
 
-    internal bool HasSubScreen => _host?.InSubScreen == true;
+    /// <summary>Returns one page, as the back button does.</summary>
+    internal void PopScreen() => _host?.PopScreen();
 
-    internal void ReturnToParent() => _host?.ReturnToParent();
+    /// <summary>Gets whether any page covers the view.</summary>
+    internal bool InSubScreen => _host?.InSubScreen == true;
+
+    /// <summary>Gets whether the left dock holds the back button of a screen.</summary>
+    internal bool HasDockedBack(string screenId) => ScreenBackButton.IsRegistered(_registry, screenId);
+
+    /// <summary>Gets whether <paramref name="screen"/> is the page on top.</summary>
+    internal bool IsTopScreen(SubScreen screen) => _host != null && ReferenceEquals(_host.TopScreen, screen);
 
     /// <summary>Makes this window the one that opens for the terminal, in place of its native machinery window.</summary>
     internal void Attach(GameItem terminal)
@@ -180,7 +184,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         native.openCallback += () =>
         {
             // The module bay cannot be drawn in two places; the native window takes it back.
-            if (_subScreen is TerminalModulesScreen) ReturnToParent();
+            if (_pages.Any(page => page.Screen is TerminalModulesScreen)) _host?.PopToView();
             // Reached when the native window was shown without the patched OpenContentAction, for example by a
             // direct Show call (OverlayHandler.ShowInventory) or when the patch is missing. Show has already
             // finished, so hiding here still flashes for one frame.
@@ -233,7 +237,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _host.Open();
         OnHostOpened();
         if (_window == null || _host == null) return;
-        _dock?.RebuildNow();
+        foreach (var dock in _docks) dock.RebuildNow();
         _window.Show();
         _window.frame?.dragHandle?.MoveFront();
         OnHostShown();
@@ -270,11 +274,12 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _diagnostics.Record("input_shield", "native_node=true placement_target=false bounds=window");
 
         var handler = new UniversalTerminalHandler(_registry, CreateCurrentTerminalStore(), WriteDiagnostic);
-        var bar = new VerticalButtonBar(_registry, handler, WriteDiagnostic);
-        _host = new TerminalHost(_registry, handler, bar, this, InstalledModules, _testViewEnabled, WriteDiagnostic, this,
+        var docks = new TerminalDocks(_registry, handler, WriteDiagnostic);
+        _host = new TerminalHost(_registry, handler, docks, this, InstalledModules, _testViewEnabled, WriteDiagnostic, this,
             CreateFeatureData());
         var host = _host;
-        _dock = DockView.Create(_window, Text, Icons, bar, () => host.Context);
+        foreach (var bar in docks.Bars)
+            _docks.Add(DockView.Create(_window, Text, Icons, bar, () => host.Context, RefreshButtons));
     }
 
     internal bool IsWindowMoveArea(Vector2 point)
@@ -312,10 +317,10 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             canvas == null ? 0f : canvas.scaleFactor);
     }
 
-    /// <summary>The back key returns from a sub-screen first; only then does it close the window.</summary>
+    /// <summary>The back key returns one page first; only over the view does it close the window.</summary>
     private bool Back()
     {
-        if (_subScreen is ITerminalBackHandler screenBack && screenBack.HandleBack()) return true;
+        if (TopPage?.Screen is ITerminalBackHandler screenBack && screenBack.HandleBack()) return true;
         if (_currentView is ITerminalBackHandler viewBack && viewBack.HandleBack()) return true;
         if (_host?.HandleBack() == true) return true;
         if (!_registry.AllowsFinalBackClose()) return false;
@@ -333,9 +338,10 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         }
 
         // Raised, so the terminal and native windows share one layer and order by focus like native windows do. The
-        // dock counts as part of the window when it is fitted into the viewport, so it never ends up off screen sideways.
+        // registered docks count as part of the window when it is fitted into the viewport, so they never end up off
+        // screen sideways.
         if (NativeWindowLayer.Attach(_window, HostLayerId, Back, _diagnostics, raised: true,
-                leftExtent: TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap) == null) return;
+                leftExtent: DockExtent(DockSide.Left), rightExtent: DockExtent(DockSide.Right)) == null) return;
         _diagnostics?.Record("drag_rebound", "native_canvas=true parent=private_viewport clamp=window_and_dock focus=viewport");
     }
 
@@ -434,27 +440,56 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     /// <inheritdoc />
     public object? StoreState() => _currentView?.StoreState();
 
-    /// <inheritdoc />
-    public void OpenSubScreen(object subScreen)
+    /// <summary>
+    /// Resizes the window so a machine body fits; the docks stay outside the frame. Layout measures only active objects,
+    /// so this runs while the window is visible.
+    /// </summary>
+    internal void FitBodyTo(RectTransform content)
     {
-        if (_viewHost == null || _subHost == null) return;
-        _currentView?.Suspend();
-        if (_window != null)
+        var window = CustomWindow;
+        if (!content.gameObject.activeInHierarchy) return;
+        LayoutRebuilder.ForceRebuildLayoutImmediate(window.Rect);
+        var chrome = window.Rect.rect.size - window.ContentRoot.rect.size;
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+        window.SetSize(LayoutUtility.GetPreferredWidth(content) + chrome.x, LayoutUtility.GetPreferredHeight(content) + chrome.y);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(window.Rect);
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<DisplayEntry> Selection => _currentView?.Selection ?? Array.Empty<DisplayEntry>();
+
+    /// <inheritdoc />
+    public void ClearSelection() => _currentView?.ClearSelection();
+
+    /// <inheritdoc />
+    public void ShowMessage(string textKey) => _currentView?.ShowMessage(textKey);
+
+    /// <inheritdoc />
+    public bool OpenScreen(ITerminalScreen screen, ITerminalScreen? covered)
+    {
+        if (_window == null || _viewHost == null || _subHost == null || screen is not SubScreen page) return false;
+        var below = TopPage;
+        if (below == null)
         {
+            _currentView?.Suspend();
             _sizeBeforeSubScreen ??= _window.Rect.sizeDelta;
             _positionBeforeSubScreen ??= _window.Rect.anchoredPosition;
-            _window.root.GetComponent<NativeWindowSizer>()?.SetLeftExtent(0f);
+            _viewHost.gameObject.SetActive(false);
+            _subHost.gameObject.SetActive(true);
         }
-        _viewHost.gameObject.SetActive(false);
-        _dock?.SetShown(false);
-        _subHost.gameObject.SetActive(true);
-        NativeWindowLayer.RebindTerminalDrag(_window!);
-        var screen = subScreen as SubScreen;
-        _subScreen = screen;
+        else
+        {
+            below.Container.gameObject.SetActive(false);
+            TryRun(below.Screen.OnCovered, "cover");
+        }
+
+        var entry = new ScreenPage(page, CreatePageContainer(_window, _subHost));
+        _pages.Add(entry);
+        NativeWindowLayer.RebindTerminalDrag(_window);
         var shown = false;
         try
         {
-            shown = screen != null && screen.Show(_subHost);
+            shown = page.Show(entry.Container);
         }
         catch (Exception error)
         {
@@ -464,44 +499,50 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         if (shown)
         {
             FitSubScreen();
-            return;
+            return true;
         }
 
-        // Back to the view, with the module panel left in (or returned to) the native machinery window.
-        _diagnostics?.Record("sub_screen", $"type={subScreen.GetType().Name} result=unavailable");
-        _host?.ReturnToParent();
-        _currentView?.ShowMessage(screen?.UnavailableKey ?? SubScreen.DefaultUnavailableKey);
+        // Back to what was shown before, with a borrowed native panel left in (or returned to) its native window.
+        _diagnostics?.Record("sub_screen", $"type={page.GetType().Name} result=unavailable");
+        RemovePage(entry);
+        if (below != null)
+        {
+            below.Container.gameObject.SetActive(true);
+            NativeWindowLayer.RebindTerminalDrag(_window);
+            FitSubScreen();
+        }
+        else
+        {
+            ShowView();
+            _currentView?.ShowMessage(page.UnavailableKey);
+        }
+
+        return false;
     }
 
     /// <inheritdoc />
-    public void CloseSubScreen(object subScreen)
+    public void CloseScreen(ITerminalScreen screen, ITerminalScreen? revealed)
     {
-        try
+        var entry = _pages.FirstOrDefault(page => ReferenceEquals(page.Screen, screen));
+        if (entry != null) RemovePage(entry);
+        if (_closing || _window == null || _viewHost == null || _subHost == null) return;
+        var next = _pages.FirstOrDefault(page => ReferenceEquals(page.Screen, revealed));
+        if (next == null)
         {
-            (subScreen as SubScreen)?.Dispose();
-        }
-        catch (Exception error)
-        {
-            _diagnostics?.Record("sub_screen", $"dispose=failed error={error.GetType().Name}");
+            ShowView();
+            return;
         }
 
-        _subScreen = null;
-        if (_closing || _viewHost == null || _subHost == null) return;
-        if (_sizeBeforeSubScreen is { } size && _window != null) _window.SetSize(size.x, size.y);
-        if (_positionBeforeSubScreen is { } position && _window != null) _window.Rect.anchoredPosition = position;
-        _sizeBeforeSubScreen = null;
-        _positionBeforeSubScreen = null;
-        _subHost.gameObject.SetActive(false);
-        _viewHost.gameObject.SetActive(true);
-        _dock?.SetShown(true);
-        _window?.root.GetComponent<NativeWindowSizer>()?.SetLeftExtent(TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap);
-        NativeWindowLayer.RebindTerminalDrag(_window!);
-        _currentView?.OnReturnFromSubScreen();
+        next.Container.gameObject.SetActive(true);
+        NativeWindowLayer.RebindTerminalDrag(_window);
+        TryRun(next.Screen.OnRevealed, "reveal");
+        FitSubScreen();
     }
 
-    protected bool RefreshSubScreenContent(SubScreen screen)
+    /// <summary>Rebuilds <paramref name="screen"/> when it is the page on top; false otherwise.</summary>
+    protected bool RefreshScreenContent(SubScreen screen)
     {
-        if (!ReferenceEquals(_subScreen, screen) || _subHost == null || !HasSubScreen) return false;
+        if (!IsTopScreen(screen) || _subHost == null) return false;
         screen.RefreshContent();
         FitSubScreen();
         return true;
@@ -509,10 +550,61 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     internal void FitSubScreenContent(SubScreen screen)
     {
-        if (ReferenceEquals(_subScreen, screen) && !_closing) FitSubScreen();
+        if (ReferenceEquals(TopPage?.Screen, screen) && !_closing) FitSubScreen();
     }
 
-    /// <summary>Measures the active page and restores the view's baseline when the page is closed.</summary>
+    private ScreenPage? TopPage => _pages.Count == 0 ? null : _pages[_pages.Count - 1];
+
+    private float DockExtent(DockSide side) =>
+        _registry.FindDock(side) == null ? 0f : TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap;
+
+    private static RectTransform CreatePageContainer(CustomUIWindow window, RectTransform host)
+    {
+        var builder = new CustomUIBuilder(CustomUIManager.Instance, window, host);
+        builder.BeginColumn(spacing: 0f);
+        var container = builder.CurrentContainer;
+        container.name = "sub_screen_page";
+        builder.End();
+        return container;
+    }
+
+    private void RemovePage(ScreenPage entry)
+    {
+        _pages.Remove(entry);
+        TryRun(entry.Screen.Dispose, "dispose");
+        if (entry.Container == null) return;
+        // Inactive at once so the layout and the next fit ignore it; destroyed at the end of the frame.
+        entry.Container.gameObject.SetActive(false);
+        UnityEngine.Object.Destroy(entry.Container.gameObject);
+    }
+
+    /// <summary>Restores the view's size, position and controls once the last page is gone.</summary>
+    private void ShowView()
+    {
+        if (_window == null || _viewHost == null || _subHost == null) return;
+        if (_sizeBeforeSubScreen is { } size) _window.SetSize(size.x, size.y);
+        if (_positionBeforeSubScreen is { } position) _window.Rect.anchoredPosition = position;
+        _sizeBeforeSubScreen = null;
+        _positionBeforeSubScreen = null;
+        _subHost.gameObject.SetActive(false);
+        _viewHost.gameObject.SetActive(true);
+        NativeWindowLayer.RebindTerminalDrag(_window);
+        _currentView?.OnReturnFromSubScreen();
+    }
+
+    private void TryRun(Action action, string stage)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception error)
+        {
+            _diagnostics?.Record("sub_screen", $"{stage}=failed error={error.GetType().Name}");
+        }
+    }
+
+    /// <summary>Measures the top page against the view's baseline size.</summary>
     private void FitSubScreen()
     {
         if (_window == null || _subHost == null) return;
@@ -526,14 +618,18 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         var content = _window.ContentRoot.rect.size;
         var needed = new Vector2(LayoutUtility.GetPreferredWidth(_subHost), LayoutUtility.GetPreferredHeight(_subHost));
         var chrome = Vector2.Max(Vector2.zero, _window.Rect.rect.size - content);
-        var width = SubScreenMetrics.GetLength(baseline.x, needed.x, chrome.x, _subScreen?.FitsContent == true);
-        var height = SubScreenMetrics.GetLength(baseline.y, needed.y, chrome.y, _subScreen?.FitsContent == true);
+        var fits = TopPage?.Screen.FitsContent == true;
+        var width = SubScreenMetrics.GetLength(baseline.x, needed.x, chrome.x, fits);
+        var height = SubScreenMetrics.GetLength(baseline.y, needed.y, chrome.y, fits);
         _window.SetSize(width, height);
         LayoutRebuilder.ForceRebuildLayoutImmediate(_window.Rect);
     }
 
     /// <inheritdoc />
-    public void RefreshButtons() => _dock?.MarkDirty();
+    public void RefreshButtons()
+    {
+        foreach (var dock in _docks) dock.MarkDirty();
+    }
 
     /// <inheritdoc />
     public void SettingChanged(string settingName)
@@ -582,9 +678,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         try
         {
             _host?.Close();
-            // Close already disposed it; this covers a host that failed before getting there.
-            _subScreen?.Dispose();
-            _subScreen = null;
+            // Close already released them; this covers a host that failed before getting there.
+            for (var index = _pages.Count - 1; index >= 0; index--) RemovePage(_pages[index]);
             DisposeCurrentView();
             _configSubscription?.Dispose();
             _configSubscription = null;
@@ -598,9 +693,10 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             _sizeBeforeSubScreen = null;
             _positionBeforeSubScreen = null;
             NativeWindowLayer.Detach(_window);
-            // Destroyed with the root at the end of the frame; until then its LateUpdate must not rebuild into it.
-            if (_dock != null) _dock.enabled = false;
-            _dock = null;
+            // Destroyed with the root at the end of the frame; until then their LateUpdate must not rebuild into them.
+            foreach (var dock in _docks)
+                if (dock != null) dock.enabled = false;
+            _docks.Clear();
             _host = null;
             _viewHost = null;
             _subHost = null;
@@ -615,6 +711,15 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         {
             _closing = false;
         }
+    }
+
+    private sealed class ScreenPage
+    {
+        internal ScreenPage(SubScreen screen, RectTransform container) => (Screen, Container) = (screen, container);
+
+        internal SubScreen Screen { get; }
+
+        internal RectTransform Container { get; }
     }
 
     // A borrowed native panel can settle its size a frame after the page was fitted, without any callback. While the

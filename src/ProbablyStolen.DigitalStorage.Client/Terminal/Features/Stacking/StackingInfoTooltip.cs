@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -45,6 +44,9 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
 
     /// <summary>The key of one selected difference line.</summary>
     public const string SelectionDifferenceKey = "stacking_info_difference";
+
+    /// <summary>The line for a difference in unexposed or disabled features while the advanced option is off.</summary>
+    public const string SelectionHiddenFeatureKey = "stacking_info_hidden_feature";
 
     /// <summary>The key of a raw tag that cannot be added as a rule.</summary>
     public const string SelectionTagUnavailableKey = "stacking_info_tag_unavailable";
@@ -103,56 +105,9 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
         }
 
         sink.Label(PanelId, SelectionKey, groups.Length);
-        var differences = new SortedSet<string>(StringComparer.Ordinal);
-        var comparable = new List<(ItemKey Key, StackingAttributes Attributes)>();
-        var unclassified = false;
-        foreach (var group in groups)
-        {
-            var key = group.Representative.Key;
-            var itemAttributes = new StackingAttributes(attributes.For(key));
-            if (StackingProjection.TryGetDifferences(key, itemAttributes, key, itemAttributes, config, out _))
-                comparable.Add((key, itemAttributes));
-            else
-                unclassified = true;
-        }
-
-        var needsPairwiseComparison = false;
-        if (comparable.Count > 1)
-        {
-            var first = comparable[0];
-            foreach (var other in comparable.Skip(1))
-            {
-                if (StackingProjection.TryGetDifferences(first.Key, first.Attributes, other.Key, other.Attributes,
-                        config, out var fields))
-                {
-                    foreach (var fieldId in fields) differences.Add(fieldId);
-                    needsPairwiseComparison |= fields.Contains("item_identity", StringComparer.Ordinal);
-                }
-                else
-                {
-                    unclassified = true;
-                    needsPairwiseComparison = true;
-                }
-            }
-        }
-
-        if (needsPairwiseComparison)
-        {
-            for (var left = 1; left < comparable.Count; left++)
-            {
-                for (var right = left + 1; right < comparable.Count; right++)
-                {
-                    if (StackingProjection.TryGetDifferences(comparable[left].Key, comparable[left].Attributes,
-                            comparable[right].Key, comparable[right].Attributes, config, out var fields))
-                    {
-                        foreach (var fieldId in fields) differences.Add(fieldId);
-                    }
-                    else unclassified = true;
-                }
-            }
-        }
-
-        if (unclassified) differences.Add("item_identity");
+        var members = groups.Select(group => group.Representative.Key)
+            .Select(key => (key, new StackingAttributes(attributes.For(key)))).ToArray();
+        var differences = StackingProjection.CollectDifferences(members, config);
         if (differences.Count == 0)
         {
             sink.Body(PanelId, SelectionUnknownKey);
@@ -178,6 +133,7 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
 
     private static LocalizedText UnknownField(string fieldId)
     {
+        if (fieldId == StackingFieldCatalog.HiddenFeature) return new LocalizedText(SelectionHiddenFeatureKey);
         if (fieldId.StartsWith(StackingFieldCatalog.TagPrefix, StringComparison.Ordinal))
             return new LocalizedText(SelectionTagUnavailableKey,
                 TooltipLiteralText.ForRichText(fieldId.Substring(StackingFieldCatalog.TagPrefix.Length)));

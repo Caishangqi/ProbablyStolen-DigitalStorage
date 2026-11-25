@@ -51,42 +51,46 @@ public sealed class StackingRule : IEquatable<StackingRule>
 }
 
 /// <summary>
-/// The stacking settings of one terminal: whether merged display is on, the marker tint and the rule rows. Immutable; every edit
-/// returns a new configuration. Row order serves the page only and never changes grouping.
+/// The stacking rule of one item definition: whether it groups, and its field rows. Immutable; every edit returns a new
+/// rule. Row order serves the page only and never changes grouping.
 /// </summary>
-public sealed class StackingConfig : IEquatable<StackingConfig>
+public sealed class StackingItemRule : IEquatable<StackingItemRule>
 {
-    /// <summary>The most rows a configuration holds.</summary>
+    /// <summary>The most rows one item rule holds.</summary>
     public const int MaxRules = 256;
 
-    /// <summary>Creates a configuration; field identifiers must be unique.</summary>
-    public StackingConfig(bool enabled, IEnumerable<StackingRule> rules, StackingMarker? marker = null)
+    /// <summary>Creates an item rule; field identifiers must be unique.</summary>
+    public StackingItemRule(string itemId, bool enabled, IEnumerable<StackingRule> rules)
     {
+        if (!IsValidItemId(itemId)) throw new ArgumentException("The item id is invalid.", nameof(itemId));
         if (rules == null) throw new ArgumentNullException(nameof(rules));
         var list = rules.ToList();
         if (list.Any(rule => rule == null)) throw new ArgumentException("A rule is missing.", nameof(rules));
         if (list.Count > MaxRules) throw new ArgumentException("Too many rules.", nameof(rules));
         if (list.Select(rule => rule.FieldId).Distinct(StringComparer.Ordinal).Count() != list.Count)
             throw new ArgumentException("A field appears in more than one rule.", nameof(rules));
+        ItemId = itemId;
         Enabled = enabled;
-        Marker = marker ?? StackingMarker.Default;
         Rules = list.AsReadOnly();
     }
 
-    /// <summary>Gets the configuration of a terminal that has none saved: on, with no rules.</summary>
-    public static StackingConfig Default { get; } = new(true, Array.Empty<StackingRule>());
+    /// <summary>Gets the item definition identifier.</summary>
+    public string ItemId { get; }
 
-    /// <summary>Gets whether merged display is on.</summary>
+    /// <summary>Gets whether the rule groups; a switched-off rule keeps its rows.</summary>
     public bool Enabled { get; }
 
-    /// <summary>Gets the tint of the mixed group mark.</summary>
-    public StackingMarker Marker { get; }
-
-    /// <summary>Gets the rule rows in page order.</summary>
+    /// <summary>Gets the rows in page order.</summary>
     public IReadOnlyList<StackingRule> Rules { get; }
 
-    /// <summary>Gets whether any rule ignores a field; without one, grouping equals exact display.</summary>
+    /// <summary>Gets whether any row ignores a field; without one, grouping equals exact display.</summary>
     public bool HasIgnoreRule => Rules.Any(rule => rule.Mode == StackingMode.Ignore);
+
+    /// <summary>Gets whether the rule changes grouping at all.</summary>
+    public bool IsActive => Enabled && HasIgnoreRule;
+
+    /// <summary>Whether a text can be an item identifier; the same limits as a field identifier.</summary>
+    public static bool IsValidItemId(string? itemId) => StackingRule.IsValidFieldId(itemId);
 
     /// <summary>Gets the mode of a field, or null when it has no row.</summary>
     public StackingMode? ModeOf(string fieldId) => Rules.FirstOrDefault(rule => rule.FieldId == fieldId)?.Mode;
@@ -99,54 +103,124 @@ public sealed class StackingConfig : IEquatable<StackingConfig>
         return -1;
     }
 
-    /// <summary>Returns a copy with merged display switched.</summary>
-    public StackingConfig WithEnabled(bool enabled) => new(enabled, Rules, Marker);
+    /// <summary>Returns a copy switched on or off.</summary>
+    public StackingItemRule WithEnabled(bool enabled) => new(ItemId, enabled, Rules);
+
+    /// <summary>Returns a copy with other rows.</summary>
+    public StackingItemRule WithRules(IEnumerable<StackingRule> rules) => new(ItemId, Enabled, rules);
+
+    /// <summary>
+    /// Returns a copy with an ignore row appended for every field that has none yet; rows that exist keep their mode.
+    /// </summary>
+    public StackingItemRule WithIgnoredFields(IEnumerable<string> fieldIds)
+    {
+        if (fieldIds == null) throw new ArgumentNullException(nameof(fieldIds));
+        var rules = Rules.ToList();
+        foreach (var fieldId in fieldIds)
+        {
+            if (rules.All(rule => rule.FieldId != fieldId)) rules.Add(new StackingRule(fieldId, StackingMode.Ignore));
+        }
+
+        return new StackingItemRule(ItemId, Enabled, rules);
+    }
+
+    /// <inheritdoc />
+    public bool Equals(StackingItemRule? other) =>
+        other != null && ItemId == other.ItemId && Enabled == other.Enabled && Rules.SequenceEqual(other.Rules);
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => Equals(obj as StackingItemRule);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => Rules.Aggregate(
+        StringComparer.Ordinal.GetHashCode(ItemId) * 2 + (Enabled ? 1 : 0), (hash, rule) => hash * 31 + rule.GetHashCode());
+}
+
+/// <summary>
+/// The stacking settings of one terminal: the marker tint, the advanced option and at most one rule per item
+/// definition. Immutable; every edit returns a new configuration. Item order serves the page only.
+/// </summary>
+public sealed class StackingConfig : IEquatable<StackingConfig>
+{
+    /// <summary>The most item rules a configuration holds.</summary>
+    public const int MaxItems = 1024;
+
+    /// <summary>Creates a configuration; item identifiers must be unique.</summary>
+    public StackingConfig(IEnumerable<StackingItemRule> items, StackingMarker? marker = null, bool advanced = true)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        var list = items.ToList();
+        if (list.Any(item => item == null)) throw new ArgumentException("An item rule is missing.", nameof(items));
+        if (list.Count > MaxItems) throw new ArgumentException("Too many item rules.", nameof(items));
+        if (list.Select(item => item.ItemId).Distinct(StringComparer.Ordinal).Count() != list.Count)
+            throw new ArgumentException("An item appears in more than one rule.", nameof(items));
+        Marker = marker ?? StackingMarker.Default;
+        Advanced = advanced;
+        Items = list.AsReadOnly();
+    }
+
+    /// <summary>Gets the configuration of a terminal that has none saved: no item rules, advanced option on.</summary>
+    public static StackingConfig Default { get; } = new(Array.Empty<StackingItemRule>());
+
+    /// <summary>Gets the tint of the mixed group mark.</summary>
+    public StackingMarker Marker { get; }
+
+    /// <summary>
+    /// Gets whether the advanced option is on: unexposed and disabled features can then be listed by identifier and
+    /// ignored. Saved with the terminal; on by default. While off, saved rows for such features stay but do not apply.
+    /// </summary>
+    public bool Advanced { get; }
+
+    /// <summary>Gets the item rules in page order.</summary>
+    public IReadOnlyList<StackingItemRule> Items { get; }
+
+    /// <summary>Gets whether any item rule changes grouping.</summary>
+    public bool HasActiveRule => Items.Any(item => item.IsActive);
+
+    /// <summary>Gets the rule of an item definition, or null.</summary>
+    public StackingItemRule? Find(string? itemId) => itemId == null ? null : Items.FirstOrDefault(item => item.ItemId == itemId);
 
     /// <summary>Returns a copy with another marker tint.</summary>
     public StackingConfig WithMarker(StackingMarker marker) =>
-        new(Enabled, Rules, marker ?? throw new ArgumentNullException(nameof(marker)));
+        new(Items, marker ?? throw new ArgumentNullException(nameof(marker)), Advanced);
 
-    /// <summary>Returns a copy with a row for the field appended, or unchanged when it already has one.</summary>
-    public StackingConfig WithAddedRule(string fieldId, StackingMode mode) =>
-        IndexOf(fieldId) >= 0 ? this : new StackingConfig(Enabled, Rules.Concat(new[] { new StackingRule(fieldId, mode) }), Marker);
+    /// <summary>Returns a copy with the advanced option switched.</summary>
+    public StackingConfig WithAdvanced(bool advanced) => new(Items, Marker, advanced);
 
-    /// <summary>Returns a copy with one row's mode changed.</summary>
-    public StackingConfig WithMode(int index, StackingMode mode) =>
-        Replace(index, new StackingRule(RuleAt(index).FieldId, mode));
-
-    /// <summary>Returns a copy with one row's field replaced, keeping its mode. The new field must have no row.</summary>
-    public StackingConfig WithField(int index, string fieldId)
+    /// <summary>Returns a copy where the item's rule is replaced in place, or appended when it has none.</summary>
+    public StackingConfig WithItem(StackingItemRule rule)
     {
-        if (IndexOf(fieldId) >= 0) throw new ArgumentException("The field already has a row.", nameof(fieldId));
-        return Replace(index, new StackingRule(fieldId, RuleAt(index).Mode));
+        if (rule == null) throw new ArgumentNullException(nameof(rule));
+        var replaced = false;
+        var items = Items.Select(item =>
+        {
+            if (item.ItemId != rule.ItemId) return item;
+            replaced = true;
+            return rule;
+        }).ToList();
+        if (!replaced) items.Add(rule);
+        return new StackingConfig(items, Marker, Advanced);
     }
 
-    /// <summary>Returns a copy without one row.</summary>
-    public StackingConfig WithoutRule(int index)
-    {
-        RuleAt(index);
-        return new StackingConfig(Enabled, Rules.Where((_, i) => i != index), Marker);
-    }
+    /// <summary>Returns a copy without the item's rule.</summary>
+    public StackingConfig WithoutItem(string itemId) =>
+        new(Items.Where(item => item.ItemId != itemId), Marker, Advanced);
 
-    /// <summary>Returns a copy without rows, keeping the switch.</summary>
-    public StackingConfig WithoutRules() => new(Enabled, Array.Empty<StackingRule>(), Marker);
+    /// <summary>Returns a copy without any item rule, keeping the marker and the advanced option.</summary>
+    public StackingConfig WithoutItems() => new(Array.Empty<StackingItemRule>(), Marker, Advanced);
+
+    /// <summary>Returns a copy with every item rule switched on or off.</summary>
+    public StackingConfig WithAllEnabled(bool enabled) =>
+        new(Items.Select(item => item.WithEnabled(enabled)), Marker, Advanced);
 
     /// <inheritdoc />
     public bool Equals(StackingConfig? other) =>
-        other != null && Enabled == other.Enabled && Marker.Equals(other.Marker) && Rules.SequenceEqual(other.Rules);
+        other != null && Advanced == other.Advanced && Marker.Equals(other.Marker) && Items.SequenceEqual(other.Items);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as StackingConfig);
 
     /// <inheritdoc />
-    public override int GetHashCode() => Rules.Aggregate((Enabled ? 1 : 0) ^ Marker.Rgb << 1, (hash, rule) => hash * 31 + rule.GetHashCode());
-
-    private StackingRule RuleAt(int index) =>
-        index >= 0 && index < Rules.Count ? Rules[index] : throw new ArgumentOutOfRangeException(nameof(index));
-
-    private StackingConfig Replace(int index, StackingRule rule)
-    {
-        RuleAt(index);
-        return new StackingConfig(Enabled, Rules.Select((existing, i) => i == index ? rule : existing), Marker);
-    }
+    public override int GetHashCode() =>
+        Items.Aggregate((Advanced ? 1 : 0) ^ Marker.Rgb << 1, (hash, item) => hash * 31 + item.GetHashCode());
 }

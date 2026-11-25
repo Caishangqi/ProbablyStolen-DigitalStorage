@@ -26,6 +26,6 @@ public static class TerminalStyleFeature
     public static void Register(TerminalRegistry registry)
     {
         if (registry == null) throw new ArgumentNullException(nameof(registry));
-        registry.AddSetting(TerminalStyle, 10, ActionPlacement.Rail, null);
+        registry.AddSetting(TerminalStyle, 10, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews);
     }
 }

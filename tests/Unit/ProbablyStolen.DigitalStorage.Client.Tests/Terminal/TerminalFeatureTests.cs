@@ -30,11 +30,11 @@ public sealed class TerminalFeatureTests
         _log.Clear();
         _registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
         StorageTerminalFeature.Register(_registry, window => "storage-view:" + window.GetHashCode());
-        ModulesFeature.Register(_registry, window => "modules-screen");
+        ModulesFeature.Register(_registry, window => new TestScreen("modules-screen"));
         TerminalStyleFeature.Register(_registry);
-        DiagnosticsFeature.Register(_registry, _ => "diagnostics-view", _ => "diagnostics-screen", _log.Add);
+        DiagnosticsFeature.Register(_registry, _ => "diagnostics-view", _ => new TestScreen("diagnostics-screen"), _log.Add);
         _registry.Freeze();
-        _bar = new VerticalButtonBar(_registry, new UniversalTerminalHandler(_registry, new MemoryStore(), _log.Add), _log.Add);
+        _bar = new TerminalDocks(_registry, new UniversalTerminalHandler(_registry, new MemoryStore(), _log.Add), _log.Add).Find(DockSide.Left)!;
     }
 
     [Test]
@@ -42,15 +42,15 @@ public sealed class TerminalFeatureTests
     {
         var registry = PartitionTerminalFeature.CreateRegistry(new MemoryConfig(), _log.Add, _ => "partition-view",
             _ => PartitionMode.Whitelist, _ => { }, _ => { });
-        var bar = new VerticalButtonBar(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+        var bar = new TerminalDocks(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add).Find(DockSide.Left)!;
 
         Assert.That(registry.Terminals.Select(item => item.TerminalName), Is.EqualTo(new[] { "partition" }));
         Assert.That(bar.GetButtons(Context("partition")).Select(item => item.Id), Is.EqualTo(new[]
         {
             PartitionTerminalFeature.ModeActionName, PartitionTerminalFeature.SizeSettingName, PartitionTerminalFeature.ClearActionName
         }));
-        Assert.That(registry.Buttons.Select(item => item.TerminalId),
-            Is.EqualTo(new string?[] { null, null, PartitionTerminalFeature.TerminalName }));
+        Assert.That(registry.Buttons.Select(item => item.Scope),
+            Is.EqualTo(new[] { ActionScope.AllViews, ActionScope.AllViews, ActionScope.View(PartitionTerminalFeature.TerminalName) }));
         Assert.That(_bar.GetButtons(Context()).Select(item => item.Id), Does.Not.Contain(PartitionTerminalFeature.ClearActionName));
     }
 
@@ -58,6 +58,7 @@ public sealed class TerminalFeatureTests
     public void PartitionModeAction_UsesTheCurrentWindowDraft()
     {
         var registry = new TerminalRegistry(new MemoryConfig(), _log.Add, PartitionTerminalFeature.TerminalName);
+        registry.AddDock(DockSide.Left, "left_title");
         var modes = new Dictionary<object, Common.Domain.Storage.Partition.PartitionMode>();
         PartitionTerminalFeature.Register(registry, _ => "partition-view",
             context => modes[(object)context.Window], context =>
@@ -117,7 +118,7 @@ public sealed class TerminalFeatureTests
             context => drafts[(object)context.Window].Mode,
             context => drafts[(object)context.Window].ToggleMode(),
             context => drafts[(object)context.Window].Clear());
-        var bar = new VerticalButtonBar(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+        var bar = new TerminalDocks(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add).Find(DockSide.Left)!;
         var context = new TerminalContext(Array.Empty<string>(), false, "partition", new RecordingCommands(), firstWindow);
 
         var clear = bar.GetButtons(context).Single(button => button.Id == PartitionTerminalFeature.ClearActionName).Appearance;

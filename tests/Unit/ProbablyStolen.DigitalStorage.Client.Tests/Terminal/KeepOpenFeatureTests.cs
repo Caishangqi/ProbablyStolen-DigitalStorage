@@ -13,14 +13,14 @@ public sealed class KeepOpenFeatureTests
     [Test]
     public void Register_UsesSharedPreferenceForRailAppearanceAndFinalBackGuard()
     {
-        var registry = new TerminalRegistry(new MemoryConfig(), _ => { });
+        var registry = Registry();
         registry.AddTerminal(Storage());
         var preference = false;
         KeepOpenFeature.Register(registry, () => preference, value => preference = value);
         registry.Freeze();
 
         var button = registry.Buttons.Single(entry => entry.Button.Id == KeepOpenFeature.ActionId);
-        Assert.That(button.TerminalId, Is.Null);
+        Assert.That(button.Scope, Is.EqualTo(ActionScope.AllViews));
         Assert.That(button.Placement, Is.EqualTo(ActionPlacement.Rail));
         Assert.That(button.Button.GetAppearance(Context()).IconKey, Is.EqualTo("button_keep_open_off"));
         Assert.That(registry.AllowsFinalBackClose(), Is.True);
@@ -38,7 +38,7 @@ public sealed class KeepOpenFeatureTests
     [Test]
     public void Register_OnlyAddsTheGuardToTheStorageTerminalRegistry()
     {
-        var storageRegistry = new TerminalRegistry(new MemoryConfig(), _ => { });
+        var storageRegistry = Registry();
         storageRegistry.AddTerminal(Storage());
         KeepOpenFeature.Register(storageRegistry, () => true, _ => { });
         storageRegistry.Freeze();

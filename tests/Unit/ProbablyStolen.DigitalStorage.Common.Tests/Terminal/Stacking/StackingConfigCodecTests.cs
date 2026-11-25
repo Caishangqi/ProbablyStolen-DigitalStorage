@@ -9,31 +9,44 @@ namespace ProbablyStolen.DigitalStorage.Common.Tests.Terminal.Stacking;
 public sealed class StackingConfigCodecTests
 {
     [Test]
-    public void RoundTrip_KeepsSwitchRowsAndOrder()
+    public void RoundTrip_KeepsItemsSwitchesRowsAndOrder()
     {
-        var config = new StackingConfig(false, new[]
+        var config = new StackingConfig(new[]
         {
-            new StackingRule("price_composition", StackingMode.Ignore),
-            new StackingRule("feature:光泽|x=", StackingMode.Match),
-            new StackingRule("tag:AGRI_PERFUME_RECORDED", StackingMode.Ignore)
-        });
+            new StackingItemRule("cabbage", false, new[]
+            {
+                new StackingRule("price_composition", StackingMode.Ignore),
+                new StackingRule("feature:光泽|x=", StackingMode.Match)
+            }),
+            new StackingItemRule("模组:物品", true, new[] { new StackingRule("tag:AGRI_PERFUME_RECORDED", StackingMode.Ignore) }),
+            new StackingItemRule("empty", true, Array.Empty<StackingRule>())
+        }, new StackingMarker(0xB37FEB), advanced: true);
         var decoded = StackingConfigCodec.Decode(StackingConfigCodec.Encode(config));
         Assert.That(decoded.Status, Is.EqualTo(StackingConfigStatus.Ok));
         Assert.That(decoded.Config, Is.EqualTo(config));
     }
 
     [Test]
-    public void RoundTrip_KeepsMarker()
+    public void Encode_WritesV4WithMarkerAndAdvancedFirst()
     {
-        var config = StackingConfig.Default.WithMarker(new StackingMarker(0xB37FEB)).WithAddedRule("a", StackingMode.Ignore);
-        var text = StackingConfigCodec.Encode(config);
-        Assert.That(text, Does.StartWith("v3\nenabled\t1\nmarker\t#B37FEB\n"));
-        Assert.That(StackingConfigCodec.Decode(text).Config, Is.EqualTo(config));
+        var config = StackingConfig.Default.WithMarker(new StackingMarker(0xB37FEB))
+            .WithItem(new StackingItemRule("a", true, new[] { new StackingRule("b", StackingMode.Ignore) }));
+        Assert.That(StackingConfigCodec.Encode(config), Is.EqualTo("v4\nmarker\t#B37FEB\nadvanced\t1\nitem\tYQ==\t1\nrule\tYg==\tignore"));
+    }
+
+    [TestCase("v3\nenabled\t1\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore")]
+    [TestCase("v3\nenabled\t0\nmarker\t#B37FEB")]
+    public void ValidV3_KeepsTheMarkerAndStartsWithoutItemRules(string text)
+    {
+        var result = StackingConfigCodec.Decode(text);
+        Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Reset));
+        Assert.That(result.Config, Is.EqualTo(StackingConfig.Default.WithMarker(new StackingMarker(0xB37FEB))));
+        Assert.That(result.Config!.Advanced, Is.True, "The advanced option starts on.");
     }
 
     [TestCase("v1\nenabled\t0\nrule\tc3RvbGVu\tignore")]
     [TestCase("v2\nenabled\t0\nmarker\t#B37FEB\nrule\tc3RvbGVu\tignore")]
-    public void ValidLegacyText_ResetsToDefaults(string text)
+    public void ValidV1AndV2_ResetToDefaults(string text)
     {
         var result = StackingConfigCodec.Decode(text);
         Assert.That(result.Status, Is.EqualTo(StackingConfigStatus.Reset));
@@ -88,18 +101,26 @@ public sealed class StackingConfigCodecTests
         Assert.That(result.Config, Is.EqualTo(StackingConfig.Default));
     }
 
-    [TestCase("v4\nenabled\t1", "unknown_version")]
+    [TestCase("v5\nmarker\t#4CD964\nadvanced\t0", "unknown_version")]
+    [TestCase("v4", "bad_marker")]
+    [TestCase("v4\nmarker\t#4cd964\nadvanced\t0", "bad_marker")]
+    [TestCase("v4\nmarker\t#4CD964", "bad_advanced")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\tyes", "bad_advanced")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nrule\tcHJpY2U=\tmatch", "rule_without_item")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==", "bad_line")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\t!!!\t1", "bad_item")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\tyes", "bad_switch")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nitem\tYQ==\t0", "duplicate_item")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrule\tcHJpY2U=\tdefault", "bad_mode")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrule\t!!!\tmatch", "bad_field")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrule\tcHJpY2U=\tmatch\nrule\tcHJpY2U=\tignore", "duplicate_field")]
+    [TestCase("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\nrow\tcHJpY2U=\tmatch", "bad_line")]
     [TestCase("v3\nenabled\t1", "bad_marker")]
-    [TestCase("v2\nenabled\t1", "bad_marker")]
+    [TestCase("v3\nenabled\t1\nmarker\t#4CD964\nrule\tcHJpY2U=", "bad_line")]
     [TestCase("v2\nenabled\t1\nmarker\t#4cd964", "bad_marker")]
-    [TestCase("v2\nenabled\t1\nmarker\t#4CD", "bad_marker")]
-    [TestCase("v2\nenabled\t1\nmarker\tgreen", "bad_marker")]
     [TestCase("v2\nenabled\t1\nrule\tcHJpY2U=\tmatch", "bad_marker")]
-    [TestCase("v2\nenabled\t1\nmarker\t#4CD964\nrule\tcHJpY2U=", "bad_line")]
-    [TestCase("v1", "missing_switch")]
+    [TestCase("v1", "bad_switch")]
     [TestCase("v1\nenabled\tyes", "bad_switch")]
-    [TestCase("v1\nenabled\t1\nrule\tcHJpY2U=", "bad_line")]
-    [TestCase("v1\nenabled\t1\nrow\tcHJpY2U=\tmatch", "bad_line")]
     [TestCase("v1\nenabled\t1\nrule\t!!!\tmatch", "bad_field")]
     [TestCase("v1\nenabled\t1\nrule\tcHJpY2U=\tdefault", "bad_mode")]
     [TestCase("v1\nenabled\t1\nrule\tcHJpY2U=\tmatch\nrule\tcHJpY2U=\tignore", "duplicate_field")]
@@ -113,28 +134,44 @@ public sealed class StackingConfigCodecTests
     }
 
     [Test]
-    public void OversizedText_IsUnreadable()
+    public void OversizedText_IsUnreadableAndOversizedConfigurationsAreNotEncoded()
     {
-        var text = "v1\nenabled\t1" + new string('x', StackingConfigCodec.MaxLength);
+        var text = "v4\nmarker\t#4CD964\nadvanced\t0" + new string('x', StackingConfigCodec.MaxLength);
         Assert.That(StackingConfigCodec.Decode(text).Status, Is.EqualTo(StackingConfigStatus.Unreadable));
+        var rows = Enumerable.Range(0, StackingItemRule.MaxRules)
+            .Select(i => new StackingRule(new string('f', 150) + i, StackingMode.Ignore));
+        var large = new StackingConfig(new[] { new StackingItemRule("a", true, rows) });
+        Refused(() => StackingConfigCodec.Encode(large));
     }
 
     [Test]
-    public void TooManyRules_AreRefused()
+    public void TooManyRowsOrItems_AreRefused()
     {
-        var rules = Enumerable.Range(0, StackingConfig.MaxRules + 1).Select(i => new StackingRule("f" + i, StackingMode.Match));
-        Refused(() => _ = new StackingConfig(true, rules));
-        var lines = string.Join("\n", Enumerable.Range(0, StackingConfig.MaxRules + 1).Select(i => "rule\tZg==\tmatch"));
-        Assert.That(StackingConfigCodec.Decode("v1\nenabled\t1\n" + lines).Reason, Is.EqualTo("too_many_rules"));
+        var rules = Enumerable.Range(0, StackingItemRule.MaxRules + 1).Select(i => new StackingRule("f" + i, StackingMode.Match));
+        Refused(() => _ = new StackingItemRule("a", true, rules));
+        var lines = string.Join("\n", Enumerable.Range(0, StackingItemRule.MaxRules + 1)
+            .Select(i => "rule\t" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("f" + i)) + "\tmatch"));
+        Assert.That(StackingConfigCodec.Decode("v4\nmarker\t#4CD964\nadvanced\t0\nitem\tYQ==\t1\n" + lines).Reason,
+            Is.EqualTo("too_many_rules"));
+        var items = Enumerable.Range(0, StackingConfig.MaxItems + 1)
+            .Select(i => new StackingItemRule("i" + i, true, Array.Empty<StackingRule>()));
+        Refused(() => _ = new StackingConfig(items));
     }
 
     [Test]
-    public void Config_RefusesDuplicateAndInvalidFields()
+    public void Config_RefusesDuplicateItemsFieldsAndInvalidIdentifiers()
     {
-        Refused(() => _ = new StackingConfig(true, new[]
+        Refused(() => _ = new StackingItemRule("a", true, new[]
         {
             new StackingRule("a", StackingMode.Match), new StackingRule("a", StackingMode.Ignore)
         }));
+        Refused(() => _ = new StackingConfig(new[]
+        {
+            new StackingItemRule("a", true, Array.Empty<StackingRule>()),
+            new StackingItemRule("a", false, Array.Empty<StackingRule>())
+        }));
+        Refused(() => _ = new StackingItemRule("", true, Array.Empty<StackingRule>()));
+        Refused(() => _ = new StackingItemRule("a\nb", true, Array.Empty<StackingRule>()));
         Refused(() => _ = new StackingRule("", StackingMode.Match));
         Refused(() => _ = new StackingRule("a\nb", StackingMode.Match));
         Refused(() => _ = new StackingRule(new string('a', StackingRule.MaxFieldIdLength + 1), StackingMode.Match));
@@ -143,18 +180,38 @@ public sealed class StackingConfigCodecTests
     [Test]
     public void Edits_ReturnNewConfigurations()
     {
-        var config = StackingConfig.Default.WithAddedRule("a", StackingMode.Ignore).WithAddedRule("b", StackingMode.Ignore);
-        Assert.That(config.WithAddedRule("a", StackingMode.Match), Is.SameAs(config));
-        Assert.That(config.WithMode(1, StackingMode.Match).ModeOf("b"), Is.EqualTo(StackingMode.Match));
-        Assert.That(config.WithField(0, "c").Rules.Select(rule => rule.FieldId), Is.EqualTo(new[] { "c", "b" }));
-        Refused(() => config.WithField(0, "b"));
-        Assert.That(config.WithoutRule(0).Rules.Single().FieldId, Is.EqualTo("b"));
-        Assert.That(config.WithoutRules().Rules, Is.Empty);
-        Assert.That(config.WithEnabled(false).Enabled, Is.False);
-        var tinted = config.WithMarker(new StackingMarker(0xFF5C5C));
-        Assert.That(tinted, Is.Not.EqualTo(config));
-        Assert.That(tinted.WithoutRule(0).WithEnabled(false).WithMode(0, StackingMode.Match).Marker.Rgb, Is.EqualTo(0xFF5C5C));
-        Assert.That(StackingConfig.Default.Rules, Is.Empty);
+        var a = new StackingItemRule("a", true, new[] { new StackingRule("x", StackingMode.Match) });
+        var b = new StackingItemRule("b", true, Array.Empty<StackingRule>());
+        var config = StackingConfig.Default.WithItem(a).WithItem(b);
+        Assert.That(config.Items.Select(item => item.ItemId), Is.EqualTo(new[] { "a", "b" }));
+
+        var replaced = config.WithItem(a.WithEnabled(false));
+        Assert.That(replaced.Items.Select(item => item.ItemId), Is.EqualTo(new[] { "a", "b" }), "A replaced rule keeps its place.");
+        Assert.That(replaced.Find("a")!.Enabled, Is.False);
+        Assert.That(config.WithoutItem("a").Items.Single().ItemId, Is.EqualTo("b"));
+        Assert.That(config.WithAllEnabled(false).Items.Any(item => item.Enabled), Is.False);
+        var tinted = config.WithMarker(new StackingMarker(0xFF5C5C)).WithAdvanced(true);
+        Assert.That(tinted.WithoutItems().Items, Is.Empty);
+        Assert.That(tinted.WithoutItems().Marker.Rgb, Is.EqualTo(0xFF5C5C), "Deleting every rule keeps the marker.");
+        Assert.That(tinted.WithoutItems().Advanced, Is.True);
+        Assert.That(StackingConfig.Default.Items, Is.Empty);
+        Assert.That(config.Find("missing"), Is.Null);
+    }
+
+    [Test]
+    public void ItemRule_IgnoredFieldsKeepExistingModesAndAppendNewRows()
+    {
+        var rule = new StackingItemRule("a", false, new[] { new StackingRule("x", StackingMode.Match) });
+
+        var extended = rule.WithIgnoredFields(new[] { "x", "y" });
+
+        Assert.That(extended.Rules, Is.EqualTo(new[]
+        {
+            new StackingRule("x", StackingMode.Match), new StackingRule("y", StackingMode.Ignore)
+        }));
+        Assert.That(extended.Enabled, Is.False, "Adding rows keeps the switch.");
+        Assert.That(extended.IsActive, Is.False);
+        Assert.That(extended.WithEnabled(true).IsActive, Is.True);
     }
 
     private static void Refused(Action code) => Assert.Throws<ArgumentException>(code);

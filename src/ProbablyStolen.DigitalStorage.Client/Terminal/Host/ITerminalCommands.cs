@@ -3,10 +3,20 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 /// <summary>What buttons may ask of the terminal window that shows them.</summary>
 public interface ITerminalCommands
 {
-    /// <summary>
-    /// Replaces the shown view with a sub-screen until it returns; the object is a platform sub-screen.
-    /// </summary>
-    void SwitchToScreen(object subScreen);
+    /// <summary>Opens a sub-screen above the shown view or the top sub-screen.</summary>
+    void PushScreen(ITerminalScreen screen);
+
+    /// <summary>Closes the top sub-screen and shows the page or view under it.</summary>
+    void PopScreen();
+
+    /// <summary>Closes every sub-screen and shows the view.</summary>
+    void PopToView();
+
+    /// <summary>Clears the shown view's selection, so actions that read it hide.</summary>
+    void ClearSelection();
+
+    /// <summary>Shows a one-off message on the shown view, on its status line where it has one.</summary>
+    void ShowMessage(string textKey);
 
     /// <summary>Saves the shown view's state so switching back restores it.</summary>
     void StoreState();

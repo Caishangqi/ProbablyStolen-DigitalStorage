@@ -83,7 +83,8 @@ public sealed class StackingFieldCatalogTests
     [Test]
     public void Discover_KeepsSavedFieldsThatNoItemHasAndMarksThem()
     {
-        var options = StackingFieldCatalog.Discover(new ItemKey[0], new[] { "feature:gone", "container_content", "metal_purity" });
+        var options = StackingFieldCatalog.Discover(Array.Empty<ItemKey>(),
+            new[] { "feature:gone", "container_content", "metal_purity" }, includeHidden: true);
         var saved = options.Single(option => option.Field.Id == "feature:gone");
         Assert.That(saved.AbsentFromInventory, Is.True);
         Assert.That(options.Count(option => option.Field.Id == "container_content"), Is.EqualTo(1));

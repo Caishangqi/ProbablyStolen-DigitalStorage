@@ -31,9 +31,9 @@ public sealed class TerminalExtensionFlowTests
         _testView = true;
         _registry = new TerminalRegistry(_config, _log.Add);
         StorageTerminalFeature.Register(_registry, _ => "storage-view");
-        ModulesFeature.Register(_registry, _ => "modules-screen");
+        ModulesFeature.Register(_registry, _ => new NamedScreen("modules-screen"));
         TerminalStyleFeature.Register(_registry);
-        DiagnosticsFeature.Register(_registry, _ => "diagnostics-view", _ => "diagnostics-screen", _log.Add);
+        DiagnosticsFeature.Register(_registry, _ => "diagnostics-view", _ => new NamedScreen("diagnostics-screen"), _log.Add);
         _registry.Freeze();
     }
 
@@ -95,13 +95,13 @@ public sealed class TerminalExtensionFlowTests
         var item = new MemoryStore();
         var host = Open(item, out var view);
 
-        host.Bar.Press(host.Context, ModulesFeature.ActionId, false);
-        Assert.That(host.SubScreen, Is.EqualTo("modules-screen"));
+        Left(host).Press(host.Context, ModulesFeature.ActionId, false);
+        Assert.That(host.TopScreen?.ScreenId, Is.EqualTo("modules-screen"));
         Assert.That(host.HandleBack(), Is.True);
         Assert.That(view.Calls, Does.Contain("close:modules-screen"));
         Assert.That(item.Written, Is.Empty, "Sub-screens do not write the stored view.");
 
-        host.Bar.Press(host.Context, StorageTerminalFeature.SortByName, false);
+        Left(host).Press(host.Context, StorageTerminalFeature.SortByName, false);
         Assert.That(_config.GetSetting(StorageTerminalFeature.SortBy), Is.EqualTo(TerminalSortOrder.Amount));
         Assert.That(view.Calls, Does.Contain("setting:" + StorageTerminalFeature.SortByName));
     }
@@ -110,8 +110,8 @@ public sealed class TerminalExtensionFlowTests
     {
         view = new MemoryHostView();
         var handler = new UniversalTerminalHandler(_registry, item, _log.Add);
-        var bar = new VerticalButtonBar(_registry, handler, _log.Add);
-        var host = new TerminalHost(_registry, handler, bar, view, Array.Empty<string>, () => _testView, _log.Add,
+        var docks = new TerminalDocks(_registry, handler, _log.Add);
+        var host = new TerminalHost(_registry, handler, docks, view, Array.Empty<string>, () => _testView, _log.Add,
             new object());
         host.Open();
         return host;
@@ -119,11 +119,20 @@ public sealed class TerminalExtensionFlowTests
 
     private static void Choose(TerminalHost host, string terminalName)
     {
-        host.Bar.Press(host.Context, TerminalSelectionButton.ButtonId, false);
-        host.Bar.Select(host.Context, terminalName);
+        Left(host).Press(host.Context, TerminalSelectionButton.ButtonId, false);
+        Left(host).Select(host.Context, terminalName);
     }
 
-    private static string[] Ids(TerminalHost host) => host.Bar.GetButtons(host.Context).Select(button => button.Id).ToArray();
+    private static VerticalButtonBar Left(TerminalHost host) => host.Docks.Find(DockSide.Left)!;
+
+    private static string[] Ids(TerminalHost host) => Left(host).GetButtons(host.Context).Select(button => button.Id).ToArray();
+
+    private sealed class NamedScreen : ITerminalScreen
+    {
+        public NamedScreen(string screenId) => ScreenId = screenId;
+
+        public string ScreenId { get; }
+    }
 
     private sealed class MemoryConfig : IConfigManager
     {
@@ -165,9 +174,19 @@ public sealed class TerminalExtensionFlowTests
 
         public object? StoreState() => null;
 
-        public void OpenSubScreen(object subScreen) => Calls.Add("open:" + subScreen);
+        public IReadOnlyList<DisplayEntry> Selection => Array.Empty<DisplayEntry>();
 
-        public void CloseSubScreen(object subScreen) => Calls.Add("close:" + subScreen);
+        public void ClearSelection() => Calls.Add("clear-selection");
+
+        public void ShowMessage(string textKey) => Calls.Add("message:" + textKey);
+
+        public bool OpenScreen(ITerminalScreen screen, ITerminalScreen? covered)
+        {
+            Calls.Add("open:" + screen.ScreenId);
+            return true;
+        }
+
+        public void CloseScreen(ITerminalScreen screen, ITerminalScreen? revealed) => Calls.Add("close:" + screen.ScreenId);
 
         public void RefreshButtons() => Calls.Add("refresh");
 

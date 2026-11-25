@@ -260,7 +260,11 @@ public sealed class StoragePresentationPipelineTests
 
     private sealed class NoCommands : ITerminalCommands
     {
-        public void SwitchToScreen(object subScreen) { }
+        public void PushScreen(ITerminalScreen screen) { }
+        public void PopScreen() { }
+        public void PopToView() { }
+        public void ClearSelection() { }
+        public void ShowMessage(string textKey) { }
         public void StoreState() { }
         public void Switch(string terminalName) { }
         public void NotifySettingChanged(string settingName) { }

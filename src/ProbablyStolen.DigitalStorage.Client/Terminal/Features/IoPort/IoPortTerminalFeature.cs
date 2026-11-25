@@ -27,7 +27,7 @@ public static class IoPortTerminalFeature
     /// <param name="readCompletion">Reads the window's completion mode, or null when its settings are unreadable.</param>
     /// <param name="setCompletion">Saves another completion mode for the window's machine.</param>
     public static TerminalRegistry CreateRegistry(IConfigManager config, Action<string> diagnostic,
-        Func<object, object> createView, Func<object, object> createModulesScreen,
+        Func<object, object> createView, Func<object, ITerminalScreen> createModulesScreen,
         Func<TerminalContext, IoPortCompletionMode?> readCompletion, Action<TerminalContext, IoPortCompletionMode> setCompletion)
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
@@ -37,9 +37,10 @@ public static class IoPortTerminalFeature
         if (setCompletion == null) throw new ArgumentNullException(nameof(setCompletion));
 
         var registry = new TerminalRegistry(config, diagnostic, TerminalName);
+        registry.AddDock(DockSide.Left, StorageTerminal.StorageTerminalFeature.LeftDockTitleKey);
         registry.AddTerminal(new TerminalDefinition(TerminalName, 0, "io_port_name", _ => true, createView));
         ModulesFeature.Register(registry, createModulesScreen);
-        registry.AddAction(new TerminalAction(CompletionActionId, 1, ActionPlacement.Rail, null,
+        registry.AddAction(new TerminalAction(CompletionActionId, 1, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews,
             context => readCompletion(context).HasValue,
             context => readCompletion(context) is { } mode
                 ? new ButtonAppearance(IoPortPanelState.CompletionIcon(mode), "io_finish_button", IoPortPanelState.CompletionKey(mode))

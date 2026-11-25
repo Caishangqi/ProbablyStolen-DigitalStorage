@@ -21,7 +21,7 @@ public static class KeepOpenFeature
         if (setValue == null) throw new ArgumentNullException(nameof(setValue));
 
         registry.AddFinalBackGuard(GuardId, () => !getValue());
-        registry.AddAction(new TerminalAction(ActionId, 20, ActionPlacement.Rail, null, _ => true,
+        registry.AddAction(new TerminalAction(ActionId, 20, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews, _ => true,
             _ => new ButtonAppearance(getValue() ? "button_keep_open_on" : "button_keep_open_off",
                 "terminal_keep_open_tip", getValue() ? "terminal_keep_open_enabled" : "terminal_keep_open_disabled"),
             _ => setValue(!getValue())));

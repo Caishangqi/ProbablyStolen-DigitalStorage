@@ -53,6 +53,8 @@ internal sealed class StorageTerminalView : ITerminalView
     private DisplayEntry? _hoverHintGroup;
     private long _hoverHintRevision = -1;
     private IReadOnlyList<string>? _hoverSelectionIds;
+    private IReadOnlyList<string> _notifiedSelectionIds = Array.Empty<string>();
+    private bool _notifiedSelectionKept;
     private IReadOnlyList<PanelText>? _hoverPanels;
     private IReadOnlyList<PanelText>? _hintPanels;
     private ITooltip? _hoverTooltip;
@@ -249,6 +251,23 @@ internal sealed class StorageTerminalView : ITerminalView
 
     /// <inheritdoc />
     public void OnReturnFromSubScreen() => Resume();
+
+    /// <inheritdoc />
+    public IReadOnlyList<DisplayEntry> Selection
+    {
+        get
+        {
+            var controller = _dragController;
+            if (_suspended || controller == null || controller.Phase != TerminalDragPhase.Selected)
+                return Array.Empty<DisplayEntry>();
+            var selected = new HashSet<string>(controller.SelectedIds, StringComparer.Ordinal);
+            return _screen.GetPage().Slots.Select(slot => slot.Group)
+                .Where(group => group != null && selected.Contains(group.Id)).Select(group => group!).ToArray();
+        }
+    }
+
+    /// <inheritdoc />
+    public void ClearSelection() => CancelDrag();
 
     /// <inheritdoc />
     public object? StoreState() => new StorageTerminalViewState(_screen.GetPage().SearchText, _screen.ScrollRow);
@@ -675,7 +694,23 @@ internal sealed class StorageTerminalView : ITerminalView
     // Only the revision actually projected into the screen may label its groups.
     private StorageScreenPage CurrentDragPage() => _screen.GetPage(_pipelineRevision);
 
-    private void CancelDrag() => _dragController?.Cancel();
+    private void CancelDrag()
+    {
+        _dragController?.Cancel();
+        NotifySelectionChanged();
+    }
+
+    /// <summary>Lets the docks re-evaluate actions that read the kept selection once it changes.</summary>
+    private void NotifySelectionChanged()
+    {
+        var controller = _dragController;
+        var kept = controller != null && controller.Phase == TerminalDragPhase.Selected;
+        var ids = kept ? controller!.SelectedIds : Array.Empty<string>();
+        if (kept == _notifiedSelectionKept && ReferenceEquals(ids, _notifiedSelectionIds)) return;
+        _notifiedSelectionKept = kept;
+        _notifiedSelectionIds = ids;
+        _host.RefreshButtons();
+    }
 
     private Transform? _dragGhostTransform() => Window.root.transform.Find("drag_ghost");
 
@@ -792,6 +827,7 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         if (_container == null) return;
         if (_dragController?.Phase != TerminalDragPhase.Idle && !IsDragSessionCurrent()) CancelDrag();
+        NotifySelectionChanged();
         if (!_host.IsCurrentSession() || _suspended) return;
         _targetHover.RetryIncompleteHighlight();
         var search = _services.Search;

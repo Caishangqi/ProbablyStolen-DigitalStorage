@@ -11,8 +11,8 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 
 /// <summary>
-/// Groups the storage view by the terminal's stacking rules while the module is installed and merged display is on.
-/// A group whose piece count would overflow is shown as its separate entries.
+/// Groups the storage view by the terminal's item stacking rules while the module is installed and at least one rule is
+/// active. A group whose piece count would overflow is shown as its separate entries.
 /// </summary>
 public sealed class StackingProjector : IStorageEntryProjector
 {
@@ -21,7 +21,6 @@ public sealed class StackingProjector : IStorageEntryProjector
 
     private static readonly ConditionalWeakTable<ITerminalFeatureData, StackingConfigStore> Stores = new();
     private static readonly ConditionalWeakTable<StackingConfigStore, KeyCache> Caches = new();
-    private static readonly string[] Attributes = { StackingFieldCatalog.AppraisedValue };
 
     private readonly Action<string> _diagnostic;
     private readonly Func<bool> _explainSplits;
@@ -39,8 +38,11 @@ public sealed class StackingProjector : IStorageEntryProjector
     /// <inheritdoc />
     public string Id => ProjectorId;
 
+    /// <summary>Gets the values the projector compares beside the identity.</summary>
+    public static IReadOnlyCollection<string> AttributeNames { get; } = new[] { StackingFieldCatalog.AppraisedValue };
+
     /// <inheritdoc />
-    public IReadOnlyCollection<string> RequiredAttributes => Attributes;
+    public IReadOnlyCollection<string> RequiredAttributes => AttributeNames;
 
     /// <summary>Gets the store of a terminal's data, shared by everything reading it during one window's life.</summary>
     public static StackingConfigStore StoreOf(ITerminalFeatureData data) =>
@@ -50,8 +52,7 @@ public sealed class StackingProjector : IStorageEntryProjector
     public bool IsActive(TerminalContext context)
     {
         if (!StackingModule.IsInstalled(context)) return false;
-        var config = StoreOf(context.FeatureData).Effective();
-        return config != null && config.Enabled && config.HasIgnoreRule;
+        return StoreOf(context.FeatureData).Effective()?.HasActiveRule == true;
     }
 
     /// <inheritdoc />

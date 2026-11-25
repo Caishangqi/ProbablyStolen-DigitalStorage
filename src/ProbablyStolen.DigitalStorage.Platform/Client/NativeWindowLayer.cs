@@ -30,10 +30,11 @@ internal static class NativeWindowLayer
     /// Falls back to <c>windowRoot</c> before the raised layer exists.
     /// </param>
     /// <param name="leftExtent">
-    /// Design width drawn left of the window outside its frame (the terminal dock), fitted and clamped with it.
+    /// Design width drawn left of the window outside its frame (the left dock), fitted and clamped with it.
     /// </param>
+    /// <param name="rightExtent">Design width drawn right of the window outside its frame (the right dock).</param>
     internal static RectTransform? Attach(CustomUIWindow window, string viewportName, Func<bool> back, TerminalDiagnostics? diagnostics = null,
-        bool raised = false, float leftExtent = 0f)
+        bool raised = false, float leftExtent = 0f, float rightExtent = 0f)
     {
         var native = RenderHandler.current;
         if (window == null || native == null || native.windowRoot == null) return null;
@@ -62,7 +63,7 @@ internal static class NativeWindowLayer
         drag.ignoreClamp = true;
         drag.moveFrontObjects = new List<GameObject> { viewport.gameObject };
         if (window.frame != null) window.frame.dragHandle = drag;
-        window.root.AddComponent<NativeWindowSizer>().Initialize(viewport, diagnostics, leftExtent);
+        window.root.AddComponent<NativeWindowSizer>().Initialize(viewport, diagnostics, leftExtent, rightExtent);
         window.root.AddComponent<RaiseOnPress>().Initialize(window, viewport, back);
         return viewport;
     }

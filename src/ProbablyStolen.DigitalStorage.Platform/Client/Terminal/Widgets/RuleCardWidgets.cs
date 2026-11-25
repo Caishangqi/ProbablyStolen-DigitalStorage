@@ -77,14 +77,19 @@ internal static class RuleCardWidgets
         label.text.enableWordWrapping = false;
     }
 
-    /// <summary>Reserves a separate gutter for the native scroll bar and lets the list box provide the fill.</summary>
-    internal static float ConfigureListScroll(GameObject view, float width, float gap)
+    /// <summary>
+    /// Lets the list box provide the fill and, when <paramref name="overflows"/>, reserves a separate gutter for the native
+    /// scroll bar. A list that fits uses the full width, so its rows line up with the controls above and below; it is
+    /// rebuilt whenever its rows change, so the width only changes when the row count crosses the visible rows.
+    /// Returns the row width.
+    /// </summary>
+    internal static float ConfigureListScroll(GameObject view, float width, float gap, bool overflows = true)
     {
         FixWidth(view, width);
         if (view.GetComponentInChildren<ScrollRect>(true) is not { } scroll || scroll.viewport == null || scroll.content == null)
             return width;
 
-        var gutter = ScrollbarSpace(view) + 8f;
+        var gutter = overflows ? ScrollbarSpace(view) + 8f : 0f;
         if (view != scroll.viewport.gameObject && view.GetComponent<Image>() is { } background)
         {
             var color = background.color;

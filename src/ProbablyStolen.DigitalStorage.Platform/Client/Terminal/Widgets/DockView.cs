@@ -12,9 +12,9 @@ using UnityEngine.UI;
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 
 /// <summary>
-/// The left dock of a terminal window: a machinery panel titled "Functions" holding the rail buttons, plus the open
-/// selection panel. It hangs from the window root outside the frame and ignores the window layout, so it never changes
-/// the body height.
+/// One dock of a terminal window: a machinery panel with the dock's registered title above its buttons, plus the dock's
+/// open selection panel. It hangs from the window root outside the frame on its side and ignores the window layout, so
+/// it never changes the body height. With no buttons to show, the panel collapses, title included.
 /// </summary>
 internal sealed class DockView : MonoBehaviour
 {
@@ -25,26 +25,31 @@ internal sealed class DockView : MonoBehaviour
     private ModText? _text;
     private VerticalButtonBar? _bar;
     private Func<TerminalContext>? _context;
+    private Action? _changed;
     private RectTransform? _rail;
     private FlyoutView? _flyout;
     private bool _dirty = true;
 
-    /// <summary>Adds the dock to <paramref name="window"/>, left of its frame with the top edges aligned.</summary>
+    /// <summary>
+    /// Adds the dock of <paramref name="bar"/> to <paramref name="window"/>, outside its frame on the bar's side with the
+    /// top edges aligned. <paramref name="changed"/> runs after a press, so every dock of the window rebuilds.
+    /// </summary>
     internal static DockView Create(CustomUIWindow window, ModText text, ButtonIcons icons, VerticalButtonBar bar,
-        Func<TerminalContext> context)
+        Func<TerminalContext> context, Action changed)
     {
-        var dock = new GameObject("dock_left", typeof(RectTransform)).GetComponent<RectTransform>();
+        var left = bar.Side == DockSide.Left;
+        var dock = new GameObject(left ? "dock_left" : "dock_right", typeof(RectTransform)).GetComponent<RectTransform>();
         dock.SetParent(window.Rect, false);
-        dock.anchorMin = dock.anchorMax = new Vector2(0f, 1f);
-        dock.pivot = new Vector2(1f, 1f);
-        dock.anchoredPosition = new Vector2(-TerminalWindowMetrics.DockGap, 0f);
+        dock.anchorMin = dock.anchorMax = new Vector2(left ? 0f : 1f, 1f);
+        dock.pivot = new Vector2(left ? 1f : 0f, 1f);
+        dock.anchoredPosition = new Vector2(left ? -TerminalWindowMetrics.DockGap : TerminalWindowMetrics.DockGap, 0f);
         dock.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
         var layout = dock.gameObject.AddComponent<VerticalLayoutGroup>();
         layout.childControlWidth = layout.childControlHeight = true;
         layout.childForceExpandWidth = layout.childForceExpandHeight = false;
         var fitter = dock.gameObject.AddComponent<ContentSizeFitter>();
         fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        NativeWindowLayer.AttachInputShield(dock, "dock_input_shield");
+        NativeWindowLayer.AttachInputShield(dock, left ? "dock_input_shield" : "dock_right_input_shield");
 
         var rail = new GameObject("rail", typeof(RectTransform)).GetComponent<RectTransform>();
         rail.SetParent(dock, false);
@@ -58,8 +63,9 @@ internal sealed class DockView : MonoBehaviour
         view._text = text;
         view._bar = bar;
         view._context = context;
+        view._changed = changed ?? throw new ArgumentNullException(nameof(changed));
         view._rail = rail;
-        view._flyout = new FlyoutView(window, text, icons);
+        view._flyout = new FlyoutView(window, text, icons, bar.Side);
         return view;
     }
 
@@ -77,18 +83,10 @@ internal sealed class DockView : MonoBehaviour
         LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)transform);
     }
 
-    /// <summary>Shows or hides the dock and its panel; a sub-screen hides them.</summary>
-    internal void SetShown(bool shown)
-    {
-        if (!shown) _flyout?.Hide();
-        gameObject.SetActive(shown);
-        if (shown) _dirty = true;
-    }
-
     private void Update()
     {
         // A press outside the open panel and its button closes the panel. Only the panel is removed here; the buttons
-        // are rebuilt after the release, so the press can still click another rail button.
+        // are rebuilt after the release, so the press can still click another dock button.
         if (_bar?.OpenSelection == null || _flyout == null || !Input.GetMouseButtonDown(0) || EventSystem.current == null)
             return;
         _hits.Clear();
@@ -99,7 +97,7 @@ internal sealed class DockView : MonoBehaviour
             return;
         _bar.CloseSelection();
         _flyout.Hide();
-        _dirty = true;
+        _changed?.Invoke();
     }
 
     private void LateUpdate()
@@ -118,10 +116,17 @@ internal sealed class DockView : MonoBehaviour
         var buttons = _bar.GetButtons(context);
         CustomUIBuilder.ClearContainer(_rail);
         _buttons.Clear();
+        _rail.gameObject.SetActive(buttons.Count > 0);
+        if (buttons.Count == 0)
+        {
+            _flyout?.Hide();
+            return;
+        }
+
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _rail);
         builder.BeginPanel(TerminalWindowMetrics.DockWidth, -1f, TextAnchor.UpperCenter, TerminalWindowMetrics.DockPadding,
             TerminalWindowMetrics.DockSpacing);
-        builder.AddHeader(_text.Get("terminal_dock_title"));
+        builder.AddHeader(_text.Get(_bar.TitleKey(context)));
         TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.DockButton, 18f);
         if (builder.Last.text != null)
         {
@@ -160,13 +165,13 @@ internal sealed class DockView : MonoBehaviour
     {
         if (_bar == null || _context == null) return;
         _bar.Press(_context(), id, false);
-        _dirty = true;
+        _changed?.Invoke();
     }
 
     private void Select(string entryId)
     {
         if (_bar == null || _context == null) return;
         _bar.Select(_context(), entryId);
-        _dirty = true;
+        _changed?.Invoke();
     }
 }

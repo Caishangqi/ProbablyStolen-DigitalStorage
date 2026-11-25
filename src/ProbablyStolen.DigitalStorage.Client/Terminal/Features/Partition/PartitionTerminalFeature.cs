@@ -55,14 +55,15 @@ public static class PartitionTerminalFeature
         if (toggleMode == null) throw new ArgumentNullException(nameof(toggleMode));
         if (clear == null) throw new ArgumentNullException(nameof(clear));
 
+        registry.AddDock(DockSide.Left, StorageTerminal.StorageTerminalFeature.LeftDockTitleKey);
         registry.AddTerminal(new TerminalDefinition(TerminalName, 0, "partition_title", _ => true, createView));
-        registry.AddAction(new TerminalAction(ModeActionName, 0, ActionPlacement.Rail, null, _ => true,
+        registry.AddAction(new TerminalAction(ModeActionName, 0, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews, _ => true,
             context => new ButtonAppearance(readMode(context) == PartitionMode.Blacklist
                 ? "button_blacklist" : "button_whitelist", "partition_mode_button",
                 readMode(context) == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist"),
             toggleMode));
-        registry.AddSetting(ViewSize, 1, ActionPlacement.Rail, null);
-        registry.AddAction(new TerminalAction(ClearActionName, 2, ActionPlacement.Rail, TerminalName, _ => true,
+        registry.AddSetting(ViewSize, 1, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews);
+        registry.AddAction(new TerminalAction(ClearActionName, 2, DockSide.Left, ActionPlacement.Rail, ActionScope.View(TerminalName), _ => true,
             _ => new ButtonAppearance("button_clear", "partition_clear"), clear));
     }
 }

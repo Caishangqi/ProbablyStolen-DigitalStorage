@@ -382,6 +382,7 @@ integration_brewing_tooltip,Show Brewing Expansion formatting and quality labels
 integration_customerstocking_label,Take goods from the digital network
 integration_customerstocking_tooltip,"One-click stocking can also take goods from online digital networks within Customer Stocking's scan range, including the store, after-hours area and ship. Offline networks and loose cells are skipped. Goods leave and return through the network as they do in terminal transfers. Drives count as machines, so enabling Skip machine contents in Customer Stocking also skips goods in the network."
 terminal_dock_title,Functions
+terminal_dock_actions_title,Actions
 terminal_button_current_tip,Current terminal: {0}
 terminal_button_functions_tip,More functions
 terminal_view_storage,Storage
@@ -412,20 +413,18 @@ stacking_info_selection_unavailable,Cannot read the stack settings, so the remai
 stacking_info_selection_unknown,Some differences could not be safely matched to a configurable attribute.
 stacking_info_difference,"    {0}"
 stacking_info_tag_unavailable,Tag {0} cannot be added as a rule.
-stacking_conditions,Meet these conditions
+stacking_conditions,Rules
 stacking_rule_count,{0} rules
-stacking_enable,Merge stacks
-stacking_scope_hint,Applies to every item in this terminal.
 stacking_config_unreadable,Cannot read the stack settings. Settings are kept unchanged and items are shown separately.
 stacking_saved_immediately,Changes are saved immediately.
 stacking_save_failed,The change could not be saved; the previous rules still apply.
 stacking_remove_rule_tip,Remove this rule
-stacking_add_rule,Add stack rule
-stacking_clear_rules,Clear all rules
+stacking_add_rule,Add attribute
+stacking_clear_rules,Delete all
 stacking_search,Search attributes...
-stacking_rule_search,Search current rules...
+stacking_rule_search,Search tag keys or attribute names...
 stacking_rule_search_empty,No matching rules.
-stacking_rules_reset,Rules from the previous version were cleared.
+stacking_rules_reset,Terminal-wide rules from the previous version no longer apply. Add rules per item instead.
 stacking_field_absent,No stored item has this attribute now
 stacking_mode_match,Match
 stacking_mode_ignore,Ignore
@@ -441,6 +440,40 @@ stacking_field_container_content,Container content
 stacking_field_container_content_desc,The items inside a container.
 stacking_field_feature,Feature: {0}
 stacking_field_feature_desc,The visible item feature {0}.
+stacking_quick_add_tip,Add to item stacking rules
+stacking_quick_append_tip,Add to existing rule
+stacking_quick_edit_tip,Edit item stacking rule
+stacking_quick_delete_tip,Delete the rules merging this slot
+stacking_quick_merged,Stacking rule added. The selected slots now merge.
+stacking_quick_still_separate,"Stacking rule added, but differences no rule can cover keep the slots apart."
+stacking_quick_rule_off,"The differences were added, but the rule is off. Turn it on to merge."
+stacking_quick_nothing,No stacking rule can merge the differences between the selected slots.
+stacking_quick_deleted,The rules merging this slot were deleted.
+stacking_quick_delete_none,No rule row can be told apart as merging this slot. Change it on the edit page.
+stacking_draft_hint,Changes are saved when you apply them. Going back discards them.
+stacking_rules_empty,No rules yet.
+stacking_apply,Apply
+stacking_item_search,"Search item names, item IDs or tag keys..."
+stacking_item_rules,Item rules
+stacking_item_rule_count,{0} rules
+stacking_item_search_empty,No item rules match.
+stacking_items_empty,No item rules yet. Box-select two slots of one item to add one from the Actions bar on the right.
+stacking_item_absent,Not in storage now
+stacking_item_on,On
+stacking_item_off,Off
+stacking_item_switch_tip,Turns this item rule on or off. Its rows are kept while it is off.
+stacking_item_edit_tip,Edit this item rule
+stacking_item_delete_tip,Delete this item rule
+stacking_all_on,All on
+stacking_all_off,All off
+stacking_all_delete,Delete all
+stacking_item_add,Add item rule
+stacking_item_has_rule,Has a rule
+stacking_advanced,Advanced: allow ignoring unexposed features
+stacking_advanced_tip,"When on, rules can ignore unexposed or disabled features by ID, such as untested water purity. When off, such rules are kept but paused."
+stacking_quick_hidden,The differences come from unexposed or disabled features. Turn on the advanced option on the stacking rules page to add them.
+stacking_info_hidden_feature,"    Unexposed or disabled features (configurable with the advanced option)"
+stacking_field_hidden,Unexposed or disabled feature
 integration_client_demand_section,Client Demand Highlight
 integration_client_demand_label,Show highlights in the terminal
 integration_client_demand_tooltip,Outline items the current customer wants. During inspections, outline only stolen items and contraband. The companion mod's hotkey, delay and ignore list apply to its own outlines.

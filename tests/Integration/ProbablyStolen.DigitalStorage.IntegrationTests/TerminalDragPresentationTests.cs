@@ -101,7 +101,7 @@ public sealed class TerminalDragPresentationTests
         Assert.That(flow.Menu.CreateDragBatch(exact, exact, new[] { exact.Slots[0].Group!.Id }, flow.Pipeline.Revision), Is.Not.Null);
 
         flow.Installed = true;
-        flow.Data.Value = StackingConfigCodec.Encode(StackingConfig.Default.WithEnabled(false));
+        flow.Data.Value = StackingConfigCodec.Encode(StackingConfigCodec.Decode(flow.Data.Value).Config!.WithAllEnabled(false));
         flow.Pipeline.Invalidate();
         flow.Refresh();
         Assert.That(flow.Page().Slots.Count(slot => slot.Group != null), Is.EqualTo(2));
@@ -149,10 +149,13 @@ public sealed class TerminalDragPresentationTests
         internal Flow(int columns = 4)
         {
             Screen = new StorageScreen(columns, 1);
-            Data.Value = StackingConfigCodec.Encode(new StackingConfig(true, new[]
+            Data.Value = StackingConfigCodec.Encode(new StackingConfig(new[]
             {
-                new StackingRule(StackingFieldCatalog.ContainerContent, StackingMode.Ignore),
-                new StackingRule(StackingFieldCatalog.AppraisedValue, StackingMode.Ignore)
+                new StackingItemRule("r", true, new[]
+                {
+                    new StackingRule(StackingFieldCatalog.ContainerContent, StackingMode.Ignore),
+                    new StackingRule(StackingFieldCatalog.AppraisedValue, StackingMode.Ignore)
+                })
             }));
             Pipeline = new StoragePresentationPipeline(new[] { new StackingProjector(_ => { }, () => false) },
                 Array.Empty<ISlotDecorator>(), Array.Empty<IEntryTooltipContributor>(), Array.Empty<TooltipPanelDefinition>(), _ => { });
@@ -183,7 +186,11 @@ public sealed class TerminalDragPresentationTests
 
     private sealed class NoCommands : ITerminalCommands
     {
-        public void SwitchToScreen(object subScreen) { }
+        public void PushScreen(ITerminalScreen screen) { }
+        public void PopScreen() { }
+        public void PopToView() { }
+        public void ClearSelection() { }
+        public void ShowMessage(string textKey) { }
         public void StoreState() { }
         public void Switch(string terminalName) { }
         public void NotifySettingChanged(string settingName) { }

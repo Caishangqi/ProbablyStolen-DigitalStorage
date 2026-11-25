@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tests.Terminal;
@@ -54,7 +55,15 @@ internal sealed class RecordingCommands : ITerminalCommands
 {
     public List<string> Calls { get; } = new();
 
-    public void SwitchToScreen(object subScreen) => Calls.Add("screen:" + subScreen);
+    public void PushScreen(ITerminalScreen screen) => Calls.Add("screen:" + screen.ScreenId);
+
+    public void PopScreen() => Calls.Add("pop");
+
+    public void PopToView() => Calls.Add("pop-all");
+
+    public void ClearSelection() => Calls.Add("clear-selection");
+
+    public void ShowMessage(string textKey) => Calls.Add("message:" + textKey);
 
     public void StoreState() => Calls.Add("store");
 
@@ -90,16 +99,31 @@ internal sealed class RecordingHostView : ITerminalHostView
         return Shown != null && StateByView.TryGetValue(Shown, out var state) ? state : null;
     }
 
-    /// <summary>Runs inside OpenSubScreen, as the platform window does when a page cannot be shown.</summary>
-    public Action<object>? OnOpen { get; set; }
+    /// <summary>Screens the platform cannot show; opening one reports false.</summary>
+    public HashSet<string> FailingScreens { get; } = new();
 
-    public void OpenSubScreen(object subScreen)
+    public IReadOnlyList<DisplayEntry> Selection { get; set; } = Array.Empty<DisplayEntry>();
+
+    public void ShowMessage(string textKey) => Calls.Add("message:" + textKey);
+
+    public void ClearSelection()
     {
-        Calls.Add("open:" + subScreen);
-        OnOpen?.Invoke(subScreen);
+        Calls.Add("clear-selection");
+        Selection = Array.Empty<DisplayEntry>();
     }
 
-    public void CloseSubScreen(object subScreen) => Calls.Add("close:" + subScreen);
+    /// <summary>Runs inside OpenScreen, before it reports.</summary>
+    public Action<ITerminalScreen>? OnOpen { get; set; }
+
+    public bool OpenScreen(ITerminalScreen screen, ITerminalScreen? covered)
+    {
+        Calls.Add("open:" + screen.ScreenId + (covered == null ? string.Empty : "/over:" + covered.ScreenId));
+        OnOpen?.Invoke(screen);
+        return !FailingScreens.Contains(screen.ScreenId);
+    }
+
+    public void CloseScreen(ITerminalScreen screen, ITerminalScreen? revealed) =>
+        Calls.Add("close:" + screen.ScreenId + (revealed == null ? string.Empty : "/reveal:" + revealed.ScreenId));
 
     public void RefreshButtons() => Calls.Add("refresh");
 
@@ -116,8 +140,19 @@ internal static class TerminalFixtures
     public static TerminalDefinition Storage() => View(TerminalRegistry.StorageTerminalName, int.MinValue);
 
     public static TerminalAction Action(string id, int order = 0, ActionPlacement placement = ActionPlacement.Rail,
-        string? terminalId = null, Func<TerminalContext, bool>? visible = null, Action<TerminalContext>? press = null) =>
-        new(id, order, placement, terminalId, visible ?? (_ => true), _ => Appearance, press ?? (_ => { }));
+        ActionScope? scope = null, Func<TerminalContext, bool>? visible = null, Action<TerminalContext>? press = null,
+        DockSide side = DockSide.Left) =>
+        new(id, order, side, placement, scope ?? ActionScope.AllViews, visible ?? (_ => true), _ => Appearance,
+            press ?? (_ => { }));
+
+    /// <summary>Creates a registry with both docks, as the storage terminal registers them.</summary>
+    public static TerminalRegistry Registry(IConfigManager? config = null, Action<string>? log = null)
+    {
+        var registry = new TerminalRegistry(config ?? new MemoryConfig(), log ?? (_ => { }));
+        registry.AddDock(DockSide.Left, "left_title");
+        registry.AddDock(DockSide.Right, "right_title");
+        return registry;
+    }
 
     public static Setting<Shade> ShadeSetting(string name = "shade") =>
         new(name, new[] { Shade.Light, Shade.Medium, Shade.Dark },
@@ -127,5 +162,18 @@ internal static class TerminalFixtures
         bool testView = false, ITerminalCommands? commands = null, params string[] modules) =>
         new(modules, testView, current, commands ?? new RecordingCommands(), Window);
 
+    public static TerminalContext ScreenContext(string screenId, int depth = 1,
+        string current = TerminalRegistry.StorageTerminalName) =>
+        new(Array.Empty<string>(), false, current, new RecordingCommands(), Window, screenId: screenId, screenDepth: depth);
+
     public static readonly object Window = new();
+}
+
+internal sealed class TestScreen : ITerminalScreen
+{
+    public TestScreen(string screenId) => ScreenId = screenId;
+
+    public string ScreenId { get; }
+
+    public override string ToString() => ScreenId;
 }

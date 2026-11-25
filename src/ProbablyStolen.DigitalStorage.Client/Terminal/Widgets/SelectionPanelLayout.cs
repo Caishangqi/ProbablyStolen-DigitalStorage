@@ -30,23 +30,28 @@ public static class SelectionPanelLayout
     }
 
     /// <summary>
-    /// Places the panel left of its button with the top edges aligned; when that leaves the viewport on the left, it
-    /// opens right of the button instead.
+    /// Places the panel outward from its dock with the top edges aligned: left of the button on the left dock, right of
+    /// it on the right dock. When that leaves the viewport, it opens toward the window instead.
     /// </summary>
     /// <param name="panel">The computed panel.</param>
+    /// <param name="side">The dock the button is on.</param>
     /// <param name="triggerX">The button's left edge.</param>
     /// <param name="triggerY">The button's top edge.</param>
     /// <param name="triggerWidth">The button width.</param>
     /// <param name="viewportLeft">The viewport's left edge in the same coordinates.</param>
+    /// <param name="viewportRight">The viewport's right edge in the same coordinates.</param>
     /// <param name="panelGap">The gap between button and panel.</param>
-    public static PanelPlacement Place(PanelGeometry panel, float triggerX, float triggerY, float triggerWidth,
-        float viewportLeft, float panelGap)
+    public static PanelPlacement Place(PanelGeometry panel, DockSide side, float triggerX, float triggerY,
+        float triggerWidth, float viewportLeft, float viewportRight, float panelGap)
     {
         if (panel == null) throw new ArgumentNullException(nameof(panel));
         var left = triggerX - panelGap - panel.Width;
-        return left >= viewportLeft
-            ? new PanelPlacement(left, triggerY, false)
-            : new PanelPlacement(triggerX + triggerWidth + panelGap, triggerY, true);
+        var right = triggerX + triggerWidth + panelGap;
+        if (side == DockSide.Left)
+            return left >= viewportLeft ? new PanelPlacement(left, triggerY, false) : new PanelPlacement(right, triggerY, true);
+        return right + panel.Width <= viewportRight
+            ? new PanelPlacement(right, triggerY, false)
+            : new PanelPlacement(left, triggerY, true);
     }
 }
 
@@ -117,6 +122,6 @@ public sealed class PanelPlacement
     /// <summary>Gets the panel's top edge.</summary>
     public float Y { get; }
 
-    /// <summary>Gets whether the panel opens right of the button because the left side had no room.</summary>
+    /// <summary>Gets whether the panel opens toward the window because the outward side had no room.</summary>
     public bool Flipped { get; }
 }

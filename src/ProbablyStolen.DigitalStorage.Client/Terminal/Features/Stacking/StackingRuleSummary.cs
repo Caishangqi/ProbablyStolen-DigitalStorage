@@ -5,10 +5,9 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 
-/// <summary>Contextual notes shown below a stacking rule.</summary>
+/// <summary>Contextual notes shown below a row of one item's stacking rule.</summary>
 public static class StackingRuleSummary
 {
-
     /// <summary>A match row alone changes nothing.</summary>
     public const string MatchAloneKey = "stacking_note_match_alone";
 
@@ -22,14 +21,15 @@ public static class StackingRuleSummary
     public const string ContainerFirstOnlyKey = "stacking_note_container_first_only";
 
     /// <summary>Returns the notes shown under one row.</summary>
-    public static IReadOnlyList<string> RowNotes(StackingConfig config, int row)
+    public static IReadOnlyList<string> RowNotes(IReadOnlyList<StackingRule> rules, int row)
     {
-        if (config == null) throw new ArgumentNullException(nameof(config));
-        if (row < 0 || row >= config.Rules.Count) throw new ArgumentOutOfRangeException(nameof(row));
-        var rule = config.Rules[row];
+        if (rules == null) throw new ArgumentNullException(nameof(rules));
+        if (row < 0 || row >= rules.Count) throw new ArgumentOutOfRangeException(nameof(row));
+        var rule = rules[row];
         var notes = new List<string>();
-        var ignoresRaw = config.Rules.Any(other => other.Mode == StackingMode.Ignore && IsRaw(other.FieldId));
-        var valueIgnored = config.ModeOf(StackingFieldCatalog.AppraisedValue) == StackingMode.Ignore;
+        var ignoresRaw = rules.Any(other => other.Mode == StackingMode.Ignore && IsRaw(other.FieldId));
+        var valueIgnored = rules.Any(other =>
+            other.FieldId == StackingFieldCatalog.AppraisedValue && other.Mode == StackingMode.Ignore);
         if (rule.Mode == StackingMode.Match && !ignoresRaw) notes.Add(MatchAloneKey);
         if (rule.Mode != StackingMode.Ignore) return notes;
         if (rule.FieldId == StackingFieldCatalog.AppraisedValue && !ignoresRaw) notes.Add(DerivedAloneKey);
@@ -38,5 +38,6 @@ public static class StackingRuleSummary
         return notes;
     }
 
-    private static bool IsRaw(string fieldId) => StackingFieldCatalog.Find(fieldId)?.Kind is StackingFieldKind.Raw or StackingFieldKind.Feature;
+    private static bool IsRaw(string fieldId) =>
+        StackingFieldCatalog.Find(fieldId)?.Kind is StackingFieldKind.Raw or StackingFieldKind.Feature;
 }

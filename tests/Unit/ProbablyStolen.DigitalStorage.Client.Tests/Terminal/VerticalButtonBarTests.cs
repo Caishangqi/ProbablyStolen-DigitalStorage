@@ -15,7 +15,9 @@ public sealed class VerticalButtonBarTests
     private TerminalRegistry _registry = null!;
     private MemoryStore _store = null!;
     private UniversalTerminalHandler _handler = null!;
+    private TerminalDocks _docks = null!;
     private VerticalButtonBar _bar = null!;
+    private VerticalButtonBar _right = null!;
     private bool _testAvailable;
 
     [SetUp]
@@ -24,7 +26,7 @@ public sealed class VerticalButtonBarTests
         _log.Clear();
         _testAvailable = false;
         _store = new MemoryStore();
-        _registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        _registry = Registry(log: _log.Add);
         _registry.AddTerminal(Storage());
         _registry.AddTerminal(View("test", 1, _ => _testAvailable));
     }
@@ -33,10 +35,10 @@ public sealed class VerticalButtonBarTests
     public void StorageView_ShowsSharedButtonsThenItsOwnByOrderThenId()
     {
         _registry.AddAction(Action("modules", 0));
-        _registry.AddSetting(ShadeSetting("size"), 10, ActionPlacement.Rail, null);
-        _registry.AddSetting(ShadeSetting("sort"), 0, ActionPlacement.Rail, "storage");
-        _registry.AddSetting(ShadeSetting("direction"), 10, ActionPlacement.Rail, "storage");
-        _registry.AddAction(Action("test.rail", 0, terminalId: "test"));
+        _registry.AddSetting(ShadeSetting("size"), 10, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews);
+        _registry.AddSetting(ShadeSetting("sort"), 0, DockSide.Left, ActionPlacement.Rail, ActionScope.View("storage"));
+        _registry.AddSetting(ShadeSetting("direction"), 10, DockSide.Left, ActionPlacement.Rail, ActionScope.View("storage"));
+        _registry.AddAction(Action("test.rail", 0, scope: ActionScope.View("test")));
         Freeze();
 
         Assert.That(Ids(Context()), Is.EqualTo(new[] { "modules", "size", "sort", "direction" }));
@@ -48,7 +50,7 @@ public sealed class VerticalButtonBarTests
     {
         _registry.AddAction(Action("b-shared", 5));
         _registry.AddAction(Action("a-shared", 5));
-        _registry.AddAction(Action("own", -100, terminalId: "storage"));
+        _registry.AddAction(Action("own", -100, scope: ActionScope.View("storage")));
         Freeze();
 
         Assert.That(Ids(Context()), Is.EqualTo(new[] { "a-shared", "b-shared", "own" }));
@@ -57,7 +59,7 @@ public sealed class VerticalButtonBarTests
     [Test]
     public void ActionSelection_AppearsOnlyWithAPickerButtonForTheShownView()
     {
-        _registry.AddAction(Action("other.picker", placement: ActionPlacement.Picker, terminalId: "test"));
+        _registry.AddAction(Action("other.picker", placement: ActionPlacement.Picker, scope: ActionScope.View("test")));
         Freeze();
         Assert.That(Ids(Context()), Does.Not.Contain(ActionSelectionButton.ButtonId),
             "A picker button of another view does not count.");
@@ -81,7 +83,7 @@ public sealed class VerticalButtonBarTests
     public void FailingButtons_AreSkippedAndLoggedOnce()
     {
         _registry.AddAction(Action("bad", visible: _ => throw new InvalidOperationException()));
-        _registry.AddAction(new TerminalAction("ugly", 0, ActionPlacement.Rail, null, _ => true,
+        _registry.AddAction(new TerminalAction("ugly", 0, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews, _ => true,
             _ => throw new InvalidOperationException(), _ => { }));
         _registry.AddAction(Action("good"));
         Freeze();
@@ -119,7 +121,7 @@ public sealed class VerticalButtonBarTests
 
         _bar.Press(Context(), TerminalSelectionButton.ButtonId, false);
         Assert.That(_bar.ActionSelection.MenuOpen, Is.False);
-        Assert.That(_bar.TerminalSelection.MenuOpen, Is.True);
+        Assert.That(_bar.TerminalSelection!.MenuOpen, Is.True);
 
         _bar.Press(Context(), TerminalSelectionButton.ButtonId, false);
         Assert.That(_bar.OpenSelection, Is.Null);
@@ -188,14 +190,14 @@ public sealed class VerticalButtonBarTests
     [TestCase("custom", "button_custom_view", "custom_name")]
     public void TerminalSelection_UsesExplicitViewIconsInTriggerAndEntries(string current, string iconKey, string nameKey)
     {
-        var registry = new TerminalRegistry(new MemoryConfig(), _log.Add);
+        var registry = Registry(log: _log.Add);
         registry.AddTerminal(new TerminalDefinition("storage", 0, "storage_name", "button_storage_view", _ => true,
             _ => new object()));
         registry.AddTerminal(new TerminalDefinition("custom", 1, "custom_name", "button_custom_view", _ => true,
             _ => new object()));
         registry.Freeze();
-        var bar = new VerticalButtonBar(registry,
-            new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add);
+        var bar = new TerminalDocks(registry,
+            new UniversalTerminalHandler(registry, new MemoryStore(), _log.Add), _log.Add).Find(DockSide.Left)!;
         var context = Context(current);
 
         var trigger = bar.GetButtons(context).Single(button => button.Id == TerminalSelectionButton.ButtonId).Appearance;
@@ -226,12 +228,99 @@ public sealed class VerticalButtonBarTests
         Assert.That(_bar.OpenSelection, Is.Null);
     }
 
+    [Test]
+    public void EachDock_ShowsOnlyItsOwnSideAndTitle()
+    {
+        _registry.AddAction(Action("left"));
+        _registry.AddAction(Action("right", side: DockSide.Right));
+        Freeze();
+
+        Assert.That(Ids(Context()), Is.EqualTo(new[] { "left" }));
+        Assert.That(RightIds(Context()), Is.EqualTo(new[] { "right" }));
+        Assert.That(_bar.Dock.TitleKey, Is.EqualTo("left_title"));
+        Assert.That(_right.Dock.TitleKey, Is.EqualTo("right_title"));
+        Assert.That(_right.TerminalSelection, Is.Null, "Only the left dock shows the current terminal.");
+    }
+
+    [Test]
+    public void RightDock_CollapsesWithoutVisibleButtons()
+    {
+        var shown = false;
+        _registry.AddAction(Action("maybe", visible: _ => shown, side: DockSide.Right));
+        Freeze();
+
+        Assert.That(RightIds(Context()), Is.Empty);
+        shown = true;
+        Assert.That(RightIds(Context()), Is.EqualTo(new[] { "maybe" }));
+    }
+
+    [Test]
+    public void RightDock_HasItsOwnPickerButton()
+    {
+        _registry.AddAction(Action("lp", placement: ActionPlacement.Picker));
+        _registry.AddAction(Action("rp", placement: ActionPlacement.Picker, side: DockSide.Right));
+        Freeze();
+
+        Assert.That(Ids(Context()), Is.EqualTo(new[] { ActionSelectionButton.ButtonId }));
+        Assert.That(RightIds(Context()), Is.EqualTo(new[] { ActionSelectionButton.IdFor(DockSide.Right) }));
+        Assert.That(_right.GetPickerButtons(Context()).Single().Id, Is.EqualTo("rp"));
+    }
+
+    [Test]
+    public void SelectionPanels_ExcludeEachOtherAcrossDocks()
+    {
+        _registry.AddAction(Action("lp", placement: ActionPlacement.Picker));
+        _registry.AddAction(Action("rp", placement: ActionPlacement.Picker, side: DockSide.Right));
+        Freeze();
+
+        _bar.Press(Context(), ActionSelectionButton.ButtonId, false);
+        _right.Press(Context(), ActionSelectionButton.IdFor(DockSide.Right), false);
+
+        Assert.That(_bar.OpenSelection, Is.Null);
+        Assert.That(_right.OpenSelection, Is.SameAs(_right.ActionSelection));
+        Assert.That(_docks.OpenSelection, Is.SameAs(_right.ActionSelection));
+    }
+
+    [Test]
+    public void SubScreen_ShowsOnlyButtonsOfThatScreen()
+    {
+        _registry.AddAction(Action("modules"));
+        _registry.AddAction(Action("sort", scope: ActionScope.View("storage")));
+        _registry.AddAction(Action("apply", scope: ActionScope.Screen("editor"), side: DockSide.Right));
+        _registry.AddAction(Action("other", scope: ActionScope.Screen("list"), side: DockSide.Right));
+        _testAvailable = true;
+        Freeze();
+
+        Assert.That(Ids(ScreenContext("editor", 2)), Is.Empty,
+            "View-level buttons and the current terminal button stay off sub-screens.");
+        Assert.That(RightIds(ScreenContext("editor", 2)), Is.EqualTo(new[] { "apply" }));
+        Assert.That(RightIds(Context()), Is.Empty);
+    }
+
+    [Test]
+    public void Press_FindsOnlyButtonsOfItsOwnDock()
+    {
+        var pressed = 0;
+        _registry.AddAction(Action("right", press: _ => pressed++, side: DockSide.Right));
+        Freeze();
+
+        _bar.Press(Context(), "right", false);
+        Assert.That(pressed, Is.Zero);
+        _right.Press(Context(), "right", false);
+        Assert.That(pressed, Is.EqualTo(1));
+    }
+
     private void Freeze()
     {
         _registry.Freeze();
         _handler = new UniversalTerminalHandler(_registry, _store, _log.Add);
-        _bar = new VerticalButtonBar(_registry, _handler, _log.Add);
+        _docks = new TerminalDocks(_registry, _handler, _log.Add);
+        _bar = _docks.Find(DockSide.Left)!;
+        _right = _docks.Find(DockSide.Right)!;
     }
+
+    private IEnumerable<string> RightIds(TerminalContext context) =>
+        _right.GetButtons(context).Select(button => button.Id).ToArray();
 
     private IEnumerable<string> Ids(TerminalContext context) => _bar.GetButtons(context).Select(button => button.Id).ToArray();
 }

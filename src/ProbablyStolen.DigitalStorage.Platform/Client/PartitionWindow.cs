@@ -185,7 +185,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private void Render()
     {
         if (_window == null || _rendering) return;
-        PartitionViewRefreshCoordinator.Refresh(_detail != null, HasSubScreen,
+        PartitionViewRefreshCoordinator.Refresh(_detail != null, RuleScreenShown,
             RenderOverview, RefreshDetailScreen);
     }
 
@@ -524,7 +524,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private void RefreshRuleHint(bool overWindow)
     {
         var canShow = overWindow && CustomUIManager.Instance != null && _window != null && _window.IsVisible &&
-            _session.IsActive && _detail == null && !HasSubScreen && _body != null && _body.gameObject.activeInHierarchy &&
+            _session.IsActive && _detail == null && !InSubScreen && _body != null && _body.gameObject.activeInHierarchy &&
             _grid != null && !_pointer.IsPressed && !_gestures.IsDragging &&
             !Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButton(2) &&
             ItemMouseDragHandler.current?.IsDraggingItem != true && ItemMultiSelectHandler.current?.IsGroupDragging != true;
@@ -678,9 +678,9 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private void Revert(string messageKey)
     {
         _draft.Rebase(_draft.Baseline);
-        var wasInDetail = _detail != null && HasSubScreen;
+        var wasInDetail = _detail != null && RuleScreenShown;
         ResetDetail();
-        if (wasInDetail) ReturnToParent();
+        if (wasInDetail) PopScreen();
         Message(messageKey);
     }
 
@@ -694,9 +694,9 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private void Reload(string messageKey)
     {
         _draft.Rebase(new CellPartitionTags(_cell).Capture().Interpret().Config);
-        var wasInDetail = _detail != null && HasSubScreen;
+        var wasInDetail = _detail != null && RuleScreenShown;
         ResetDetail();
-        if (wasInDetail) ReturnToParent();
+        if (wasInDetail) PopScreen();
         Message(messageKey);
     }
 
@@ -722,12 +722,12 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _showSample = false;
         _messageKey = null;
         _ruleScreen = new PartitionRuleScreen(this);
-        SwitchToScreen(_ruleScreen);
+        PushScreen(_ruleScreen);
     }
 
     private void Back()
     {
-        ReturnToParent();
+        PopScreen();
     }
 
     /// <summary>

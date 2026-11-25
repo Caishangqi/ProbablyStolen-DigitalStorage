@@ -27,6 +27,8 @@ public sealed class TerminalRegistry
     private readonly List<TooltipPanelDefinition> _panels = new() { TooltipPanelDefinition.Hint };
     private readonly HashSet<string> _extensionIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<bool>> _finalBackGuards = new(StringComparer.Ordinal);
+    private readonly Dictionary<DockSide, DockDefinition> _docks = new();
+    private readonly List<(DockSide Side, ActionScope Scope, string TitleKey)> _dockTitles = new();
     private bool _frozen;
 
     /// <summary>Creates an empty registry.</summary>
@@ -75,19 +77,72 @@ public sealed class TerminalRegistry
         return true;
     }
 
+    /// <summary>Gets the registered docks, left first.</summary>
+    public IReadOnlyList<DockDefinition> Docks => _docks.Values.OrderBy(dock => dock.Side).ToArray();
+
+    /// <summary>Gets the dock of a side, or null when that side has none.</summary>
+    public DockDefinition? FindDock(DockSide side) => _docks.TryGetValue(side, out var dock) ? dock : null;
+
+    /// <summary>Adds the dock of one side with its title; a second dock on the same side is refused and logged.</summary>
+    public bool AddDock(DockSide side, string titleKey)
+    {
+        var dock = new DockDefinition(side, titleKey);
+        EnsureOpen();
+        if (_docks.ContainsKey(side))
+        {
+            _diagnostic($"terminal_registry refused=dock side={side} reason=duplicate");
+            return false;
+        }
+
+        _docks.Add(side, dock);
+        return true;
+    }
+
+    /// <summary>
+    /// Gives a dock another title while <paramref name="scope"/> applies, for example on a sub-screen whose buttons on that
+    /// side are actions rather than functions. A second title for the same side and scope is refused and logged.
+    /// </summary>
+    public bool AddDockTitle(DockSide side, ActionScope scope, string titleKey)
+    {
+        if (side != DockSide.Left && side != DockSide.Right) throw new ArgumentOutOfRangeException(nameof(side));
+        if (scope == null) throw new ArgumentNullException(nameof(scope));
+        if (string.IsNullOrWhiteSpace(titleKey)) throw new ArgumentException("A title key is required.", nameof(titleKey));
+        EnsureOpen();
+        if (_dockTitles.Any(entry => entry.Side == side && entry.Scope.Equals(scope)))
+        {
+            _diagnostic($"terminal_registry refused=dock_title side={side} scope={scope} reason=duplicate");
+            return false;
+        }
+
+        _dockTitles.Add((side, scope, titleKey));
+        return true;
+    }
+
+    /// <summary>Gets the title key a dock shows in a context: a scoped title that applies, else the dock's own.</summary>
+    public string DockTitleKey(DockDefinition dock, TerminalContext context)
+    {
+        if (dock == null) throw new ArgumentNullException(nameof(dock));
+        if (context == null) throw new ArgumentNullException(nameof(context));
+        foreach (var entry in _dockTitles)
+            if (entry.Side == dock.Side && entry.Scope.Includes(context)) return entry.TitleKey;
+        return dock.TitleKey;
+    }
+
     /// <summary>Adds an action button; a repeated id is refused and logged.</summary>
     public bool AddAction(TerminalAction action)
     {
         if (action == null) throw new ArgumentNullException(nameof(action));
-        return AddButton(new ActionButton(action), action.Order, action.Placement, action.TerminalId, action.IsVisible);
+        return AddButton(new ActionButton(action), action.Order, action.Side, action.Placement, action.Scope,
+            action.IsVisible);
     }
 
     /// <summary>Adds a setting toggle; its id is the setting name. A repeated id is refused and logged.</summary>
-    public bool AddSetting<T>(Setting<T> setting, int order, ActionPlacement placement, string? terminalId)
+    public bool AddSetting<T>(Setting<T> setting, int order, DockSide side, ActionPlacement placement, ActionScope scope)
         where T : struct, Enum
     {
         if (setting == null) throw new ArgumentNullException(nameof(setting));
-        return AddButton(new SettingToggleButton<T>(setting, _config), order, placement, terminalId, _ => true);
+        if (scope == null) throw new ArgumentNullException(nameof(scope));
+        return AddButton(new SettingToggleButton<T>(setting, _config), order, side, placement, scope, _ => true);
     }
 
     /// <summary>Adds a final window-close guard; a repeated id is refused and logged.</summary>
@@ -163,12 +218,17 @@ public sealed class TerminalRegistry
         new(_projectors, _decorators, _contributors, _panels,
             diagnostic ?? throw new ArgumentNullException(nameof(diagnostic)));
 
-    /// <summary>Closes registration. The default view must be registered by then.</summary>
+    /// <summary>Closes registration. The default view and the dock of every button's side must be registered by then.</summary>
     public void Freeze()
     {
         EnsureOpen();
         if (Find(DefaultTerminalName) == null)
             throw new InvalidOperationException("The default terminal must be registered before freezing.");
+        var homeless = Buttons.FirstOrDefault(entry => !_docks.ContainsKey(entry.Side));
+        if (homeless != null)
+            throw new InvalidOperationException($"The button {homeless.Button.Id} needs a dock on the {homeless.Side} side.");
+        if (_dockTitles.Any(entry => !_docks.ContainsKey(entry.Side)))
+            throw new InvalidOperationException("A dock title needs a dock on its side.");
         _terminals.Freeze();
         _buttonRegistry.Freeze();
         _frozen = true;
@@ -178,9 +238,10 @@ public sealed class TerminalRegistry
     public TerminalDefinition? Find(string terminalName) =>
         terminalName == null ? null : _terminals.GetValueOrDefault(RegistryKey.For(terminalName));
 
-    private bool AddButton(TerminalButton button, int order, ActionPlacement placement, string? terminalId,
+    private bool AddButton(TerminalButton button, int order, DockSide side, ActionPlacement placement, ActionScope scope,
         Func<TerminalContext, bool> isVisible)
     {
+        if (side != DockSide.Left && side != DockSide.Right) throw new ArgumentOutOfRangeException(nameof(side));
         EnsureOpen();
         var key = RegistryKey.For(button.Id);
         if (_buttonRegistry.TryGetValue(key, out _))
@@ -189,7 +250,7 @@ public sealed class TerminalRegistry
             return false;
         }
 
-        var entry = new RegisteredButton(button, order, placement, terminalId, isVisible);
+        var entry = new RegisteredButton(button, order, side, placement, scope, isVisible);
         _buttonRegistry.Register(key, entry);
         return true;
     }

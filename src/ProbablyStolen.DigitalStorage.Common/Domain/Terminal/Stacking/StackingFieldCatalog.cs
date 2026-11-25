@@ -8,11 +8,15 @@ namespace ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 /// <summary>A field offered in the attribute menu.</summary>
 public sealed class StackingFieldOption
 {
-    internal StackingFieldOption(StackingField field, bool absentFromInventory)
+    internal StackingFieldOption(StackingField field, bool absentFromInventory, bool hidden = false)
     {
         Field = field;
         AbsentFromInventory = absentFromInventory;
+        Hidden = hidden;
     }
+
+    /// <summary>Gets whether the field is a feature no stored item shows openly: unexposed or disabled.</summary>
+    public bool Hidden { get; }
 
     /// <summary>Gets the field.</summary>
     public StackingField Field { get; }
@@ -35,6 +39,12 @@ public static class StackingFieldCatalog
 
     /// <summary>Creates the field identifier for one raw tag key.</summary>
     public static string TagFieldId(string tagKey) => TagPrefix + (tagKey ?? throw new ArgumentNullException(nameof(tagKey)));
+
+    /// <summary>
+    /// The difference reported for an unexposed or disabled feature while the advanced option is off. It names no feature,
+    /// so nothing hidden leaks, and no rule can be made from it.
+    /// </summary>
+    public const string HiddenFeature = "hidden_feature";
 
     /// <summary>The estimated value shown in item tooltips.</summary>
     public const string AppraisedValue = "appraised_value";
@@ -98,10 +108,11 @@ public static class StackingFieldCatalog
     }
 
     /// <summary>
-    /// Lists the menu: fixed fields, recorded root tag keys, exposed and enabled features not owned by a fixed field,
-    /// and saved rules that no current item has, marked as absent from the inventory.
+    /// Lists fixed fields, recorded tags, visible features and saved fields. Without advanced access, a feature is only
+    /// listed when a stored sample exposes it.
     /// </summary>
-    public static IReadOnlyList<StackingFieldOption> Discover(IEnumerable<ItemKey> storedKeys, IEnumerable<string> savedFieldIds)
+    public static IReadOnlyList<StackingFieldOption> Discover(IEnumerable<ItemKey> storedKeys, IEnumerable<string> savedFieldIds,
+        bool includeHidden = false)
     {
         if (storedKeys == null) throw new ArgumentNullException(nameof(storedKeys));
         if (savedFieldIds == null) throw new ArgumentNullException(nameof(savedFieldIds));
@@ -109,6 +120,7 @@ public static class StackingFieldCatalog
         var seen = new HashSet<string>(Fixed.Select(field => field.Id), StringComparer.Ordinal);
         var tags = new SortedSet<string>(StringComparer.Ordinal);
         var features = new SortedSet<string>(StringComparer.Ordinal);
+        var shown = new HashSet<string>(StringComparer.Ordinal);
         foreach (var key in storedKeys)
         {
             var summary = key?.ReadSummary();
@@ -121,8 +133,10 @@ public static class StackingFieldCatalog
 
             foreach (var feature in summary.Features)
             {
-                if (feature.Exposed && !feature.Disabled && !FixedFeatureIds.Contains(feature.Identifier))
-                    features.Add(feature.Identifier);
+                if (FixedFeatureIds.Contains(feature.Identifier)) continue;
+                var open = feature.Exposed && !feature.Disabled;
+                if (open) shown.Add(feature.Identifier);
+                if (open || includeHidden) features.Add(feature.Identifier);
             }
         }
 
@@ -135,14 +149,14 @@ public static class StackingFieldCatalog
         foreach (var featureId in features)
         {
             var field = StackingField.ForFeature(featureId);
-            if (seen.Add(field.Id)) options.Add(new StackingFieldOption(field, false));
+            if (seen.Add(field.Id)) options.Add(new StackingFieldOption(field, false, !shown.Contains(featureId)));
         }
 
         foreach (var id in savedFieldIds)
         {
             if (id == null || seen.Contains(id)) continue;
             var field = Find(id);
-            if (field == null) continue;
+            if (field == null || !includeHidden && field.FeatureId != null) continue;
             seen.Add(id);
             options.Add(new StackingFieldOption(field, true));
         }

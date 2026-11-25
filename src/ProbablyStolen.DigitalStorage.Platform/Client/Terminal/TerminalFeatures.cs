@@ -35,8 +35,7 @@ internal static class TerminalFeatures
         ModulesFeature.Register(registry, window => new TerminalModulesScreen((TerminalWindowHost)window));
         TerminalStyleFeature.Register(registry);
         KeepOpenFeature.Register(registry, keepOpen, setKeepOpen);
-        StackingFeature.Register(registry, window => new StackingRulesScreen((TerminalWindowHost)window,
-            ((TerminalWindow)window).Storage), log, identityLogEnabled);
+        StackingFeature.Register(registry, new StackingPlatform(), log, identityLogEnabled);
         DiagnosticsFeature.Register(registry, window => new DiagnosticTerminalView((TerminalWindowHost)window),
             window => new DiagnosticScreen((TerminalWindowHost)window), log);
         registry.Freeze();

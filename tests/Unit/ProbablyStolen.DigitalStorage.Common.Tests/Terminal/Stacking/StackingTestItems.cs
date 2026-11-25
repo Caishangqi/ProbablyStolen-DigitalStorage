@@ -48,8 +48,27 @@ internal static class StackingTestItems
             (tags ?? Array.Empty<CanonicalIdentityTag>()).ToArray(),
             (features ?? Array.Empty<CanonicalIdentityFeature>()).ToArray(), unitValue: unitValue));
 
+    /// <summary>Every item identifier the stacking tests use; shared helpers give each the same rows.</summary>
+    internal static readonly string[] ItemIds =
+    {
+        IngotId, BottleId, "bottled_water", "box", "fruit", "lamp", "large_bottle", "ore", "powerblock",
+        "scrap_metal", "small_bottle", "watch"
+    };
+
     internal static StackingConfig Ignore(params string[] fields) =>
-        new(true, fields.Select(field => new StackingRule(field, StackingMode.Ignore)));
+        Rules(fields.Select(field => new StackingRule(field, StackingMode.Ignore)));
+
+    /// <summary>Gives every test item the same switched-on rows.</summary>
+    internal static StackingConfig Rules(IEnumerable<StackingRule> rules)
+    {
+        var list = rules.ToArray();
+        return new StackingConfig(ItemIds.Select(id => new StackingItemRule(id, true, list)));
+    }
+
+    /// <summary>Appends a row to every item rule that does not have the field yet.</summary>
+    internal static StackingConfig WithAddedRule(this StackingConfig config, string fieldId, StackingMode mode) =>
+        new(config.Items.Select(item => item.IndexOf(fieldId) >= 0
+            ? item : item.WithRules(item.Rules.Concat(new[] { new StackingRule(fieldId, mode) }))), config.Marker, config.Advanced);
 
     internal static StackingAttributes Value(long appraised) =>
         new(new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = appraised });

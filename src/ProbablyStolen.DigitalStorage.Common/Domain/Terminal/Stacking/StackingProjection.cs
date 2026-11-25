@@ -97,9 +97,9 @@ public sealed class StackingGroupKey : IEquatable<StackingGroupKey>
 }
 
 /// <summary>
-/// Maps an entry to its grouping key. Raw fields set to ignore are removed from the identity, derived fields that are
-/// not ignored are added, and everything else stays exact. When anything is unknown the entry keeps its exact key, so
-/// a missing value never merges items.
+/// Maps an entry to its grouping key under the rule of its own item definition. Raw fields set to ignore are removed
+/// from the identity, derived fields that are not ignored are added, and everything else stays exact. An item without an
+/// active rule, or with anything unknown, keeps its exact key, so a missing value never merges items.
 /// </summary>
 public static class StackingProjection
 {
@@ -162,8 +162,8 @@ public static class StackingProjection
         if (rightAttributes == null) throw new ArgumentNullException(nameof(rightAttributes));
         if (config == null) throw new ArgumentNullException(nameof(config));
 
-        var a = MaskForComparison(left, leftAttributes, config);
-        var b = MaskForComparison(right, rightAttributes, config);
+        var a = MaskForComparison(left, leftAttributes, config.Find(left.Identifier), config.Advanced);
+        var b = MaskForComparison(right, rightAttributes, config.Find(right.Identifier), config.Advanced);
         if (a.Input == null || b.Input == null)
         {
             result = left.Equals(right) ? Array.Empty<string>() : new[] { "item_identity" };
@@ -194,11 +194,17 @@ public static class StackingProjection
             var leftFeature = a.Input.Features.FirstOrDefault(feature => feature.Identifier == featureId);
             var rightFeature = b.Input.Features.FirstOrDefault(feature => feature.Identifier == featureId);
             var present = leftFeature ?? rightFeature;
-            if (present == null ||
-                leftFeature != null && (!leftFeature.IsFeatureExposed || leftFeature.IsDisabled) ||
-                rightFeature != null && (!rightFeature.IsFeatureExposed || rightFeature.IsDisabled))
+            if (present == null)
             {
                 differences.Add("item_identity");
+                continue;
+            }
+
+            if (!config.Advanced &&
+                (leftFeature != null && (!leftFeature.IsFeatureExposed || leftFeature.IsDisabled) ||
+                 rightFeature != null && (!rightFeature.IsFeatureExposed || rightFeature.IsDisabled)))
+            {
+                differences.Add(StackingFieldCatalog.HiddenFeature);
                 continue;
             }
 
@@ -214,6 +220,51 @@ public static class StackingProjection
         return true;
     }
 
+    /// <summary>Finds the differences that can distinguish any of the selected identities.</summary>
+    public static IReadOnlyCollection<string> CollectDifferences(
+        IReadOnlyList<(ItemKey Key, StackingAttributes Attributes)> items, StackingConfig config)
+    {
+        var differences = new SortedSet<string>(StringComparer.Ordinal);
+        var comparable = new List<(ItemKey Key, StackingAttributes Attributes)>();
+        foreach (var item in items)
+        {
+            if (TryGetDifferences(item.Key, item.Attributes, item.Key, item.Attributes, config, out _))
+                comparable.Add(item);
+            else
+                differences.Add("item_identity");
+        }
+
+        var compareRemaining = false;
+        for (var index = 1; index < comparable.Count; index++)
+            compareRemaining |= Compare(comparable[0], comparable[index]);
+
+        // A hidden feature on the first item can obscure distinct exposed values on the other items.
+        if (compareRemaining)
+        {
+            for (var left = 1; left < comparable.Count; left++)
+            {
+                for (var right = left + 1; right < comparable.Count; right++)
+                    Compare(comparable[left], comparable[right]);
+            }
+        }
+
+        return differences;
+
+        bool Compare((ItemKey Key, StackingAttributes Attributes) left,
+            (ItemKey Key, StackingAttributes Attributes) right)
+        {
+            if (!TryGetDifferences(left.Key, left.Attributes, right.Key, right.Attributes, config, out var fields))
+            {
+                differences.Add("item_identity");
+                return true;
+            }
+
+            differences.UnionWith(fields);
+            return fields.Contains("item_identity", StringComparer.Ordinal) ||
+                fields.Contains(StackingFieldCatalog.HiddenFeature, StringComparer.Ordinal);
+        }
+    }
+
     /// <summary>
     /// Lists the ignore rules whose unprotected fields differ among the members of one projected group, in rule order.
     /// Derived fields are included only when captured values show a difference.
@@ -223,7 +274,8 @@ public static class StackingProjection
     {
         if (members == null) throw new ArgumentNullException(nameof(members));
         if (config == null) throw new ArgumentNullException(nameof(config));
-        if (members.Count < 2 || !config.Enabled || !config.HasIgnoreRule) return Array.Empty<StackingField>();
+        var itemRule = members.Count < 2 ? null : config.Find(members[0].Key.Identifier);
+        if (itemRule == null || !itemRule.IsActive) return Array.Empty<StackingField>();
         var inputs = new CanonicalIdentityInput[members.Count];
         for (var i = 0; i < members.Count; i++)
         {
@@ -233,7 +285,7 @@ public static class StackingProjection
         }
 
         // Within one projected group, the applicability of a Match field overlapping ignored paths is shared.
-        var rules = config.Rules.Select(rule => (rule.Mode, Field: StackingFieldCatalog.Find(rule.FieldId))).ToArray();
+        var rules = itemRule.Rules.Select(rule => (rule.Mode, Field: StackingFieldCatalog.Find(rule.FieldId))).ToArray();
         var matchedPaths = StackingOwnedPaths.None;
         foreach (var (mode, field) in rules)
         {
@@ -248,7 +300,8 @@ public static class StackingProjection
         var fields = new List<StackingField>();
         foreach (var (mode, field) in rules)
         {
-            if (mode != StackingMode.Ignore || field == null || !field.Applies(inputs[0]) || !field.IsVisible(inputs[0])) continue;
+            if (mode != StackingMode.Ignore || field == null ||
+                !inputs.Any(input => field.Applies(input) && (config.Advanced || field.IsVisible(input)))) continue;
             if (field.Kind == StackingFieldKind.Derived)
             {
                 if (HasDerivedDifference(members, field.Id)) fields.Add(field);
@@ -295,13 +348,22 @@ public static class StackingProjection
         if (key == null) throw new ArgumentNullException(nameof(key));
         if (config == null) throw new ArgumentNullException(nameof(config));
         if (attributes == null) throw new ArgumentNullException(nameof(attributes));
-        if (!config.Enabled || !config.HasIgnoreRule) return Masked.Exact("no_ignore_rule");
+        return Mask(key, config.Find(key.Identifier), config.Advanced, attributes);
+    }
+
+    /// <summary>
+    /// Masks one identity under an item rule. A hidden feature row applies only with the advanced option; without it the
+    /// row pauses and its data stays compared. A match row always protects its data, hidden or not.
+    /// </summary>
+    private static Masked Mask(ItemKey key, StackingItemRule? itemRule, bool advanced, StackingAttributes attributes)
+    {
+        if (itemRule == null || !itemRule.IsActive) return Masked.Exact("no_ignore_rule");
         var input = CanonicalMask.Decode(key);
         if (input == null) return Masked.Exact("not_canonical");
 
-        var ignoredRules = config.Rules.Where(rule => rule.Mode == StackingMode.Ignore)
+        var ignoredRules = itemRule.Rules.Where(rule => rule.Mode == StackingMode.Ignore)
             .OrderBy(rule => rule.FieldId, StringComparer.Ordinal).ToArray();
-        var matchedRules = config.Rules.Where(rule => rule.Mode == StackingMode.Match)
+        var matchedRules = itemRule.Rules.Where(rule => rule.Mode == StackingMode.Match)
             .OrderBy(rule => rule.FieldId, StringComparer.Ordinal).ToArray();
         var ignored = new HashSet<string>(ignoredRules.Select(rule => rule.FieldId), StringComparer.Ordinal);
         var paths = StackingOwnedPaths.None;
@@ -313,10 +375,13 @@ public static class StackingProjection
             var field = StackingFieldCatalog.Find(rule.FieldId);
             if (field == null || field.Kind == StackingFieldKind.Derived) continue;
             var applies = field.Applies(input);
-            derived.Add(applies ? 1 : 0);
-            derivedFields.Add(field.Id);
-            if (!applies) continue;
-            if (!field.IsVisible(input)) return Masked.Exact("hidden:" + field.Id);
+            if (field.Kind != StackingFieldKind.Feature)
+            {
+                derived.Add(applies ? 1 : 0);
+                derivedFields.Add(field.Id);
+            }
+
+            if (!applies || !advanced && !field.IsVisible(input)) continue;
             paths = paths.Union(field.OwnedPaths);
         }
 
@@ -330,7 +395,6 @@ public static class StackingProjection
             derived.Add(applies ? 1 : 0);
             derivedFields.Add(field.Id);
             if (!applies) continue;
-            if (!field.IsVisible(input)) return Masked.Exact("hidden:" + field.Id);
             matchedPaths = matchedPaths.Union(overlap);
         }
 
@@ -346,9 +410,10 @@ public static class StackingProjection
         return new Masked(CanonicalMask.Strip(input, paths), derived.ToArray(), derivedFields.ToArray(), null);
     }
 
-    private static Masked MaskForComparison(ItemKey key, StackingAttributes attributes, StackingConfig config)
+    private static Masked MaskForComparison(ItemKey key, StackingAttributes attributes, StackingItemRule? itemRule,
+        bool advanced)
     {
-        if (config.Enabled && config.HasIgnoreRule) return Mask(key, config, attributes);
+        if (itemRule != null && itemRule.IsActive) return Mask(key, itemRule, advanced, attributes);
         var input = CanonicalMask.Decode(key);
         return input == null ? Masked.Exact("not_canonical") : new Masked(input, Array.Empty<long>(), Array.Empty<string>(), null);
     }

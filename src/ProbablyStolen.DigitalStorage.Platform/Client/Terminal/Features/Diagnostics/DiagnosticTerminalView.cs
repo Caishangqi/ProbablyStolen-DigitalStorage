@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using TMPro;
 using UnityEngine;
@@ -32,6 +33,12 @@ internal sealed class DiagnosticTerminalView : ITerminalView
 
     /// <inheritdoc />
     public void Suspend()
+    {
+    }
+
+    public IReadOnlyList<DisplayEntry> Selection => Array.Empty<DisplayEntry>();
+
+    public void ClearSelection()
     {
     }
 

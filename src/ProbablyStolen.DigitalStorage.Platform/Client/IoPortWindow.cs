@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Machines.IoPort;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.IoPort;
@@ -85,27 +86,6 @@ internal sealed class IoPortWindow : TerminalWindowHost
 
     protected override void OnHostShown() => View?.Fit();
 
-    /// <summary>
-    /// Resizes the window so the body fits; the rail stays outside the frame. Layout measures only active objects, so
-    /// this runs while the window is visible.
-    /// </summary>
-    internal void FitTo(RectTransform content)
-    {
-        var window = CustomWindow;
-        if (!content.gameObject.activeInHierarchy) return;
-        LayoutRebuilder.ForceRebuildLayoutImmediate(window.Rect);
-        var chrome = window.Rect.rect.size - window.ContentRoot.rect.size;
-        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
-        window.SetSize(LayoutUtility.GetPreferredWidth(content) + chrome.x, LayoutUtility.GetPreferredHeight(content) + chrome.y);
-        LayoutRebuilder.ForceRebuildLayoutImmediate(window.Rect);
-    }
-
-    private sealed class MemoryTerminalStore : ICurrentTerminalStore
-    {
-        private string? _name;
-        public string? Read() => _name;
-        public void Write(string terminalName) => _name = terminalName;
-    }
 }
 
 /// <summary>The IO Port body: borrowed native banks, the transfer controls, and the status with its progress bar.</summary>
@@ -150,7 +130,7 @@ internal sealed class IoPortTerminalView : ITerminalView
     /// <summary>Sizes the window to the body; called once the window is visible.</summary>
     internal void Fit()
     {
-        if (_container != null) _owner.FitTo(_container);
+        if (_container != null) _owner.FitBodyTo(_container);
     }
 
     public void Build(RectTransform container)
@@ -325,6 +305,12 @@ internal sealed class IoPortTerminalView : ITerminalView
     public void Resume() => Refresh(force: true);
 
     public void Suspend() => ReturnBanks("io_port_sub_screen");
+
+    public IReadOnlyList<DisplayEntry> Selection => Array.Empty<DisplayEntry>();
+
+    public void ClearSelection()
+    {
+    }
 
     public void OnReturnFromSubScreen()
     {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
@@ -17,6 +18,9 @@ internal sealed partial class PartitionWindow
     private readonly MemoryTerminalStore _currentViewStore = new();
     private bool _moduleSubscription;
     private PartitionRuleScreen? _ruleScreen;
+
+    /// <summary>Gets whether the rule page is the page on top.</summary>
+    private bool RuleScreenShown => _ruleScreen != null && IsTopScreen(_ruleScreen);
 
     protected override string HostWindowId => WindowId;
     protected override string HostTitleKey => "partition_title";
@@ -45,7 +49,7 @@ internal sealed partial class PartitionWindow
         }
         if (_detail == null) return;
         _ruleScreen = new PartitionRuleScreen(this);
-        SwitchToScreen(_ruleScreen);
+        PushScreen(_ruleScreen);
     }
 
     protected override void OnHostClosed(bool actualClose)
@@ -139,7 +143,7 @@ internal sealed partial class PartitionWindow
         if (_draft.At(slot) == null || !_session.IsActive) return;
         OpenDetail(slot);
         _ruleScreen = new PartitionRuleScreen(this);
-        SwitchToScreen(_ruleScreen);
+        PushScreen(_ruleScreen);
     }
 
     internal void ReturnFromRuleScreen()
@@ -155,7 +159,7 @@ internal sealed partial class PartitionWindow
         var offset = _detailScroll != null && _detailScroll.content != null && _detailScroll.viewport != null
             ? Mathf.Max(0f, _detailScroll.content.rect.height - _detailScroll.viewport.rect.height) *
                 (1f - _detailScroll.verticalNormalizedPosition) : 0f;
-        if (_ruleScreen == null || !RefreshSubScreenContent(_ruleScreen))
+        if (_ruleScreen == null || !RefreshScreenContent(_ruleScreen))
         {
             Render();
             return;
@@ -165,7 +169,7 @@ internal sealed partial class PartitionWindow
 
     internal void RefreshActiveDetail()
     {
-        PartitionViewRefreshCoordinator.Refresh(_detail != null, _ruleScreen != null && HasSubScreen,
+        PartitionViewRefreshCoordinator.Refresh(_detail != null, RuleScreenShown,
             Render, RefreshDetailScreen);
     }
 
@@ -195,7 +199,7 @@ internal sealed partial class PartitionWindow
             return true;
         }
 
-        ReturnToParent();
+        PopScreen();
         return true;
     }
 
@@ -205,14 +209,6 @@ internal sealed partial class PartitionWindow
         return true;
     }
 
-    private sealed class MemoryTerminalStore : ICurrentTerminalStore
-    {
-        private string? _value;
-
-        public string? Read() => _value;
-
-        public void Write(string terminalName) => _value = terminalName;
-    }
 }
 
 internal readonly struct PartitionViewState
@@ -239,6 +235,12 @@ internal sealed class PartitionTerminalView : ITerminalView, ITerminalBackHandle
     }
 
     public void Suspend() => _owner.SuspendOverview();
+
+    public IReadOnlyList<DisplayEntry> Selection => Array.Empty<DisplayEntry>();
+
+    public void ClearSelection()
+    {
+    }
 
     public void OnReturnFromSubScreen() => _owner.RestoreOverview();
 
@@ -270,6 +272,9 @@ internal sealed class PartitionRuleScreen : SubScreen, ITerminalBackHandler
     private readonly PartitionWindow _owner;
 
     internal PartitionRuleScreen(PartitionWindow owner) : base(owner) => _owner = owner;
+
+    /// <inheritdoc />
+    public override string ScreenId => "partition.rule";
 
     protected override bool AddBackButton => false;
 

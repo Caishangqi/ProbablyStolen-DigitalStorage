@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
@@ -22,6 +24,12 @@ internal interface ITerminalView
     /// Called instead of <see cref="Resume"/> when a sub-screen returns to this view.
     /// </summary>
     void OnReturnFromSubScreen();
+
+    /// <summary>Gets the slots the view keeps selected; empty for a view without a selection.</summary>
+    IReadOnlyList<DisplayEntry> Selection { get; }
+
+    /// <summary>Clears the kept selection; a view without a selection ignores it.</summary>
+    void ClearSelection();
 
     /// <summary>Captures what a rebuilt view needs to look the same, or null.</summary>
     object? StoreState();
@@ -65,4 +73,7 @@ internal interface ITerminalViewHost
 
     /// <summary>A fresh context of the window, or null while it is not open.</summary>
     ProbablyStolen.DigitalStorage.Client.Terminal.Host.TerminalContext? Context { get; }
+
+    /// <summary>Asks the docks to re-evaluate their buttons, for example after the selection changed.</summary>
+    void RefreshButtons();
 }

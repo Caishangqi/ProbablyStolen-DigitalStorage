@@ -64,11 +64,11 @@ public sealed class IoPortPanelStateTests
     public void CreateRegistry_RegistersModulesBeforeCompletionAction()
     {
         var mode = (IoPortCompletionMode?)IoPortCompletionMode.WorkComplete;
-        var registry = IoPortTerminalFeature.CreateRegistry(new MemoryConfig(), _ => { }, _ => new object(), _ => new object(),
+        var registry = IoPortTerminalFeature.CreateRegistry(new MemoryConfig(), _ => { }, _ => new object(), _ => new TestScreen("modules"),
             _ => mode, (_, next) => mode = next);
 
-        var rail = new VerticalButtonBar(registry,
-            new UniversalTerminalHandler(registry, new MemoryStore(), _ => { }), _ => { });
+        var rail = new TerminalDocks(registry,
+            new UniversalTerminalHandler(registry, new MemoryStore(), _ => { }), _ => { }).Find(DockSide.Left)!;
         var context = TerminalFixtures.Context(IoPortTerminalFeature.TerminalName);
 
         Assert.That(registry.DefaultTerminal.TerminalName, Is.EqualTo(IoPortTerminalFeature.TerminalName));

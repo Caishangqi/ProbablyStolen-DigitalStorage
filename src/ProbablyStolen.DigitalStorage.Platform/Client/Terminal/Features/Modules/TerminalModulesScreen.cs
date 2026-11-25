@@ -1,4 +1,5 @@
 using System;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Modules;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using UnityEngine;
@@ -16,6 +17,9 @@ internal sealed class TerminalModulesScreen : SubScreen
     private CustomUIElement? _unavailableMessage;
 
     internal TerminalModulesScreen(TerminalWindowHost window) : base(window) { }
+
+    /// <inheritdoc />
+    public override string ScreenId => ModulesFeature.ScreenId;
     internal override string UnavailableKey => "terminal_modules_unavailable";
     internal override bool FitsContent => true;
 

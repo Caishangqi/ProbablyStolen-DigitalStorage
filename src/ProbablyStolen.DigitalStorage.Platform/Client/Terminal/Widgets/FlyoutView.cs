@@ -9,9 +9,9 @@ using UnityEngine.UI;
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 
 /// <summary>
-/// The selection panel of an open selection button: up to three buttons per column, opening left of the button with
-/// the top edges aligned and flipping right when the viewport has no room on the left
-/// (<see cref="SelectionPanelLayout"/>). It sits under the window root outside the frame, with its own input shield.
+/// The selection panel of an open selection button: up to three buttons per column, opening outward from its dock with
+/// the top edges aligned and flipping toward the window when the viewport has no room (<see cref="SelectionPanelLayout"/>).
+/// It sits under the window root outside the frame, with its own input shield.
 /// </summary>
 internal sealed class FlyoutView
 {
@@ -20,10 +20,12 @@ internal sealed class FlyoutView
     private readonly CustomUIWindow _window;
     private readonly ButtonIcons _icons;
     private readonly ModText _text;
+    private readonly DockSide _side;
     private RectTransform? _root;
 
-    internal FlyoutView(CustomUIWindow window, ModText text, ButtonIcons icons)
+    internal FlyoutView(CustomUIWindow window, ModText text, ButtonIcons icons, DockSide side)
     {
+        _side = side;
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -46,8 +48,9 @@ internal sealed class FlyoutView
         var topLeft = windowRoot.InverseTransformPoint(corners[1]);
         var topRight = windowRoot.InverseTransformPoint(corners[2]);
         // Panel coordinates grow downward; the window's local y grows upward.
-        var placement = SelectionPanelLayout.Place(geometry, topLeft.x, -topLeft.y, topRight.x - topLeft.x,
-            ViewportLeft(windowRoot), PanelGap);
+        var (viewportLeft, viewportRight) = ViewportEdges(windowRoot);
+        var placement = SelectionPanelLayout.Place(geometry, _side, topLeft.x, -topLeft.y, topRight.x - topLeft.x,
+            viewportLeft, viewportRight, PanelGap);
 
         _root = new GameObject("terminal_flyout", typeof(RectTransform)).GetComponent<RectTransform>();
         _root.SetParent(windowRoot, false);
@@ -89,13 +92,13 @@ internal sealed class FlyoutView
         _root = null;
     }
 
-    /// <summary>The viewport's left edge in window coordinates; without a viewport the panel never flips.</summary>
-    private static float ViewportLeft(RectTransform windowRoot)
+    /// <summary>The viewport's side edges in window coordinates; without a viewport the panel never flips.</summary>
+    private static (float Left, float Right) ViewportEdges(RectTransform windowRoot)
     {
-        if (windowRoot.parent is not RectTransform viewport) return float.MinValue;
+        if (windowRoot.parent is not RectTransform viewport) return (float.MinValue, float.MaxValue);
         var corners = new Vector3[4];
         viewport.GetWorldCorners(corners);
-        return windowRoot.InverseTransformPoint(corners[0]).x;
+        return (windowRoot.InverseTransformPoint(corners[0]).x, windowRoot.InverseTransformPoint(corners[2]).x);
     }
 
     private static void StretchToParent(RectTransform rect)
