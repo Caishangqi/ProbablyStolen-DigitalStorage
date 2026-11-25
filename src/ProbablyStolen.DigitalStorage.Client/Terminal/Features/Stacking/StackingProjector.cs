@@ -129,7 +129,7 @@ public sealed class StackingProjector : IStorageEntryProjector
     {
         foreach (var item in order.GroupBy(key => key.Identifier).Where(group => group.Count() > 1))
         {
-            var rule = config.Find(item.Key);
+            var rule = config.EffectiveRule(item.Key);
             if (rule?.IsActive != true || !_explained.Add((rule, config.Advanced))) continue;
             var first = buckets[item.First()][0];
             var second = buckets[item.Skip(1).First()][0];

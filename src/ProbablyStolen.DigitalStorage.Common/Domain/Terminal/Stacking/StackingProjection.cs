@@ -97,9 +97,10 @@ public sealed class StackingGroupKey : IEquatable<StackingGroupKey>
 }
 
 /// <summary>
-/// Maps an entry to its grouping key under the rule of its own item definition. Raw fields set to ignore are removed
-/// from the identity, derived fields that are not ignored are added, and everything else stays exact. An item without an
-/// active rule, or with anything unknown, keeps its exact key, so a missing value never merges items.
+/// Maps an entry to its grouping key under the effective rule of its item definition: its item rule joined with the
+/// global rows. Raw fields set to ignore are removed from the identity, derived fields that are not ignored are added,
+/// and everything else stays exact. An item without an active rule, or with anything unknown, keeps its exact key, so a
+/// missing value never merges items.
 /// </summary>
 public static class StackingProjection
 {
@@ -162,8 +163,8 @@ public static class StackingProjection
         if (rightAttributes == null) throw new ArgumentNullException(nameof(rightAttributes));
         if (config == null) throw new ArgumentNullException(nameof(config));
 
-        var a = MaskForComparison(left, leftAttributes, config.Find(left.Identifier), config.Advanced);
-        var b = MaskForComparison(right, rightAttributes, config.Find(right.Identifier), config.Advanced);
+        var a = MaskForComparison(left, leftAttributes, config.EffectiveRule(left.Identifier), config.Advanced);
+        var b = MaskForComparison(right, rightAttributes, config.EffectiveRule(right.Identifier), config.Advanced);
         if (a.Input == null || b.Input == null)
         {
             result = left.Equals(right) ? Array.Empty<string>() : new[] { "item_identity" };
@@ -274,7 +275,7 @@ public static class StackingProjection
     {
         if (members == null) throw new ArgumentNullException(nameof(members));
         if (config == null) throw new ArgumentNullException(nameof(config));
-        var itemRule = members.Count < 2 ? null : config.Find(members[0].Key.Identifier);
+        var itemRule = members.Count < 2 ? null : config.EffectiveRule(members[0].Key.Identifier);
         if (itemRule == null || !itemRule.IsActive) return Array.Empty<StackingField>();
         var inputs = new CanonicalIdentityInput[members.Count];
         for (var i = 0; i < members.Count; i++)
@@ -348,7 +349,7 @@ public static class StackingProjection
         if (key == null) throw new ArgumentNullException(nameof(key));
         if (config == null) throw new ArgumentNullException(nameof(config));
         if (attributes == null) throw new ArgumentNullException(nameof(attributes));
-        return Mask(key, config.Find(key.Identifier), config.Advanced, attributes);
+        return Mask(key, config.EffectiveRule(key.Identifier), config.Advanced, attributes);
     }
 
     /// <summary>

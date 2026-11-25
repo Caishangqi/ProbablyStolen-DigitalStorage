@@ -96,6 +96,40 @@ public sealed class StackingRulesEditor
     /// <summary>Removes every item rule, keeping the marker color and the advanced option.</summary>
     public bool RemoveAll() => Commit(Config.WithoutItems());
 
+    /// <summary>Adds a switched-on "ignore" global row for the field; false when the field already has one.</summary>
+    public bool AddGlobal(string fieldId) => StackingRule.IsValidFieldId(fieldId) && Config.FindGlobal(fieldId) == null &&
+        TryCommit(() => Config.WithGlobal(new StackingGlobalRule(fieldId, StackingMode.Ignore, true)));
+
+    /// <summary>Switches one global row on or off.</summary>
+    public bool SetGlobalEnabled(string fieldId, bool enabled) =>
+        Config.FindGlobal(fieldId) is { } row && Commit(Config.WithGlobal(row.WithEnabled(enabled)));
+
+    /// <summary>Changes the mode of one global row.</summary>
+    public bool SetGlobalMode(string fieldId, StackingMode mode) =>
+        Config.FindGlobal(fieldId) is { } row && Commit(Config.WithGlobal(row.WithMode(mode)));
+
+    /// <summary>Removes one global row.</summary>
+    public bool RemoveGlobal(string fieldId) => Config.FindGlobal(fieldId) != null && Commit(Config.WithoutGlobal(fieldId));
+
+    /// <summary>Switches every global row on or off.</summary>
+    public bool SetAllGlobalsEnabled(bool enabled) => Commit(Config.WithAllGlobalsEnabled(enabled));
+
+    /// <summary>Removes every global row.</summary>
+    public bool RemoveAllGlobals() => Commit(Config.WithGlobals(Array.Empty<StackingGlobalRule>()));
+
+    /// <summary>
+    /// Lists the attribute menu of the global rows from every stored identity and the saved rows; unexposed and disabled
+    /// features are listed only with <paramref name="includeHidden"/>, the advanced option.
+    /// </summary>
+    public static IReadOnlyList<StackingFieldOption> GlobalMenuOptions(StackingConfig config, IEnumerable<ItemKey> storedKeys,
+        bool includeHidden)
+    {
+        if (config == null) throw new ArgumentNullException(nameof(config));
+        if (storedKeys == null) throw new ArgumentNullException(nameof(storedKeys));
+        return StackingFieldCatalog.Discover(storedKeys.Where(key => key != null), config.Globals.Select(row => row.FieldId),
+            includeHidden);
+    }
+
     /// <summary>Switches the advanced option, which lets rules ignore unexposed and disabled features.</summary>
     public bool SetAdvanced(bool advanced) => advanced == Config.Advanced || Commit(Config.WithAdvanced(advanced));
 
@@ -103,18 +137,7 @@ public sealed class StackingRulesEditor
     public bool Apply(StackingItemRule rule)
     {
         if (rule == null) throw new ArgumentNullException(nameof(rule));
-        StackingConfig candidate;
-        try
-        {
-            candidate = Config.WithItem(rule);
-        }
-        catch (ArgumentException)
-        {
-            LastError = SaveFailedKey;
-            return false;
-        }
-
-        return Commit(candidate);
+        return TryCommit(() => Config.WithItem(rule));
     }
 
     /// <summary>Sets the marker color from #RGB or #RRGGBB; other text keeps the current color.</summary>
@@ -129,6 +152,22 @@ public sealed class StackingRulesEditor
         if (!marker.Equals(Config.Marker)) return Commit(Config.WithMarker(marker));
         LastError = null;
         return true;
+    }
+
+    private bool TryCommit(Func<StackingConfig> build)
+    {
+        StackingConfig candidate;
+        try
+        {
+            candidate = build();
+        }
+        catch (ArgumentException)
+        {
+            LastError = SaveFailedKey;
+            return false;
+        }
+
+        return Commit(candidate);
     }
 
     private bool Commit(StackingConfig candidate)

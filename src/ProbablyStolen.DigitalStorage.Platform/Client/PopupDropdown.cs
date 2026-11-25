@@ -158,6 +158,7 @@ internal sealed class PopupDropdown
                 RebuildList();
             });
             Size(builder.Last.root, -1f, 28f);
+            SearchInputs.AttachClear(builder.Last);
             searchInput = builder.Last.input;
             searchHeight = 28f + column.spacing;
         }

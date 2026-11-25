@@ -27,8 +27,17 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
     /// <summary>The entry count key.</summary>
     public const string KindsKey = "stacking_info_kinds";
 
-    /// <summary>The rules caption key.</summary>
-    public const string RulesKey = "stacking_info_rules";
+    /// <summary>The caption of the item rule rows acting on the group.</summary>
+    public const string ItemRulesKey = "stacking_info_item_rules";
+
+    /// <summary>The caption of the global rows acting on the group.</summary>
+    public const string GlobalRulesKey = "stacking_info_global_rules";
+
+    /// <summary>The line telling that the item's own rule is off, so only global rows act.</summary>
+    public const string ItemRuleOffKey = "stacking_info_item_off";
+
+    /// <summary>The key of a difference the item rule matches although a global row ignores it.</summary>
+    public const string SelectionOverriddenKey = "stacking_info_difference_overridden";
 
     /// <summary>The key of one rule line; formatted with the field name.</summary>
     public const string RuleKey = "stacking_info_rule";
@@ -78,12 +87,19 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
         var members = entry.Members.Select(member => (member.Key, new StackingAttributes(attributes.For(member.Key)))).ToArray();
         var fields = StackingProjection.AppliedIgnoredFields(members, config);
         if (fields.Count == 0) return;
-        sink.Label(PanelId, RulesKey);
-        foreach (var field in fields)
-        {
-            var name = FieldName(field);
-            sink.Body(PanelId, RuleKey, name);
-        }
+        var itemId = entry.Representative.Key.Identifier;
+        var own = fields.Where(field => config.IsItemField(itemId, field.Id)).ToArray();
+        var global = fields.Where(field => !config.IsItemField(itemId, field.Id)).ToArray();
+        Group(sink, ItemRulesKey, own);
+        if (global.Length > 0 && config.Find(itemId) is { Enabled: false }) sink.Label(PanelId, ItemRuleOffKey);
+        Group(sink, GlobalRulesKey, global);
+    }
+
+    private static void Group(EntryTooltipSink sink, string captionKey, IReadOnlyList<StackingField> fields)
+    {
+        if (fields.Count == 0) return;
+        sink.Label(PanelId, captionKey);
+        foreach (var field in fields) sink.Body(PanelId, RuleKey, FieldName(field));
     }
 
     /// <inheritdoc />
@@ -120,7 +136,10 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
             var name = field == null
                 ? UnknownField(fieldId)
                 : FieldName(field);
-            sink.Body(PanelId, SelectionDifferenceKey, name);
+            // Explains why a global add can leave the slots apart: the item's own rule matches what the global row ignores.
+            var overridden = config.Find(identifier) is { Enabled: true } item && item.ModeOf(fieldId) == StackingMode.Match &&
+                config.FindGlobal(fieldId) is { Enabled: true, Mode: StackingMode.Ignore };
+            sink.Body(PanelId, overridden ? SelectionOverriddenKey : SelectionDifferenceKey, name);
         }
     }
 

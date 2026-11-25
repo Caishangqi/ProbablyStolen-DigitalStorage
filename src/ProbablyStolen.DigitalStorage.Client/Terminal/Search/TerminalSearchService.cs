@@ -376,6 +376,9 @@ public sealed class TerminalSearchService
         return _parsedQuery;
     }
 
+    /// <summary>Gets the prefixes whose fields are switched on, in registration order, with their field ids.</summary>
+    public IReadOnlyList<KeyValuePair<char, string>> ActivePrefixList() => new List<KeyValuePair<char, string>>(ActivePrefixes());
+
     private IReadOnlyDictionary<char, string> ActivePrefixes()
     {
         var result = new Dictionary<char, string>();

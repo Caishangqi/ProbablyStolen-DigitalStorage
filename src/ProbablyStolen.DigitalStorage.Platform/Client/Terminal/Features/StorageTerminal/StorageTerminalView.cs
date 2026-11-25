@@ -146,6 +146,7 @@ internal sealed class StorageTerminalView : ITerminalView
                 _screen.SetSearchText(query);
                 Refresh();
             });
+        SearchInputs.Attach(builder.Last, text, "terminal_search_tip_title", _services.Search, syntax: true);
         _searchInput = builder.Last.input;
         _inputHighlighter = _searchInput == null ? null : new TerminalInputHighlighter(_searchInput, _services.Search,
             _screen.HasSearchResults);

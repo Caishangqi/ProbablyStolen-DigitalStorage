@@ -542,7 +542,7 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_keep_open_tip", "terminal_keep_open_enabled", "terminal_keep_open_disabled",
         "terminal_tooltip_total_units",
         "stacking_marker_color", "stacking_marker_placeholder", "stacking_marker_color_tip", "stacking_marker_invalid",
-        "stacking_info_title", "stacking_info_kinds", "stacking_info_rules", "stacking_info_rule",
+        "stacking_info_title", "stacking_info_kinds", "stacking_info_rule",
         "stacking_info_selection", "stacking_info_selection_unavailable", "stacking_info_selection_unknown",
         "stacking_info_difference", "stacking_info_tag_unavailable",
         "stacking_conditions", "stacking_rule_count",
@@ -578,6 +578,16 @@ def check_content(project: Path, output: Path) -> None:
         "stacking_item_delete_tip", "stacking_all_on", "stacking_all_off", "stacking_all_delete",
         "stacking_item_add", "stacking_item_has_rule", "stacking_advanced", "stacking_advanced_tip",
         "stacking_quick_hidden", "stacking_info_hidden_feature", "stacking_field_hidden",
+        "stacking_quick_global_add_tip", "stacking_quick_global_delete_tip", "stacking_quick_global_overridden",
+        "stacking_quick_global_deleted", "stacking_quick_global_delete_none", "stacking_global_rules",
+        "stacking_globals_empty", "stacking_global_add", "stacking_global_switch_tip", "stacking_global_delete_tip",
+        "terminal_search_tip_title", "terminal_search_tip_tags", "terminal_search_tip_types",
+        "terminal_search_tip_descriptions", "terminal_search_tip_identifier", "terminal_search_tip_negate",
+        "terminal_search_tip_or", "terminal_search_tip_quote", "terminal_search_tip_pinyin",
+        "terminal_search_tip_clear", "stacking_item_search_tip", "stacking_rule_search_tip",
+        "stacking_info_item_rules", "stacking_info_global_rules", "stacking_info_item_off",
+        "stacking_info_difference_overridden", "stacking_rule_overrides_global", "stacking_rule_same_as_global",
+        "stacking_item_overrides", "stacking_global_overridden_by",
     ))
     text_resources = [entry["path"] for entry in _resource_contract()["resources"]
                       if Path(entry["path"]).suffix == ".txt"]

@@ -55,7 +55,7 @@ public static class StackingConfigCodec
     /// <summary>The longest text accepted.</summary>
     public const int MaxLength = 16384;
 
-    private const int Version = 4;
+    private const int Version = 5;
     private static readonly string VersionHeader = "v" + Version.ToString(CultureInfo.InvariantCulture);
     private const string MarkerPrefix = "marker\t";
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -67,6 +67,12 @@ public static class StackingConfigCodec
         var builder = new StringBuilder();
         builder.Append(VersionHeader).Append('\n').Append(MarkerPrefix).Append(config.Marker.Format())
             .Append('\n').Append("advanced\t").Append(config.Advanced ? '1' : '0');
+        foreach (var row in config.Globals)
+        {
+            builder.Append('\n').Append("global\t").Append(EncodeText(row.FieldId)).Append('\t')
+                .Append(row.Mode == StackingMode.Ignore ? "ignore" : "match").Append('\t').Append(row.Enabled ? '1' : '0');
+        }
+
         foreach (var item in config.Items)
         {
             builder.Append('\n').Append("item\t").Append(EncodeText(item.ItemId)).Append('\t').Append(item.Enabled ? '1' : '0');
@@ -118,6 +124,8 @@ public static class StackingConfigCodec
             default: return StackingConfigReadResult.Unreadable(text, "bad_advanced");
         }
 
+        var globals = new List<StackingGlobalRule>();
+        var globalFields = new HashSet<string>(StringComparer.Ordinal);
         var items = new List<StackingItemRule>();
         var itemIds = new HashSet<string>(StringComparer.Ordinal);
         string? itemId = null;
@@ -127,6 +135,26 @@ public static class StackingConfigCodec
         for (var i = 3; i < lines.Length; i++)
         {
             var parts = lines[i].Split('\t');
+            if (parts[0] == "global")
+            {
+                // Global rows come before the first item.
+                if (parts.Length != 4 || itemId != null) return StackingConfigReadResult.Unreadable(text, "bad_line");
+                if (!TryReadRule(parts, out var globalRule, out var globalReason))
+                    return StackingConfigReadResult.Unreadable(text, globalReason);
+                if (!globalFields.Add(globalRule.FieldId)) return StackingConfigReadResult.Unreadable(text, "duplicate_global");
+                if (globals.Count >= StackingConfig.MaxGlobals) return StackingConfigReadResult.Unreadable(text, "too_many_globals");
+                bool globalEnabled;
+                switch (parts[3])
+                {
+                    case "1": globalEnabled = true; break;
+                    case "0": globalEnabled = false; break;
+                    default: return StackingConfigReadResult.Unreadable(text, "bad_switch");
+                }
+
+                globals.Add(new StackingGlobalRule(globalRule.FieldId, globalRule.Mode, globalEnabled));
+                continue;
+            }
+
             if (parts.Length != 3) return StackingConfigReadResult.Unreadable(text, "bad_line");
             if (parts[0] == "item")
             {
@@ -157,7 +185,7 @@ public static class StackingConfigCodec
         }
 
         if (itemId != null) items.Add(new StackingItemRule(itemId, enabled, rules));
-        return StackingConfigReadResult.Ok(new StackingConfig(items, marker, advanced));
+        return StackingConfigReadResult.Ok(new StackingConfig(items, marker, advanced, globals));
     }
 
     private static bool TryReadRule(string[] parts, out StackingRule rule, out string reason)

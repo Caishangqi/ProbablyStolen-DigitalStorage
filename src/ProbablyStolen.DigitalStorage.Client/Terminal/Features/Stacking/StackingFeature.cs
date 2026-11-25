@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
@@ -24,8 +25,14 @@ public static class StackingFeature
     /// <summary>The edit button id, shown for one merged slot.</summary>
     public const string EditActionId = "stacking.edit";
 
-    /// <summary>The delete button id, shown for one merged slot; it deletes only the rows merging that slot.</summary>
+    /// <summary>The delete button id, shown for one merged slot; it deletes only the item rows merging that slot.</summary>
     public const string DeleteActionId = "stacking.delete";
+
+    /// <summary>The global add button id, shown for two or more slots of one item that differ in fields no global row names.</summary>
+    public const string GlobalAddActionId = "stacking.global_add";
+
+    /// <summary>The global delete button id, shown for one merged slot; it deletes only the global rows merging that slot.</summary>
+    public const string GlobalDeleteActionId = "stacking.global_delete";
 
     /// <summary>The screen id of the rules page.</summary>
     public const string RulesScreenId = "stacking.rules";
@@ -56,11 +63,15 @@ public static class StackingFeature
             StackingModule.IsInstalled, _ => rules,
             context => context.Commands.PushScreen(platform.CreateRulesScreen(context.Window))));
 
-        AddQuick(registry, AddActionId, 0, StackingQuickKind.AddNew, "button_add", "stacking_quick_add_tip",
-            context => QuickAdd(context, platform));
-        AddQuick(registry, AppendActionId, 0, StackingQuickKind.AddToExisting, "button_add", "stacking_quick_append_tip",
-            context => QuickAdd(context, platform));
-        AddQuick(registry, EditActionId, 10, StackingQuickKind.EditMixed, "button_edit", "stacking_quick_edit_tip",
+        AddQuick(registry, AddActionId, 0, (selection, _) => selection.Kind == StackingQuickKind.AddNew, "button_add",
+            "stacking_quick_add_tip", context => QuickAdd(context, platform));
+        AddQuick(registry, AppendActionId, 0, (selection, _) => selection.Kind == StackingQuickKind.AddToExisting, "button_add",
+            "stacking_quick_append_tip", context => QuickAdd(context, platform));
+        var globalAdd = new GlobalAddCheck(platform);
+        AddQuick(registry, GlobalAddActionId, 5, globalAdd.IsAvailable, GlobalAddIcon, "stacking_quick_global_add_tip",
+            context => QuickAddGlobal(context, platform));
+        AddQuick(registry, EditActionId, 10, (selection, _) => selection.Kind == StackingQuickKind.EditMixed, "button_edit",
+            "stacking_quick_edit_tip",
             context =>
             {
                 var selection = Classify(context);
@@ -68,17 +79,15 @@ public static class StackingFeature
                     context.Commands.PushScreen(platform.CreateItemEditor(context.Window, selection.ItemId!));
                 else context.Commands.ClearSelection();
             });
-        AddQuick(registry, DeleteActionId, 20, StackingQuickKind.EditMixed, "button_delete", "stacking_quick_delete_tip",
-            context =>
-            {
-                var selection = Classify(context);
-                var message = selection.Kind != StackingQuickKind.EditMixed ? null
-                    : StackingQuickActions.DeleteForSelection(context, StackingProjector.StoreOf(context.FeatureData),
-                        platform.ReadAttributes(context.Window, selection.Groups[0].Members));
-                if (message == StackingQuickActions.DeletedKey) platform.Regroup(context.Window);
-                context.Commands.ClearSelection();
-                if (message != null) context.Commands.ShowMessage(message);
-            });
+        AddQuick(registry, DeleteActionId, 20, (selection, _) => selection.Kind == StackingQuickKind.EditMixed &&
+            selection.HasItemRule, "button_delete", "stacking_quick_delete_tip",
+            context => QuickDelete(context, platform, StackingQuickActions.DeleteForSelection,
+                StackingQuickActions.DeletedKey));
+        AddQuick(registry, GlobalDeleteActionId, 25, (selection, context) => selection.Kind == StackingQuickKind.EditMixed &&
+            StackingQuickActions.HasGlobalIgnore(Config(context)), GlobalDeleteIcon,
+            "stacking_quick_global_delete_tip",
+            context => QuickDelete(context, platform, StackingQuickActions.DeleteGlobalForSelection,
+                StackingQuickActions.GlobalDeletedKey));
 
         ScreenBackButton.Register(registry, RulesScreenId, StorageTerminal.StorageTerminalFeature.RightDockTitleKey);
         ScreenBackButton.Register(registry, ItemEditorScreenId, StorageTerminal.StorageTerminalFeature.RightDockTitleKey);
@@ -89,17 +98,83 @@ public static class StackingFeature
         registry.AddTooltipContributor(new StackingInfoTooltip());
     }
 
-    private static void AddQuick(TerminalRegistry registry, string id, int order, StackingQuickKind kind, string icon,
-        string tooltip, Action<TerminalContext> press)
+    /// <summary>The icon of the global add button.</summary>
+    public const string GlobalAddIcon = "button_add_global";
+
+    /// <summary>The icon of the global delete button.</summary>
+    public const string GlobalDeleteIcon = "button_delete_global";
+
+    private static void AddQuick(TerminalRegistry registry, string id, int order,
+        Func<StackingQuickSelection, TerminalContext, bool> shows, string icon, string tooltip, Action<TerminalContext> press)
     {
         var appearance = new ButtonAppearance(icon, tooltip);
         registry.AddAction(new TerminalAction(id, order, DockSide.Right, ActionPlacement.Rail,
-            ActionScope.View(TerminalRegistry.StorageTerminalName), context => Classify(context).Kind == kind,
+            ActionScope.View(TerminalRegistry.StorageTerminalName), context => shows(Classify(context), context),
             _ => appearance, press));
     }
 
+    private static StackingConfig? Config(TerminalContext context) => StackingProjector.StoreOf(context.FeatureData).Effective();
+
     private static StackingQuickSelection Classify(TerminalContext context) =>
         StackingQuickActions.Classify(context, StackingProjector.StoreOf(context.FeatureData).Effective());
+
+    private static void QuickDelete(TerminalContext context, IStackingPlatform platform,
+        Func<TerminalContext, StackingConfigStore, Extensions.EntryAttributes, string?> delete, string deletedKey)
+    {
+        var selection = Classify(context);
+        var message = selection.Kind != StackingQuickKind.EditMixed ? null
+            : delete(context, StackingProjector.StoreOf(context.FeatureData),
+                platform.ReadAttributes(context.Window, selection.Groups[0].Members));
+        if (message == deletedKey) platform.Regroup(context.Window);
+        context.Commands.ClearSelection();
+        if (message != null) context.Commands.ShowMessage(message);
+    }
+
+    private static void QuickAddGlobal(TerminalContext context, IStackingPlatform platform)
+    {
+        var selection = Classify(context);
+        var result = StackingQuickResult.Unavailable;
+        if (selection.Kind is StackingQuickKind.AddNew or StackingQuickKind.AddToExisting)
+        {
+            var members = selection.Groups.Select(group => group.Representative).ToArray();
+            result = StackingQuickActions.AddGlobalFromSelection(context, StackingProjector.StoreOf(context.FeatureData),
+                platform.ReadAttributes(context.Window, members));
+        }
+
+        if (result is StackingQuickResult.Merged or StackingQuickResult.StillSeparate or StackingQuickResult.OverriddenByItem)
+            platform.Regroup(context.Window);
+        context.Commands.ClearSelection();
+        if (StackingQuickActions.MessageOf(result) is { } message) context.Commands.ShowMessage(message);
+    }
+
+    /// <summary>
+    /// Decides whether the global add shows. It compares the selected slots, which reads their attributes, so the
+    /// answer is kept until the selection or the settings change.
+    /// </summary>
+    private sealed class GlobalAddCheck
+    {
+        private readonly IStackingPlatform _platform;
+        private StackingConfig? _config;
+        private string[]? _groups;
+        private bool _available;
+
+        internal GlobalAddCheck(IStackingPlatform platform) => _platform = platform;
+
+        internal bool IsAvailable(StackingQuickSelection selection, TerminalContext context)
+        {
+            if (selection.Kind is not (StackingQuickKind.AddNew or StackingQuickKind.AddToExisting)) return false;
+            var config = Config(context);
+            if (config == null) return false;
+            var groups = selection.Groups.Select(group => group.Id).ToArray();
+            if (ReferenceEquals(config, _config) && _groups != null && _groups.SequenceEqual(groups)) return _available;
+            var members = selection.Groups.Select(group => group.Representative).ToArray();
+            _available = StackingQuickActions.GlobalAdditions(selection, config,
+                _platform.ReadAttributes(context.Window, members)).Count > 0;
+            _config = config;
+            _groups = groups;
+            return _available;
+        }
+    }
 
     private static void QuickAdd(TerminalContext context, IStackingPlatform platform)
     {

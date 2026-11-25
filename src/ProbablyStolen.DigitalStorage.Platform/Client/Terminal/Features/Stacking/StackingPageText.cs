@@ -27,6 +27,20 @@ internal static class StackingPageText
         return field.FeatureId != null ? text.Get(field.DescriptionKey, field.FeatureId) : text.Get(field.DescriptionKey);
     }
 
+    /// <summary>The light yellow behind an item rule row that overrides a global row; it marks a choice, not an error.</summary>
+    internal static readonly Color OverrideFill = new(1f, 0.85f, 0.35f, 0.18f);
+
+    /// <summary>The light yellow of an item name whose rule overrides global rows.</summary>
+    internal static readonly Color OverrideText = new(1f, 0.86f, 0.5f, 1f);
+
+    /// <summary>Describes how an item rule row relates to the global rows, or null when no switched-on row names its field.</summary>
+    internal static string? GlobalRelation(ModText text, StackingConfig config, StackingRule row)
+    {
+        if (config.OverriddenGlobal(row) is { } global)
+            return text.Get("stacking_rule_overrides_global", text.Get(ModeKey(global.Mode)), text.Get(ModeKey(row.Mode)));
+        return config.RepeatsGlobal(row) ? text.Get("stacking_rule_same_as_global") : null;
+    }
+
     internal static string ModeKey(StackingMode mode) =>
         mode == StackingMode.Ignore ? "stacking_mode_ignore" : "stacking_mode_match";
 

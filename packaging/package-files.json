@@ -704,6 +704,42 @@
       }
     },
     {
+      "path": "Textures/button_add_global.png",
+      "image": {
+        "source": [
+          16,
+          16
+        ],
+        "runtime": [
+          16,
+          16
+        ],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_delete_global.png",
+      "image": {
+        "source": [
+          16,
+          16
+        ],
+        "runtime": [
+          16,
+          16
+        ],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
       "path": "Textures/annotation_square.png",
       "image": {
         "source": [

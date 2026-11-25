@@ -184,13 +184,85 @@ public sealed class StackingFeatureTests
         Assert.That(panel.Lines.Select(line => (line.Role, line.TextKey)), Is.EqualTo(new[]
         {
             (TooltipRole.Title, StackingInfoTooltip.TitleKey), (TooltipRole.Label, StackingInfoTooltip.KindsKey),
-            (TooltipRole.Label, StackingInfoTooltip.RulesKey), (TooltipRole.Body, StackingInfoTooltip.RuleKey)
+            (TooltipRole.Label, StackingInfoTooltip.ItemRulesKey), (TooltipRole.Body, StackingInfoTooltip.RuleKey)
         }));
         Assert.That(panel.Lines[1].Args.Single(), Is.EqualTo(3));
         var name = (LocalizedText)panel.Lines[3].Args.Single();
         Assert.That(name.TextKey, Is.EqualTo(StackingFieldCatalog.Find(StackingFieldCatalog.ContainerContent)!.NameKey));
         Assert.That(pipeline.Tooltip(DisplayEntry.Single(Bottle(1, 1)), Context(data, Installed)), Is.Empty);
         Assert.That(pipeline.Tooltip(mixed, Context(data, Array.Empty<string>())), Is.Empty);
+    }
+
+    [Test]
+    public void InfoTooltip_GroupsRulesBySourceAndNotesASwitchedOffItemRule()
+    {
+        var data = new MemoryData();
+        Save(data, new StackingConfig(new[]
+        {
+            new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Ignore) })
+        }, globals: new[] { new StackingGlobalRule("tag:OTHER", StackingMode.Ignore, true) }));
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var first = Tagged("fruit", Tag("A"), new CanonicalIdentityTag("OTHER", enabled: true, valueInt: 1));
+        var second = Tagged("fruit", Tag("B"), new CanonicalIdentityTag("OTHER", enabled: true, valueInt: 2));
+        var mixed = new DisplayEntry("g", new[] { first, second });
+        var values = Values((first, 20), (second, 20));
+
+        var lines = pipeline.Tooltip(mixed, Context(data, Installed), values).Single().Lines;
+        Assert.That(lines.Select(line => (line.TextKey, line.Args.FirstOrDefault())), Is.EqualTo(new (string, object?)[]
+        {
+            (StackingInfoTooltip.TitleKey, null), (StackingInfoTooltip.KindsKey, 2),
+            (StackingInfoTooltip.ItemRulesKey, null), (StackingInfoTooltip.RuleKey, "VARIANT"),
+            (StackingInfoTooltip.GlobalRulesKey, null), (StackingInfoTooltip.RuleKey, "OTHER")
+        }));
+
+        var store = new StackingConfigStore(data);
+        store.TryCommit(store.Effective()!.WithAllEnabled(false));
+        Assert.That(pipeline.Tooltip(mixed, Context(data, Installed), values).Single().Lines.Select(line => line.TextKey),
+            Does.Contain(StackingInfoTooltip.ItemRuleOffKey).And.Not.Contain(StackingInfoTooltip.ItemRulesKey));
+    }
+
+    [Test]
+    public void Config_ReportsItemRowsThatOverrideOrRepeatGlobalRows()
+    {
+        var config = new StackingConfig(new[]
+        {
+            new StackingItemRule("a", true, new[]
+            {
+                new StackingRule("x", StackingMode.Match), new StackingRule("y", StackingMode.Ignore)
+            }),
+            new StackingItemRule("b", false, new[] { new StackingRule("x", StackingMode.Match) })
+        }, globals: new[]
+        {
+            new StackingGlobalRule("x", StackingMode.Ignore, true), new StackingGlobalRule("y", StackingMode.Ignore, true),
+            new StackingGlobalRule("z", StackingMode.Ignore, false)
+        });
+
+        Assert.That(config.OverriddenGlobal(new StackingRule("x", StackingMode.Match))!.FieldId, Is.EqualTo("x"));
+        Assert.That(config.OverriddenGlobal(new StackingRule("y", StackingMode.Ignore)), Is.Null);
+        Assert.That(config.RepeatsGlobal(new StackingRule("y", StackingMode.Ignore)), Is.True);
+        Assert.That(config.OverriddenGlobal(new StackingRule("z", StackingMode.Match)), Is.Null, "A switched-off row is not in effect.");
+        Assert.That(config.CountOverrides("x"), Is.EqualTo(1), "A switched-off item rule overrides nothing.");
+        Assert.That(config.IsItemField("a", "x"), Is.True);
+        Assert.That(config.IsItemField("b", "x"), Is.False);
+    }
+
+    [Test]
+    public void SelectionTooltip_NotesADifferenceTheItemRuleKeepsAgainstTheGlobalRow()
+    {
+        var data = new MemoryData();
+        Save(data, new StackingConfig(new[]
+        {
+            new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Match) })
+        }, globals: new[] { new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true) }));
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var a = Group("a", Tagged("fruit", Tag("A")));
+        var b = Group("b", Tagged("fruit", Tag("B")));
+        var values = Values((a.Representative, 20), (b.Representative, 20));
+
+        var lines = pipeline.TooltipForSelection(a, Context(data, Installed), new[] { a, b }, values).Single().Lines;
+        Assert.That(lines.Select(line => line.TextKey), Does.Contain(StackingInfoTooltip.SelectionOverriddenKey));
     }
 
     [Test]
@@ -375,8 +447,8 @@ public sealed class StackingFeatureTests
         Assert.That(registry.Buttons.Where(entry => entry.Side == DockSide.Right).Select(entry => entry.Button.Id),
             Is.EquivalentTo(new[]
             {
-                StackingFeature.AddActionId, StackingFeature.AppendActionId, StackingFeature.EditActionId,
-                StackingFeature.DeleteActionId
+                StackingFeature.AddActionId, StackingFeature.AppendActionId, StackingFeature.GlobalAddActionId,
+                StackingFeature.EditActionId, StackingFeature.DeleteActionId, StackingFeature.GlobalDeleteActionId
             }));
         Assert.That(registry.StorageProjectors.Single().Id, Is.EqualTo(StackingProjector.ProjectorId));
     }
@@ -559,7 +631,9 @@ public sealed class StackingFeatureTests
         Assert.That(Kind(data, a, b, other), Is.EqualTo(StackingQuickKind.None), "Three slots, one of another item.");
         Assert.That(Kind(data, a, b, Group("c", Tagged("fruit", Tag("C")))), Is.EqualTo(StackingQuickKind.AddNew),
             "Three slots of one item.");
-        Assert.That(Kind(data, mixed), Is.EqualTo(StackingQuickKind.None), "A mixed slot needs a rule of its item.");
+        Assert.That(Kind(data, mixed), Is.EqualTo(StackingQuickKind.EditMixed), "Global rows alone can merge a slot.");
+        Assert.That(StackingQuickActions.Classify(Context(data, Installed, mixed), new StackingConfigStore(data).Effective())
+            .HasItemRule, Is.False);
         Assert.That(Kind(data, mixed, a), Is.EqualTo(StackingQuickKind.AddNew), "A merged slot can join another slot.");
         Assert.That(Kind(data, mixed, other), Is.EqualTo(StackingQuickKind.None), "Different items.");
         Assert.That(Kind(data), Is.EqualTo(StackingQuickKind.None));
@@ -783,6 +857,127 @@ public sealed class StackingFeatureTests
             "The rows that do not merge this slot stay.");
         Assert.That(StackingQuickActions.DeleteForSelection(Context(data, Installed, mixed), store, Values((a, 20), (b, 20))),
             Is.EqualTo(StackingQuickActions.NothingToDeleteKey), "A stale group has no row left that merges it.");
+    }
+
+    [Test]
+    public void QuickAddGlobal_AppendsSwitchedOnIgnoreRowsThatMergeEveryItem()
+    {
+        var data = new MemoryData();
+        Save(data, StackingConfig.Default.WithGlobal(new StackingGlobalRule("tag:OTHER", StackingMode.Match, false)));
+        var store = new StackingConfigStore(data);
+        var left = Tagged("fruit", Tag("A"));
+        var right = Tagged("fruit", Tag("B"));
+        var selection = new[] { Group("l", left), Group("r", right) };
+        var values = Values((left, 20), (right, 20));
+
+        Assert.That(StackingQuickActions.GlobalAdditions(
+            StackingQuickActions.Classify(Context(data, Installed, selection), store.Effective()), store.Effective()!, values),
+            Is.EqualTo(new[] { "tag:VARIANT" }));
+        Assert.That(StackingQuickActions.AddGlobalFromSelection(Context(data, Installed, selection), store, values),
+            Is.EqualTo(StackingQuickResult.Merged));
+        var config = store.Effective()!;
+        Assert.That(config.Items, Is.Empty, "The item gets no rule of its own.");
+        Assert.That(config.Globals, Is.EqualTo(new[]
+        {
+            new StackingGlobalRule("tag:OTHER", StackingMode.Match, false),
+            new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true)
+        }), "Existing rows keep their mode and switch.");
+        var otherA = Tagged("other_item", Tag("A"));
+        var otherB = Tagged("other_item", Tag("B"));
+        var otherValues = Values((otherA, 20), (otherB, 20));
+        Assert.That(StackingProjection.Compute(otherA.Key, config, new StackingAttributes(otherValues.For(otherA.Key))),
+            Is.EqualTo(StackingProjection.Compute(otherB.Key, config, new StackingAttributes(otherValues.For(otherB.Key)))),
+            "Global rows apply to every item.");
+        Assert.That(StackingQuickActions.GlobalAdditions(
+            StackingQuickActions.Classify(Context(data, Installed, selection), config), config, values), Is.Empty,
+            "Nothing is left to add.");
+    }
+
+    [Test]
+    public void QuickAddGlobal_ReportsAnItemRuleThatMatchesTheField()
+    {
+        var data = new MemoryData();
+        Save(data, new StackingConfig(new[]
+        {
+            new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Match) })
+        }));
+        var store = new StackingConfigStore(data);
+        var left = Tagged("fruit", Tag("A"));
+        var right = Tagged("fruit", Tag("B"));
+
+        Assert.That(StackingQuickActions.AddGlobalFromSelection(Context(data, Installed, Group("l", left), Group("r", right)),
+            store, Values((left, 20), (right, 20))), Is.EqualTo(StackingQuickResult.OverriddenByItem));
+        Assert.That(store.Effective()!.FindGlobal("tag:VARIANT"), Is.Not.Null);
+        Assert.That(StackingQuickActions.MessageOf(StackingQuickResult.OverriddenByItem),
+            Is.EqualTo(StackingQuickActions.OverriddenByItemKey));
+    }
+
+    [Test]
+    public void QuickDelete_ItemAndGlobalDeletesLeaveEachOtherAlone()
+    {
+        var data = new MemoryData();
+        var global = new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true);
+        var unrelated = new StackingGlobalRule("tag:OTHER", StackingMode.Ignore, true);
+        Save(data, StackingConfig.Default.WithGlobals(new[] { global, unrelated }));
+        var store = new StackingConfigStore(data);
+        var a = Tagged("fruit", Tag("A"));
+        var b = Tagged("fruit", Tag("B"));
+        var mixed = new DisplayEntry("m", new[] { a, b });
+        var values = Values((a, 20), (b, 20));
+
+        Assert.That(StackingQuickActions.DeleteForSelection(Context(data, Installed, mixed), store, values), Is.Null,
+            "Without an item rule there is no item row to delete.");
+        store.TryCommit(store.Effective()!.WithItem(new StackingItemRule("fruit", true,
+            new[] { new StackingRule("tag:KEEP", StackingMode.Ignore) })));
+        Assert.That(StackingQuickActions.DeleteForSelection(Context(data, Installed, mixed), store, values),
+            Is.EqualTo(StackingQuickActions.NothingToDeleteKey), "The global row merges the slot, not the item rule.");
+        Assert.That(StackingQuickActions.DeleteGlobalForSelection(Context(data, Installed, mixed), store, values),
+            Is.EqualTo(StackingQuickActions.GlobalDeletedKey));
+        Assert.That(store.Effective()!.Globals, Is.EqualTo(new[] { unrelated }), "Only the merging global row goes.");
+        Assert.That(store.Effective()!.Find("fruit")!.Rules.Single().FieldId, Is.EqualTo("tag:KEEP"));
+        Assert.That(StackingQuickActions.DeleteGlobalForSelection(Context(data, Installed, mixed), store, values),
+            Is.EqualTo(StackingQuickActions.NothingGlobalToDeleteKey));
+    }
+
+    [Test]
+    public void QuickDeleteGlobal_SkipsFieldsTheItemRuleNames()
+    {
+        var data = new MemoryData();
+        Save(data, new StackingConfig(new[]
+        {
+            new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Ignore) })
+        }, globals: new[] { new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true) }));
+        var store = new StackingConfigStore(data);
+        var a = Tagged("fruit", Tag("A"));
+        var b = Tagged("fruit", Tag("B"));
+        var mixed = new DisplayEntry("m", new[] { a, b });
+
+        Assert.That(StackingQuickActions.DeleteGlobalForSelection(Context(data, Installed, mixed), store, Values((a, 20), (b, 20))),
+            Is.EqualTo(StackingQuickActions.NothingGlobalToDeleteKey), "The item rule, not the global row, merges the slot.");
+        Assert.That(store.Effective()!.Globals, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void QuickGlobalButtons_ShowForAddableDifferencesAndSwitchedOnIgnoreRows()
+    {
+        var registry = new TerminalRegistry(new MemoryConfig(), _ => { });
+        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false);
+        var add = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.GlobalAddActionId);
+        var delete = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.GlobalDeleteActionId);
+        var itemDelete = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.DeleteActionId);
+        var data = new MemoryData();
+        var a = Tagged("fruit", Tag("A"));
+        var b = Tagged("fruit", Tag("B"));
+        var mixed = new DisplayEntry("m", new[] { a, b });
+
+        Assert.That(add.IsVisible(Context(data, Installed, Group("l", a), Group("r", b))), Is.True);
+        Assert.That(delete.IsVisible(Context(data, Installed, mixed)), Is.False, "No global row ignores anything.");
+        Save(data, StackingConfig.Default.WithGlobal(new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, false)));
+        Assert.That(add.IsVisible(Context(data, Installed, Group("l", a), Group("r", b))), Is.False,
+            "A field with a global row, even switched off, is not added again.");
+        Save(data, StackingConfig.Default.WithGlobal(new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true)));
+        Assert.That(delete.IsVisible(Context(data, Installed, mixed)), Is.True);
+        Assert.That(itemDelete.IsVisible(Context(data, Installed, mixed)), Is.False, "The item has no rule of its own.");
     }
 
     [Test]

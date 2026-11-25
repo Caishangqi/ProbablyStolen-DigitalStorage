@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Stacking;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -11,7 +12,9 @@ using UnityEngine.UI;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Stacking;
 
-/// <summary>Manages saved item rules and preserves the list state while an item's editor is open.</summary>
+/// <summary>
+/// Manages the global rows and the saved item rules, and preserves both lists' state while an item's editor is open.
+/// </summary>
 internal sealed class StackingRulesScreen : SubScreen
 {
     private const float Gap = 4f;
@@ -19,8 +22,10 @@ internal sealed class StackingRulesScreen : SubScreen
     private const float CountWidth = 110f;
     private const float ToggleWidth = 72f;
     private const float PickerWidth = 320f;
-    // The list keeps this many rows of height whatever it holds, so the page does not resize as rules come and go.
-    private const int VisibleRows = 6;
+    private const float ModeWidth = 96f;
+    // Both lists keep this many rows of height whatever they hold, so the page does not resize as rules come and go.
+    private const int VisibleRows = 4;
+    private static readonly StackingMode[] Modes = { StackingMode.Match, StackingMode.Ignore };
     private const float RowHeight = RuleCardWidgets.ControlHeight + 2 * RuleCardWidgets.CardPadding;
 
     private readonly StackingRulesEditor _editor;
@@ -30,9 +35,13 @@ internal sealed class StackingRulesScreen : SubScreen
     private TerminalInventoryRefreshHandler? _frame;
     private RectTransform? _rowHost;
     private ScrollRect? _rowScroll;
+    private RectTransform? _globalHost;
+    private ScrollRect? _globalScroll;
     private StackingItemNames? _names;
+    private HashSet<string>? _visibleFieldIds;
     private string _query = string.Empty;
-    private float? _pendingScroll;
+    private string _globalQuery = string.Empty;
+    private (float Rows, float Globals)? _pendingScroll;
 
     internal StackingRulesScreen(TerminalWindowHost window, StorageTerminalServices storage, IStackingPlatform platform)
         : base(window)
@@ -63,6 +72,8 @@ internal sealed class StackingRulesScreen : SubScreen
 
         _rowHost = null;
         _rowScroll = null;
+        _globalHost = null;
+        _globalScroll = null;
         _names = new StackingItemNames(Window, _storage);
         if (!_editor.IsEditable)
         {
@@ -74,13 +85,15 @@ internal sealed class StackingRulesScreen : SubScreen
         BuildMarker(builder, config);
         builder.AddToggle(text.Get("stacking_advanced"), config.Advanced, on => Edit(() => _editor.SetAdvanced(on)));
         TerminalTooltipPresenter.SetText(builder.Last, text.Get("stacking_advanced_tip"));
-        BuildListHeader(builder, config);
+        BuildGlobals(builder, config);
+        BuildListHeader(builder, "stacking_item_rules", config.Items.Count);
         builder.AddInput(text.Get("stacking_item_search"), _query, onTyping: typed =>
         {
             _query = typed ?? string.Empty;
             RebuildRows();
             Window.FitSubScreenContent(this);
         });
+        SearchInputs.Attach(builder.Last, text, "stacking_item_search_tip", _storage.Search, syntax: false);
         RuleCardWidgets.SetSize(builder.Last, BodyWidth, RuleCardWidgets.ControlHeight);
         builder.BeginColumn(Gap);
         _rowHost = builder.CurrentContainer;
@@ -110,6 +123,8 @@ internal sealed class StackingRulesScreen : SubScreen
         _dropdown = null;
         _rowHost = null;
         _rowScroll = null;
+        _globalHost = null;
+        _globalScroll = null;
         if (_frame != null) UnityEngine.Object.Destroy(_frame);
         _frame = null;
         base.Dispose();
@@ -150,14 +165,167 @@ internal sealed class StackingRulesScreen : SubScreen
         builder.End();
     }
 
-    private void BuildListHeader(CustomUIBuilder builder, StackingConfig config)
+    /// <summary>
+    /// The global rows: a search, one card per field with its switch, mode and delete, then the bulk actions.
+    /// </summary>
+    private void BuildGlobals(CustomUIBuilder builder, StackingConfig config)
+    {
+        var text = Window.Text;
+        BuildListHeader(builder, "stacking_global_rules", config.Globals.Count);
+        _visibleFieldIds = config.Advanced ? null : new HashSet<string>(StackingRulesEditor.GlobalMenuOptions(config,
+            StackingPageText.StoredKeys(Window, _storage), includeHidden: false).Select(option => option.Field.Id),
+            StringComparer.Ordinal);
+        builder.AddInput(text.Get("stacking_rule_search"), _globalQuery, onTyping: typed =>
+        {
+            _globalQuery = typed ?? string.Empty;
+            RebuildGlobals();
+            Window.FitSubScreenContent(this);
+        });
+        SearchInputs.Attach(builder.Last, text, "stacking_rule_search_tip", _storage.Search, syntax: false);
+        RuleCardWidgets.SetSize(builder.Last, BodyWidth, RuleCardWidgets.ControlHeight);
+        builder.BeginColumn(Gap);
+        _globalHost = builder.CurrentContainer;
+        RebuildGlobals();
+        builder.End();
+
+        var any = config.Globals.Count > 0;
+        builder.BeginRow(Gap, TextAnchor.MiddleLeft);
+        RuleCardWidgets.FixWidth(builder.CurrentContainer.gameObject, BodyWidth);
+        AddBulk(builder, "stacking_all_on", any, () => _editor.SetAllGlobalsEnabled(true));
+        AddBulk(builder, "stacking_all_off", any, () => _editor.SetAllGlobalsEnabled(false));
+        AddBulk(builder, "stacking_all_delete", any, () => _editor.RemoveAllGlobals());
+        builder.AddFlexibleSpace();
+        CustomUIElement? add = null;
+        add = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, ButtonIcons.Add, false,
+            () => OpenGlobalPicker(add!), RuleCardWidgets.ControlHeight);
+        TerminalTooltipPresenter.SetButtonText(add, text.Get("stacking_global_add"));
+        builder.End();
+    }
+
+    private void RebuildGlobals()
+    {
+        if (_globalHost == null) return;
+        _dropdown?.Close();
+        CustomUIBuilder.ClearContainer(_globalHost);
+        _globalScroll = null;
+        var globals = _editor.Config.Globals;
+        var rows = StackingRulesEditor.FindRows(globals.Select(row => row.Rule).ToArray(), _globalQuery, FieldName,
+            _storage.Search.MatchesText, showsIdentifier: ShowsIdentifier);
+        var builder = new CustomUIBuilder(CustomUIManager.Instance, Window.CustomWindow, _globalHost);
+        var rowWidth = BeginList(builder, rows.Count, out _globalScroll);
+        foreach (var row in rows) BuildGlobalRow(builder, globals[row], rowWidth);
+        if (rows.Count == 0)
+        {
+            builder.AddLabel(Window.Text.Get(_globalQuery.Trim().Length != 0 ? "stacking_rule_search_empty" : "stacking_globals_empty"));
+            RuleCardWidgets.FixWidth(builder.Last.root, rowWidth);
+            StackingPageText.Muted(builder.Last);
+        }
+
+        builder.End();
+        builder.End();
+    }
+
+    /// <summary>Opens a fixed-height list box with its scroll view; the caller closes both. Returns the row width.</summary>
+    private static float BeginList(CustomUIBuilder builder, int count, out ScrollRect? scroll)
+    {
+        RuleCardWidgets.BeginListBox(builder, Gap, BodyWidth, RuleCardWidgets.CardFill);
+        var inner = BodyWidth - 2 * RuleCardWidgets.ListPadding;
+        var parent = builder.CurrentContainer;
+        builder.BeginScroll(VisibleRows * (RowHeight + Gap) - Gap);
+        var view = parent.GetChild(parent.childCount - 1).gameObject;
+        var width = RuleCardWidgets.ConfigureListScroll(view, inner, Gap, count > VisibleRows);
+        scroll = view.GetComponentInChildren<ScrollRect>(true);
+        return width;
+    }
+
+    private void BuildGlobalRow(CustomUIBuilder builder, StackingGlobalRule row, float width)
+    {
+        var text = Window.Text;
+        var fieldId = row.FieldId;
+        RuleCardWidgets.BeginCard(builder, Gap, width);
+        var fieldName = TooltipLiteralText.ForRichText(FieldName(fieldId));
+        builder.AddLabel(fieldName);
+        RuleCardWidgets.FixWidth(builder.Last.root, width - 2 * RuleCardWidgets.CardPadding - ToggleWidth - ModeWidth -
+            RuleCardWidgets.ControlHeight - 3 * Gap);
+        RuleCardWidgets.Ellipsis(builder.Last);
+        var description = ShowsIdentifier(fieldId) && StackingFieldCatalog.Find(fieldId) is { } attribute
+            ? StackingPageText.Description(text, attribute) : string.Empty;
+        var overrides = row.Enabled ? _editor.Config.CountOverrides(fieldId) : 0;
+        var overridden = overrides > 0 ? text.Get("stacking_global_overridden_by", overrides) : string.Empty;
+        TerminalTooltipPresenter.SetText(builder.Last, string.Join("\n",
+            new[] { fieldName, TooltipLiteralText.ForRichText(description), overridden }.Where(line => line.Length > 0)));
+        builder.AddPointerButton(text.Get(row.Enabled ? "stacking_item_on" : "stacking_item_off"),
+            () => Edit(() => _editor.SetGlobalEnabled(fieldId, !row.Enabled)));
+        RuleCardWidgets.SetSize(builder.Last, ToggleWidth, RuleCardWidgets.ControlHeight);
+        TerminalTooltipPresenter.SetButtonText(builder.Last, text.Get("stacking_global_switch_tip"));
+        var modeLabels = Modes.Select(mode => new DropdownOption(text.Get(StackingPageText.ModeKey(mode)))).ToList();
+        var current = Array.IndexOf(Modes, row.Mode);
+        CustomUIElement? mode = null;
+        mode = PopupDropdown.AddField(builder, modeLabels[current].Label, ModeWidth, () =>
+        {
+            if (_dropdown == null || !((ITerminalViewHost)Window).IsCurrentSession()) return;
+            if (_dropdown.IsOpenFor(mode!)) _dropdown.Close();
+            else _dropdown.Open(mode!, modeLabels, current, choice => Edit(() => _editor.SetGlobalMode(fieldId, Modes[choice])));
+        });
+        var delete = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, "button_delete", false,
+            () => Edit(() => _editor.RemoveGlobal(fieldId)), RuleCardWidgets.ControlHeight);
+        TerminalTooltipPresenter.SetButtonText(delete, text.Get("stacking_global_delete_tip"));
+        builder.End();
+    }
+
+    /// <summary>Lists the attributes of every stored item that have no global row yet; choosing one adds it as ignore.</summary>
+    private void OpenGlobalPicker(CustomUIElement anchor)
+    {
+        if (_dropdown == null || !((ITerminalViewHost)Window).IsCurrentSession()) return;
+        if (_dropdown.IsOpenFor(anchor))
+        {
+            _dropdown.Close();
+            return;
+        }
+
+        var text = Window.Text;
+        var config = _editor.Config;
+        var options = StackingRulesEditor.GlobalMenuOptions(config, StackingPageText.StoredKeys(Window, _storage), config.Advanced)
+            .Where(option => config.FindGlobal(option.Field.Id) == null).ToArray();
+        var absence = text.Get("stacking_field_absent");
+        var hidden = text.Get("stacking_field_hidden");
+        var names = options.Select(option => StackingPageText.FieldName(text, option.Field.Id)).ToArray();
+        var details = options.Select((option, index) => (Title: TooltipLiteralText.ForRichText(names[index]),
+            Description: TooltipLiteralText.ForRichText(StackingPageText.Description(text, option.Field)),
+            Absence: option.AbsentFromInventory ? absence : option.Hidden ? hidden : null)).ToArray();
+        var labels = details.Select((detail, index) =>
+            new DropdownOption(detail.Title, detail.Absence ?? detail.Description, names[index])).ToArray();
+        // The search is cleared so the new row, appended last, is not filtered out.
+        _dropdown.Open(anchor, labels, -1, choice => Edit(() =>
+            {
+                var added = _editor.AddGlobal(options[choice].Field.Id);
+                if (added) _globalQuery = string.Empty;
+                return added;
+            }, revealGlobal: true),
+            text.Get("stacking_search"), preferredWidth: PickerWidth, hover: new StackingFieldTooltip(details));
+    }
+
+    private void AddBulk(CustomUIBuilder builder, string labelKey, bool enabled, Func<bool> edit)
+    {
+        builder.AddPointerButton(Window.Text.Get(labelKey), () => Edit(edit));
+        if (builder.Last.button != null) builder.Last.button.interactable = enabled;
+    }
+
+    private bool ShowsIdentifier(string fieldId) => _visibleFieldIds == null ||
+        !fieldId.StartsWith(StackingFieldCatalog.FeaturePrefix, StringComparison.Ordinal) || _visibleFieldIds.Contains(fieldId);
+
+    private string FieldName(string fieldId) => ShowsIdentifier(fieldId)
+        ? StackingPageText.FieldName(Window.Text, fieldId)
+        : Window.Text.Get("stacking_field_hidden");
+
+    private void BuildListHeader(CustomUIBuilder builder, string titleKey, int count)
     {
         var text = Window.Text;
         builder.BeginRow(Gap);
-        builder.AddLabel(text.Get("stacking_item_rules"));
+        builder.AddLabel(text.Get(titleKey));
         RuleCardWidgets.FixWidth(builder.Last.root, BodyWidth - Gap - CountWidth);
         // The bulk actions apply to every saved rule, so the count stays the total while searching.
-        builder.AddLabel(text.Get("stacking_item_rule_count", config.Items.Count));
+        builder.AddLabel(text.Get("stacking_item_rule_count", count));
         RuleCardWidgets.FixWidth(builder.Last.root, CountWidth);
         if (builder.Last.text != null)
         {
@@ -177,13 +345,7 @@ internal sealed class StackingRulesScreen : SubScreen
         var names = _names;
         var items = StackingRulesEditor.FindItems(_editor.Config, _query, names.Of, _storage.Search.MatchesText);
         var builder = new CustomUIBuilder(CustomUIManager.Instance, Window.CustomWindow, _rowHost);
-        RuleCardWidgets.BeginListBox(builder, Gap, BodyWidth, RuleCardWidgets.CardFill);
-        var inner = BodyWidth - 2 * RuleCardWidgets.ListPadding;
-        var parent = builder.CurrentContainer;
-        builder.BeginScroll(VisibleRows * (RowHeight + Gap) - Gap);
-        var view = parent.GetChild(parent.childCount - 1).gameObject;
-        var rowWidth = RuleCardWidgets.ConfigureListScroll(view, inner, Gap, items.Count > VisibleRows);
-        _rowScroll = view.GetComponentInChildren<ScrollRect>(true);
+        var rowWidth = BeginList(builder, items.Count, out _rowScroll);
 
         foreach (var item in items) BuildRow(builder, item, rowWidth, names);
         if (items.Count == 0)
@@ -208,6 +370,13 @@ internal sealed class StackingRulesScreen : SubScreen
         RuleCardWidgets.Ellipsis(builder.Last);
         var lore = TooltipLiteralText.ForRichText(itemId);
         if (!names.IsStored(itemId)) lore += "\n" + text.Get("stacking_item_absent");
+        var overrides = item.Enabled ? item.Rules.Count(row => _editor.Config.OverriddenGlobal(row) != null) : 0;
+        if (overrides > 0)
+        {
+            lore += "\n" + text.Get("stacking_item_overrides", overrides);
+            if (builder.Last.text != null) builder.Last.text.color = StackingPageText.OverrideText;
+        }
+
         TerminalTooltipPresenter.SetText(builder.Last, lore);
         builder.AddPointerButton(text.Get(item.Enabled ? "stacking_item_on" : "stacking_item_off"),
             () => Edit(() => _editor.SetItemEnabled(itemId, !item.Enabled)));
@@ -228,12 +397,9 @@ internal sealed class StackingRulesScreen : SubScreen
         var any = config.Items.Count > 0;
         builder.BeginRow(Gap, TextAnchor.MiddleLeft);
         RuleCardWidgets.FixWidth(builder.CurrentContainer.gameObject, BodyWidth);
-        builder.AddPointerButton(text.Get("stacking_all_on"), () => Edit(() => _editor.SetAllEnabled(true)));
-        if (builder.Last.button != null) builder.Last.button.interactable = any;
-        builder.AddPointerButton(text.Get("stacking_all_off"), () => Edit(() => _editor.SetAllEnabled(false)));
-        if (builder.Last.button != null) builder.Last.button.interactable = any;
-        builder.AddPointerButton(text.Get("stacking_all_delete"), () => Edit(() => _editor.RemoveAll()));
-        if (builder.Last.button != null) builder.Last.button.interactable = any;
+        AddBulk(builder, "stacking_all_on", any, () => _editor.SetAllEnabled(true));
+        AddBulk(builder, "stacking_all_off", any, () => _editor.SetAllEnabled(false));
+        AddBulk(builder, "stacking_all_delete", any, () => _editor.RemoveAll());
         builder.AddFlexibleSpace();
         CustomUIElement? add = null;
         add = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, ButtonIcons.Add, false,
@@ -270,32 +436,39 @@ internal sealed class StackingRulesScreen : SubScreen
         if (_platform.CreateItemEditor(Window, itemId) is SubScreen editor) Window.PushScreen(editor);
     }
 
-    private void Edit(Func<bool> edit)
+    // A global row just added goes to the end of its list, so that list scrolls to the bottom to show it.
+    private void Edit(Func<bool> edit, bool revealGlobal = false)
     {
         _dropdown?.Close();
-        var offset = _rowScroll?.content?.anchoredPosition.y ?? 0f;
-        edit();
+        var rows = Offset(_rowScroll);
+        var globals = Offset(_globalScroll);
+        var changed = edit();
+        if (changed && revealGlobal) globals = float.MaxValue;
         RefreshContent();
         Window.FitSubScreenContent(this);
-        RestoreScroll(offset);
-        // Restore after the window refits the list and resets its scroll position.
-        _pendingScroll = offset;
+        RestoreScroll(_rowScroll, rows);
+        RestoreScroll(_globalScroll, globals);
+        // Restore after the window refits the lists and resets their scroll positions.
+        _pendingScroll = (rows, globals);
     }
 
     private void Tick()
     {
         _dropdown?.CloseOnOutsidePress(StackingPageText.EventCamera(Window));
-        if (_pendingScroll is not { } offset) return;
+        if (_pendingScroll is not { } offsets) return;
         _pendingScroll = null;
-        RestoreScroll(offset);
+        RestoreScroll(_rowScroll, offsets.Rows);
+        RestoreScroll(_globalScroll, offsets.Globals);
     }
 
-    private void RestoreScroll(float offset)
+    private static float Offset(ScrollRect? scroll) => scroll?.content?.anchoredPosition.y ?? 0f;
+
+    private static void RestoreScroll(ScrollRect? scroll, float offset)
     {
-        if (_rowScroll == null || _rowScroll.content == null || _rowScroll.viewport == null) return;
-        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_rowScroll.transform);
-        _rowScroll.StopMovement();
-        var maxOffset = Mathf.Max(0f, _rowScroll.content.rect.height - _rowScroll.viewport.rect.height);
-        _rowScroll.verticalNormalizedPosition = maxOffset <= 0f ? 1f : 1f - Mathf.Clamp(offset, 0f, maxOffset) / maxOffset;
+        if (scroll == null || scroll.content == null || scroll.viewport == null) return;
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)scroll.transform);
+        scroll.StopMovement();
+        var maxOffset = Mathf.Max(0f, scroll.content.rect.height - scroll.viewport.rect.height);
+        scroll.verticalNormalizedPosition = maxOffset <= 0f ? 1f : 1f - Mathf.Clamp(offset, 0f, maxOffset) / maxOffset;
     }
 }

@@ -94,6 +94,7 @@ internal sealed class StackingItemEditorScreen : SubScreen
             RebuildCards();
             Window.FitSubScreenContent(this);
         });
+        SearchInputs.Attach(builder.Last, text, "stacking_rule_search_tip", _storage.Search, syntax: false);
         RuleCardWidgets.SetSize(builder.Last, BodyWidth - Gap - RuleCardWidgets.ControlHeight, RuleCardWidgets.ControlHeight);
         CustomUIElement? add = null;
         add = TerminalButtonView.AddIcon(builder, Window.ButtonIcons, ButtonIcons.Add, false,
@@ -196,13 +197,16 @@ internal sealed class StackingItemEditorScreen : SubScreen
         var text = Window.Text;
         var rule = _draft.Rules[row];
         RuleCardWidgets.BeginCard(builder, Gap, width);
+        var relation = StackingPageText.GlobalRelation(text, _editor.Config, rule);
         if (located) RuleCardWidgets.Fill(builder.CurrentContainer.gameObject, LocatedCardFill);
+        else if (_editor.Config.OverriddenGlobal(rule) != null)
+            RuleCardWidgets.Fill(builder.CurrentContainer.gameObject, StackingPageText.OverrideFill);
         var fieldName = TooltipLiteralText.ForRichText(FieldName(rule.FieldId));
         CustomUIElement? field = null;
         field = PopupDropdown.AddField(builder, fieldName, FieldWidth, () => OpenFieldPicker(field!, row));
         var description = ShowsIdentifier(rule.FieldId) && StackingFieldCatalog.Find(rule.FieldId) is { } attribute
             ? StackingPageText.Description(text, attribute) : string.Empty;
-        var lore = new[] { fieldName, TooltipLiteralText.ForRichText(description) }
+        var lore = new[] { fieldName, TooltipLiteralText.ForRichText(description), relation ?? string.Empty }
             .Concat(StackingRuleSummary.RowNotes(_draft.Rules, row).Select(note => text.Get(note)))
             .Where(line => !string.IsNullOrEmpty(line));
         TerminalTooltipPresenter.SetButtonText(field, string.Join("\n", lore));

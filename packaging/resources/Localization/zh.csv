@@ -406,7 +406,6 @@ stacking_marker_color_tip,输入 #RGB 或 #RRGGBB 格式的颜色，也可点击
 stacking_marker_invalid,颜色格式无效，请输入 #RGB 或 #RRGGBB。仍使用之前的颜色。
 stacking_info_title,堆叠显示模块
 stacking_info_kinds,合并的物品种类: {0}
-stacking_info_rules,生效的堆叠规则:
 stacking_info_rule,"    {0}"
 stacking_info_selection,选中同类物品组: {0}
 stacking_info_selection_unavailable,当前设置无法读取，不能判断分组原因。
@@ -439,16 +438,26 @@ stacking_field_container_content,容器内容
 stacking_field_container_content_desc,容器里装的物品.
 stacking_field_feature,特征: {0}
 stacking_field_feature_desc,可见的物品特征 {0}.
-stacking_quick_add_tip,添加到物品堆叠规则
+stacking_quick_add_tip,添加到物品规则
 stacking_quick_append_tip,添加到已有规则
 stacking_quick_edit_tip,编辑物品堆叠规则
-stacking_quick_delete_tip,删除合并此组的规则
+stacking_quick_delete_tip,从物品规则删除合并此组的行
 stacking_quick_merged,已添加堆叠规则，选中的格子已合并。
 stacking_quick_still_separate,已添加堆叠规则，但仍有无法配置的差异，格子保持分开。
 stacking_quick_rule_off,差异已加入规则，但该规则已关闭，开启后才会合并。
 stacking_quick_nothing,选中格子的差异无法通过堆叠规则合并。
 stacking_quick_deleted,已删除合并此组的规则。
 stacking_quick_delete_none,找不到合并此组的规则行，请在编辑页中修改。
+stacking_quick_global_add_tip,添加到全局规则
+stacking_quick_global_delete_tip,从全局规则删除合并此组的行
+stacking_quick_global_overridden,已加入全局规则，但该物品的规则对其中的字段设为匹配，格子保持分开。
+stacking_quick_global_deleted,已从全局规则删除合并此组的行，所有物品都会受到影响。
+stacking_quick_global_delete_none,找不到合并此组的全局规则行。
+stacking_global_rules,全局规则
+stacking_globals_empty,还没有全局规则。全局规则对本终端的所有物品生效，物品规则可逐字段覆盖。
+stacking_global_add,添加全局规则
+stacking_global_switch_tip,切换此全局规则是否生效，关闭时保留。
+stacking_global_delete_tip,删除此全局规则，所有物品都会受到影响。
 stacking_draft_hint,点击「应用」后保存，返回则放弃修改。
 stacking_rules_empty,暂无规则。
 stacking_apply,应用
@@ -486,3 +495,23 @@ integration_itemdetails_section,Item Details
 integration_itemdetails_label,为数字物流提示保留 Item Details 空间
 integration_itemdetails_tooltip,给可见的 Item Details 类型标签和内容面板留出空间。检测到 Item Details 正在运行时默认开启。
 tooltip_scroll_hint,按住 Alt 并滚动鼠标滚轮查看提示
+terminal_search_tip_title,按物品名称搜索
+terminal_search_tip_tags,用 {0} 按标签搜索 ({0}材料)
+terminal_search_tip_types,用 {0} 按物品类型搜索 ({0}工具)
+terminal_search_tip_descriptions,用 {0} 按描述搜索 ({0}古董)
+terminal_search_tip_identifier,用 {0} 按物品 ID 搜索 ({0}scrap_metal)
+terminal_search_tip_negate,用 {0} 排除条件 ({0}材料)
+terminal_search_tip_or,用 {0} 匹配任一组 (材料{0}工具)
+terminal_search_tip_quote,用 {0} 保留空格 ({0}两个 词{0})
+terminal_search_tip_pinyin,中文可用拼音或首字母搜索 (cailiao / cl)
+terminal_search_tip_clear,右键清空
+stacking_item_search_tip,按物品名称、物品 ID 或标签键搜索
+stacking_rule_search_tip,按属性名称或标签键搜索
+stacking_info_item_rules,物品规则:
+stacking_info_global_rules,全局规则:
+stacking_info_item_off,物品规则已关闭，仅全局规则生效。
+stacking_info_difference_overridden,"    {0}（物品规则设为匹配，覆盖全局）"
+stacking_rule_overrides_global,覆盖全局规则：全局为{0}，此处为{1}
+stacking_rule_same_as_global,与全局规则相同
+stacking_item_overrides,{0} 行覆盖全局规则
+stacking_global_overridden_by,{0} 个物品规则覆盖了此行
