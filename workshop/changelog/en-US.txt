@@ -1,8 +1,8 @@
-0.7.1
+0.7.2
 
-The Stack Display Module now uses separate rules for each item ID. This update removes the old terminal-wide rules.
+The Stack Display Module now supports global rules for all items in a terminal, plus rules for individual items.
 
-- Box-select two or more slots with the same item ID. Use Actions on the right to add their configurable differences as Ignore entries in a new or existing rule. Box-select a single merged slot to edit its rule or remove the entries that merged it.
-- Open Stack display rules to search by item name, ID, or tag key. Rules can be turned on or off individually or in bulk. In the item editor, choose Match or Ignore for each attribute and click Apply to save.
-- The drive's sidebar now opens dedicated priority and module pages. The priority page has a number field and step buttons.
-- Drop several storage cells onto an empty slot in a drive or IO Port to fill the next available slots in the same grid. Dropping cells onto the machine icon fills compatible slots from the first row onward.
+- An item rule takes precedence over the global rule for the same attribute. Use the terminal's Actions bar to add or remove global rules from a selection.
+- Hover over a search box to see how to use it. The terminal explains active prefixes and operators, plus pinyin when it's on. The stacking rule editor shows what you can search for.
+- Control tooltips can now widen to fit their text.
+- Saved stack display settings from earlier versions are no longer read. Set up your stacking rules again after updating.

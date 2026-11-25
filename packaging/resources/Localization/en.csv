@@ -441,7 +441,7 @@ stacking_field_feature_desc,The visible item feature {0}.
 stacking_quick_add_tip,Add to item rules
 stacking_quick_append_tip,Add to existing rule
 stacking_quick_edit_tip,Edit item stacking rule
-stacking_quick_delete_tip,Delete the item rule rows merging this slot
+stacking_quick_delete_tip,Remove item rule entries that merge this group
 stacking_quick_merged,Stacking rule added. The selected slots now merge.
 stacking_quick_still_separate,"Stacking rule added, but differences no rule can cover keep the slots apart."
 stacking_quick_rule_off,"The differences were added, but the rule is off. Turn it on to merge."
@@ -449,15 +449,15 @@ stacking_quick_nothing,No stacking rule can merge the differences between the se
 stacking_quick_deleted,The rules merging this slot were deleted.
 stacking_quick_delete_none,No rule row can be told apart as merging this slot. Change it on the edit page.
 stacking_quick_global_add_tip,Add to global rules
-stacking_quick_global_delete_tip,Delete the global rows merging this slot
-stacking_quick_global_overridden,"Added to the global rules, but this item's rule matches some of those fields, so the slots stay apart."
-stacking_quick_global_deleted,The global rows merging this slot were deleted. This affects every item.
-stacking_quick_global_delete_none,No global row can be told apart as merging this slot.
+stacking_quick_global_delete_tip,Remove global rule entries that merge this group
+stacking_quick_global_overridden,Added to global rules. This item's rule still requires some of those attributes to match. The slots stay separate.
+stacking_quick_global_deleted,Removed the global rule entries that merge this group. The change applies to every item.
+stacking_quick_global_delete_none,Could not identify a global rule entry that merges this group.
 stacking_global_rules,Global rules
-stacking_globals_empty,No global rules yet. Global rules apply to every item in this terminal; an item rule overrides them field by field.
+stacking_globals_empty,No global rules yet. Global rules apply to all items in this terminal. Item rules take precedence for the same attribute.
 stacking_global_add,Add global rule
-stacking_global_switch_tip,Switch this global rule on or off; it is kept while off.
-stacking_global_delete_tip,Delete this global rule. This affects every item.
+stacking_global_switch_tip,Turn this rule on or off without deleting it.
+stacking_global_delete_tip,Delete this global rule for all items.
 stacking_draft_hint,Changes are saved when you apply them. Going back discards them.
 stacking_rules_empty,No rules yet.
 stacking_apply,Apply
@@ -496,22 +496,22 @@ integration_itemdetails_label,Keep Item Details clear of Digital Storage tooltip
 integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. This option defaults on when Item Details is running.
 tooltip_scroll_hint,Hold Alt and use the mouse wheel to scroll
 terminal_search_tip_title,Search by item name
-terminal_search_tip_tags,Use {0} to search by tag ({0}material)
-terminal_search_tip_types,Use {0} to search by item type ({0}tool)
-terminal_search_tip_descriptions,Use {0} to search in descriptions ({0}antique)
-terminal_search_tip_identifier,Use {0} to search by item ID ({0}scrap_metal)
-terminal_search_tip_negate,Use {0} to exclude a term ({0}material)
-terminal_search_tip_or,Use {0} to match either side (material{0}tool)
-terminal_search_tip_quote,Use {0} to keep spaces ({0}two words{0})
-terminal_search_tip_pinyin,Chinese text also matches pinyin or initials (cailiao / cl)
+terminal_search_tip_tags,Search tags with {0} ({0}material)
+terminal_search_tip_types,Search item types with {0} ({0}tool)
+terminal_search_tip_descriptions,Search descriptions with {0} ({0}antique)
+terminal_search_tip_identifier,Search item IDs with {0} ({0}scrap_metal)
+terminal_search_tip_negate,Exclude a term with {0} ({0}material)
+terminal_search_tip_or,Match either side with {0} (material{0}tool)
+terminal_search_tip_quote,Put {0} around a phrase ({0}two words{0})
+terminal_search_tip_pinyin,Search Chinese text with pinyin or initials (cailiao / cl)
 terminal_search_tip_clear,Right-click to clear
 stacking_item_search_tip,"Search by item name, item ID or tag key"
 stacking_rule_search_tip,Search by attribute name or tag key
 stacking_info_item_rules,Item rules:
 stacking_info_global_rules,Global rules:
-stacking_info_item_off,The item rule is off; only global rules apply.
-stacking_info_difference_overridden,"    {0} (the item rule matches it, overriding the global rule)"
-stacking_rule_overrides_global,Overrides the global rule: {0} there, {1} here
+stacking_info_item_off,Item rules are off. Only global rules apply.
+stacking_info_difference_overridden,"    {0} (item rule requires a match and overrides the global rule)"
+stacking_rule_overrides_global,Overrides global rule (global: {0}; item: {1})
 stacking_rule_same_as_global,Same as the global rule
-stacking_item_overrides,{0} rows override global rules
-stacking_global_overridden_by,{0} item rules override this row
+stacking_item_overrides,Overrides global rules for {0} attributes
+stacking_global_overridden_by,{0} item rules override this rule
