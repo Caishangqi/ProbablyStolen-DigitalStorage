@@ -218,7 +218,8 @@ public sealed class PlatformComposition : IDisposable
         var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
             itemContent.Changed);
         var housing = new MaterialItem(cell);
-        var drive = new DriveItem(appearance, windows, inventory, networkEvents);
+        var drive = new DriveItem(appearance, windows, inventory, networkEvents, text,
+            () => DriveWindow.Create(text, networkPowerSettings, buttonIcons, message => log.Log(message)));
         var controller = new ControllerItem(appearance, windows);
         var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
             networkPowerSettings.GetItemIdentityLog, networkPowerSettings.GetTerminalKeepOpen,

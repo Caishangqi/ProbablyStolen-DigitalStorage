@@ -522,7 +522,7 @@ def check_content(project: Path, output: Path) -> None:
         "terminal_search_identifiers_name", "terminal_search_identifiers_desc",
         "terminal_search_highlighting_name", "terminal_search_highlighting_desc",
         "debug_show_cell_pages_name", "debug_show_cell_pages_desc",
-        "priority_configure", "priority_title", "priority_desc", "priority_invalid",
+        "priority_configure", "priority_title", "priority_insert_rule", "priority_extract_rule",
         "network_tab_digital_storage", "network_card_digital_storage",
         "network_digital_storage_starter_title", "network_digital_storage_starter_desc",
         "network_digital_storage_advanced_title", "network_digital_storage_advanced_desc",

@@ -228,8 +228,8 @@ data_scientist_greet_1,"The lab upstairs ordered too much storage hardware again
 data_scientist_greet_2,"I sell storage gear and buy back standalone storage components at a discount. I can spend up to 800 per visit. No assembled cells, housings, IO Ports, or modules."
 priority_configure,Priority
 priority_title,Drive Priority
-priority_desc,Items go into higher-priority drives first and come out of lower-priority drives first. Range {0} to {1}.
-priority_invalid,Enter a whole number
+priority_insert_rule,Storing: higher priority devices first
+priority_extract_rule,Taking: lower priority devices first
 cell_storage_bytes,{0}/{1} bytes used
 cell_storage_types,{0}/{1} item types
 cell_storage_partition_include,Whitelist · {0}/{1} rules

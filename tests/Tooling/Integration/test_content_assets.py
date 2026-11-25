@@ -317,25 +317,41 @@ class ContentContractTests(unittest.TestCase):
             r"item\.useSpriteFromMod = true;\s*item\.SetSpriteQuick\(_modId, spriteKey\);",
         )
 
-    def test_drive_priority_panel_and_input_wiring(self):
+    def test_drive_priority_page_and_input_wiring(self):
         original = REPOSITORY / "src" / self.platform.name
         window = (original / "Client/MachineContentWindow.cs").read_text(encoding="utf-8")
-        panel_order = ('power,', '"modules_panel"', '"cells_panel"', '"priority_configure"')
+        panel_order = ('power,', '"modules_panel"', '"cells_panel"')
         positions = [window.index(part) for part in panel_order]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn('priority.Content, "priority"', window)
-        self.assertIn("openCallback += priority.Refresh", window)
+        self.assertNotIn("priority", window)
         self.assertNotIn("AddHeaderButton", window)
 
-        priority = (original / "Client/DrivePriorityWindow.cs").read_text(encoding="utf-8")
-        self.assertRegex(priority, r"Button\(100\), Button\(10\), Button\(1\), _fieldHost,\s*"
-                                   r"Button\(-1\), Button\(-10\), Button\(-100\)")
+        priority = (original / "Client/DrivePriorityPanel.cs").read_text(encoding="utf-8")
+        self.assertIn("Steps = { 1, 10, 100, 1000 }", priority)
         self.assertIn("TextAlignmentOptions.Center", priority)
-        self.assertIn("_field.onValueChanged.AddListener(Typed)", priority)
-        self.assertIn("_field.onEndEdit.AddListener(_ => ShowCurrent())", priority)
-        self.assertRegex(priority, r"if \(!DrivePriority\.TryParse\(text\?\.Trim\(\), out var priority\)\) return;\s*"
+        self.assertIn("MachineHelper.Panel(text.Get(\"priority_title\"), content, Role)", priority)
+        self.assertRegex(priority, r"if \(DrivePriority\.TryParse\(text, out var priority\)\) "
                                    r"DrivePriorityTag\.Write\(_drive, priority\);")
         self.assertIn("DrivePriority.Clamp((long)DrivePriorityTag.Read(_drive) + delta)", priority)
+        drive = (original / "Content/DriveItem.cs").read_text(encoding="utf-8")
+        self.assertIn("DrivePriorityPanel.Create(item, _text).Panel", drive)
+        self.assertIn("_createWindow().Attach(item);", drive)
+        self.assertIn("DriveWindow.HasLiveOwner(item) &&", drive)
+        self.assertIn("ReferenceEquals(GraphUtils.FindParentType<GameItem>(bay), item) &&", drive)
+        drive_window = (original / "Client/DriveWindow.cs").read_text(encoding="utf-8")
+        self.assertIn("!element.IsDestroyed()", drive_window)
+        self.assertIn("window.parentItems.Contains(drive)", drive_window)
+        self.assertIn("Initialize(() => IsCurrentSession())", drive_window)
+
+    def test_borrowed_panels_scope_selection_to_the_visible_window(self):
+        original = REPOSITORY / "src" / self.platform.name
+        panel_input = (original / "Client/BorrowedPanelInput.cs").read_text(encoding="utf-8")
+        self.assertIn("bandWindow != null || _bandOrigin == null", panel_input)
+        self.assertIn("_bandOrigin.TryGetTarget", panel_input)
+        self.assertIn("selected.FindAll", panel_input)
+        self.assertIn("if (!ReferenceEquals(window, origin)) continue;", panel_input)
+        self.assertIn("TopHit((Vector2)arguments[4])", panel_input)
+        self.assertIn("FindParentElement(), element)", panel_input)
 
     def test_native_content_callbacks_use_the_tested_production_coordinators(self):
         original = REPOSITORY / "src" / self.platform.name
@@ -377,7 +393,7 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("acceptsBattery: true, consumesNetworkPower: true", controller)
         drive = (original / "Content/DriveItem.cs").read_text(encoding="utf-8")
         terminal = (original / "Content/TerminalItem.cs").read_text(encoding="utf-8")
-        self.assertIn("_windows.Attach(item, bays, drivePriority: true)", drive)
+        self.assertIn("_windows.Attach(item, bays, additionalPanels:", drive)
         self.assertNotIn("configurePartitions:", drive)
         self.assertNotIn("new CellPartitionSource(slots[index])", drive)
         self.assertIn("_windows.Attach(item, moduleTypes: ModuleTypes);", terminal)

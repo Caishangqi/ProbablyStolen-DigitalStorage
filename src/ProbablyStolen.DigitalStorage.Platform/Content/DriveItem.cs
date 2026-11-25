@@ -1,3 +1,4 @@
+using System;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Events;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
@@ -24,11 +25,15 @@ internal sealed class DriveItem
     private readonly MachineContentWindow _windows;
     private readonly DriveCellInventory _inventory;
     private readonly NativeNetworkEvents _events;
+    private readonly Func<DriveWindow> _createWindow;
+    private readonly ModText _text;
 
-    internal DriveItem(ItemAppearance appearance,
-        MachineContentWindow windows, DriveCellInventory inventory, NativeNetworkEvents events)
+    internal DriveItem(ItemAppearance appearance, MachineContentWindow windows, DriveCellInventory inventory,
+        NativeNetworkEvents events, ModText text, Func<DriveWindow> createWindow)
     {
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _events = events;
+        _createWindow = createWindow ?? throw new ArgumentNullException(nameof(createWindow));
         _appearance = appearance;
         _windows = windows;
         _inventory = inventory;
@@ -44,6 +49,7 @@ internal sealed class DriveItem
         {
             _appearance.Apply(item, SpriteKey, Width, Height);
             var bays = new GridPixelElement(7, 2);
+            ForwardFillGrids.Register(bays);
             var slots = new GameSlotInventory[GetCellCount()];
             var ports = new ICellBayPort[GetCellCount()];
             for (var index = 0; index < slots.Length; index++)
@@ -62,14 +68,18 @@ internal sealed class DriveItem
             {
                 var bayIndex = index;
                 var bay = slots[index];
-                bay.mayInventoryAddItemFunc = (cell, _) =>
+                // The borrowed panel can still receive a native drop while its owner is being destroyed.
+                bay.mayInventoryAddItemFunc = (cell, _) => DriveWindow.HasLiveOwner(item) &&
+                    ReferenceEquals(GraphUtils.FindParentType<GameItem>(bay), item) &&
                     binding.CanInsert(bayIndex, ContentSnapshots.Cell(cell), ReferenceEquals(bay.childItem, cell),
                         GeneralHelper.CanAddItemToInv(cell, item));
                 bay.maxSlotAmountItemFunc = (_, _, _) => _inventory.GetSlotLimit(bayIndex);
                 _events.AttachSlot(bay, NetworkChangeReason.CellInserted, NetworkChangeReason.CellRemoved);
             }
 
-            _windows.Attach(item, bays, drivePriority: true);
+            // The native window keeps the cell bays and module bay; the drive window borrows them while it is open.
+            _windows.Attach(item, bays, additionalPanels: new[] { DrivePriorityPanel.Create(item, _text).Panel });
+            _createWindow().Attach(item);
             return item;
         }
         catch

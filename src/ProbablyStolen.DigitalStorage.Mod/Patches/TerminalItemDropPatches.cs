@@ -40,6 +40,19 @@ internal static class TerminalGroupDropPatch
     }
 }
 
+/// <summary>
+/// Spreads a group dropped onto one empty drive or IO Port bay over the sibling bays; the native drop runs unchanged
+/// and the postfix only places what it left behind (<see cref="MachineBayGroupDrop"/>).
+/// </summary>
+[HarmonyPatch(typeof(ItemMultiSelectHandler), "EndGroupDrag")]
+internal static class MachineBayGroupDropPatch
+{
+    private static void Prefix(ItemMultiSelectHandler __instance, out object? __state) =>
+        __state = MachineBayGroupDrop.Begin(__instance);
+
+    private static void Postfix(object? __state) => MachineBayGroupDrop.Complete(__state);
+}
+
 [HarmonyPatch(typeof(ItemMultiSelectHandler), "UpdateDropTarget")]
 internal static class TerminalGroupHoverPatch
 {

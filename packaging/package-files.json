@@ -686,6 +686,24 @@
       }
     },
     {
+      "path": "Textures/button_priority.png",
+      "image": {
+        "source": [
+          16,
+          16
+        ],
+        "runtime": [
+          16,
+          16
+        ],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
       "path": "Textures/annotation_square.png",
       "image": {
         "source": [

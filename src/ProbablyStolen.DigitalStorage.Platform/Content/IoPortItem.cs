@@ -65,6 +65,7 @@ internal sealed partial class IoPortItem
     private (GridPixelElement Grid, GameSlotInventory[] Slots) CreateBank(bool right)
     {
         var grid = new GridPixelElement(BankColumns, SlotsPerBank / BankColumns);
+        ForwardFillGrids.Register(grid);
         var slots = new GameSlotInventory[SlotsPerBank];
         for (var index = 0; index < slots.Length; index++)
         {

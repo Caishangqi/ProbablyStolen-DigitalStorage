@@ -12,6 +12,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 internal sealed class MachineContentWindow
 {
+    /// <summary>The role of the cell bay panel, which the drive window borrows.</summary>
+    internal const string CellsPanelRole = "cells";
+
     private readonly ModText _text;
     private readonly GridNetworkPowerCoordinator _networkPower;
     private readonly NativeNetworkEvents _events;
@@ -24,13 +27,12 @@ internal sealed class MachineContentWindow
     }
 
     internal void Attach(GameItem machine, GridPixelElement? cellBays = null,
-        bool acceptsBattery = false, bool consumesNetworkPower = false, bool drivePriority = false,
+        bool acceptsBattery = false, bool consumesNetworkPower = false,
         string[]? moduleTypes = null, IReadOnlyList<MachineryPanel>? additionalPanels = null, int[]? displayOrder = null)
     {
         var battery = new GameSlotInventory();
         var modules = new GameGridInventory(MachineHelper.DEFAULT_MODULE_BAY_CONFIG, MachineHelper.DEFAULT_MODULE_BAY_WIDTH);
         var power = MachineHelper.PowerPanel(battery);
-        var priority = drivePriority ? new DrivePriorityWindow(machine) : null;
         var panels = new List<MachineryPanel>
         {
             power,
@@ -38,18 +40,13 @@ internal sealed class MachineContentWindow
         };
         if (cellBays != null)
         {
-            panels.Add(MachineHelper.Panel(_text.Get("cells_panel"), cellBays, "cells"));
-        }
-        if (priority != null)
-        {
-            panels.Add(MachineHelper.Panel(_text.Get("priority_configure"), priority.Content, "priority"));
+            panels.Add(MachineHelper.Panel(_text.Get("cells_panel"), cellBays, CellsPanelRole));
         }
         if (additionalPanels != null) panels.AddRange(additionalPanels);
         var nativePanels = panels.ToArray();
         machine.SetContentWindow(displayOrder == null
             ? MachineHelper.CreateMachineryWindow(true, nativePanels)
             : MachineHelper.CreateMachineryWindow(true, displayOrder, nativePanels));
-        if (priority != null) machine.contentWindow.openCallback += priority.Refresh;
         MachineryHelper.InitMachinery(machine);
         machine.EnableTag(MachineHelper.STANDARD_MACHINE_TAG);
         // Classified like vanilla machines: no nesting in containers, counted as machinery when bought.

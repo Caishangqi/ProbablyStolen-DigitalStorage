@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
@@ -14,6 +15,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 /// </summary>
 internal sealed class MachineryPanelHost : MachineryWidget
 {
+    private static readonly HashSet<MachineryPanelHost> Showing = new();
     private readonly Action<string> _diagnostic;
     private readonly string _showEvent;
     private readonly string _restoreEvent;
@@ -32,6 +34,23 @@ internal sealed class MachineryPanelHost : MachineryWidget
     }
 
     internal bool IsShowing => _panel != null && ((PixelElement)_panel).IsRenderingChildOf(this);
+
+    /// <summary>Gets the native panels some host is showing right now.</summary>
+    internal static IReadOnlyList<(MachineryPanel Panel, NativeWindowSizer Window)> ShownPanels
+    {
+        get
+        {
+            var panels = new List<(MachineryPanel, NativeWindowSizer)>();
+            foreach (var host in Showing)
+            {
+                if (host.handler == null || !host.handler.gameObject.activeInHierarchy || !host.IsShowing) continue;
+                var window = host.handler.GetComponentInParent<NativeWindowSizer>();
+                if (window != null) panels.Add((host._panel!, window));
+            }
+
+            return panels;
+        }
+    }
 
     public bool fillWidth => false;
     public bool canResize => false;
@@ -74,6 +93,7 @@ internal sealed class MachineryPanelHost : MachineryWidget
         _home = home;
         ((PixelElement)panel).SetRenderingParent(this);
         panel.handler.rectTransform.anchoredPosition = Vector2.zero;
+        Showing.Add(this);
         _diagnostic($"{_showEvent} result=shown target=panel size={panel.widthPixels}x{panel.heightPixels} scale={localScale:0.##}");
         return true;
     }
@@ -87,6 +107,7 @@ internal sealed class MachineryPanelHost : MachineryWidget
         _panel = null;
         _home = null;
         _originalSiblingIndex = -1;
+        Showing.Remove(this);
         if (panel == null || home == null) return;
         try
         {

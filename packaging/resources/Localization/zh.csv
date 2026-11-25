@@ -228,8 +228,8 @@ data_scientist_greet_1,"楼上实验室又多订了一批存储设备。与其�
 data_scientist_greet_2,"我会卖存储设备，也折价收购独立存储组件。每次最多花 800。不收存储元件、外壳、IO 端口或模块。"
 priority_configure,优先级
 priority_title,驱动器优先级
-priority_desc,存入时先放入优先级高的驱动器, 取出时先从优先级低的驱动器取出. 范围 {0} 到 {1}.
-priority_invalid,请输入整数
+priority_insert_rule,存入时: 高优先级设备优先
+priority_extract_rule,取出时: 低优先级设备优先
 cell_storage_bytes,已用 {0}/{1} 字节
 cell_storage_types,{0}/{1} 种物品
 cell_storage_partition_include,白名单 · {0}/{1} 条规则
