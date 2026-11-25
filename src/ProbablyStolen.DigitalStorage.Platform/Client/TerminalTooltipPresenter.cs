@@ -27,15 +27,22 @@ internal static class TerminalTooltipPresenter
             SetText(element, text);
     }
 
+    /// <summary>
+    /// Sets the hint of a control. With the native service it uses the button tooltip, which grows to fit its widest
+    /// line instead of the native tooltip's fixed maximum width, so long names and syntax lines are not wrapped.
+    /// </summary>
     internal static void SetText(CustomUIElement? element, string text)
     {
         if (element?.root == null) return;
+        if (_service is NativeTooltipService native)
+        {
+            native.SetButtonTooltip(element, text);
+            return;
+        }
+
         if (_service != null)
         {
-            if (string.IsNullOrEmpty(text) && _service is NativeTooltipService native)
-                native.ClearTooltip(element);
-            else
-                _service.SetTooltip(element, text ?? string.Empty, element);
+            _service.SetTooltip(element, text ?? string.Empty, element);
             return;
         }
 

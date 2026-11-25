@@ -2,9 +2,12 @@ using System;
 
 namespace ProbablyStolen.DigitalStorage.Client.Tooltips;
 
+/// <summary>
+/// The width of a control hint: its widest line plus padding, so long lines are never wrapped or shrunk, limited only by
+/// the viewport.
+/// </summary>
 internal static class ButtonTooltipWidth
 {
-    private const float MaximumWidth = 350f;
     private const float TextAllowance = 1f;
 
     internal static bool TryFit(float widestLine, int horizontalPadding, int viewportPixels, float canvasScale, out float width)
@@ -15,7 +18,7 @@ internal static class ButtonTooltipWidth
             return false;
 
         // Round the desired width up and the viewport budget down so rounding cannot exceed either cap.
-        var limit = Math.Min(MaximumWidth, Math.Floor(viewportPixels / (double)canvasScale));
+        var limit = Math.Floor(viewportPixels / (double)canvasScale);
         if (limit <= horizontalPadding) return false;
         width = (float)Math.Min(Math.Ceiling((double)widestLine + horizontalPadding + TextAllowance), limit);
         return true;

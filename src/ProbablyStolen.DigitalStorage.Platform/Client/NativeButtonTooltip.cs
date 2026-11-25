@@ -102,6 +102,12 @@ internal sealed class NativeButtonTooltip
         clone.GetComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         _popup = (RectTransform)clone.transform;
         _label = _popup.GetChild(0).GetComponent<TextMeshProUGUI>();
+        // The native prefab shrinks its text to fit; the hint grows to fit its text instead, at the largest size.
+        if (_label.enableAutoSizing)
+        {
+            _label.enableAutoSizing = false;
+            _label.fontSize = _label.fontSizeMax;
+        }
         _horizontalPadding = layout.padding.horizontal;
         _manager = manager;
         _prefab = prefab;

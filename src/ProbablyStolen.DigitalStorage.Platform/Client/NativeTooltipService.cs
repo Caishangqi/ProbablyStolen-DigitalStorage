@@ -95,6 +95,9 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         var trigger = element.root.AddComponent<DigitalStorageTooltipTrigger>();
         trigger.tooltipText = text;
         if (button) trigger.UseButtonTooltip(this);
+        // A plain label receives no pointer events, so its hint, such as the full name of a cut-off field, would never
+        // show. The native SetTooltip makes the same change.
+        if (element.text != null) element.text.raycastTarget = true;
         var binding = new Binding(this, element, trigger, owner);
         _bindings[element] = binding;
         EnsureDriver();
@@ -149,8 +152,10 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         _nextOwnerSweepFrame = frameId + 60;
         _bindingSweep.Clear();
         foreach (var binding in _bindings.Values) _bindingSweep.Add(binding);
+        // A hidden control, such as the storage view under a sub-page, shows again later with the same element, so its
+        // hint stays bound until the control is destroyed.
         foreach (var binding in _bindingSweep)
-            if (!IsOwnerAlive(binding.Owner)) binding.Dispose();
+            if (IsOwnerDestroyed(binding.Owner)) binding.Dispose();
         _bindingSweep.Clear();
         for (var index = _groups.Count - 1; index >= 0; index--)
             if (!IsOwnerAlive(_groups[index].Owner)) _groups[index].Dispose();
@@ -278,6 +283,13 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
             UnityEngine.Object.Destroy(binding.Trigger);
         }
     }
+
+    private static bool IsOwnerDestroyed(object owner) => owner switch
+    {
+        CustomUIElement element => element.root == null,
+        UnityEngine.Object unityObject => unityObject == null,
+        _ => false
+    };
 
     private static bool IsOwnerAlive(object owner)
     {

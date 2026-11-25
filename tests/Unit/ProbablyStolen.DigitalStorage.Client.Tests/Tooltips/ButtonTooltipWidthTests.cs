@@ -19,12 +19,12 @@ public sealed class ButtonTooltipWidthTests
         Assert.That(width, Is.EqualTo(expected));
     }
 
-    [TestCase(1920, 1f, 350f)]
-    [TestCase(750, 2f, 350f)]
+    [TestCase(1920, 1f, 1920f)]
+    [TestCase(750, 2f, 375f)]
     [TestCase(699, 2f, 349f)]
     [TestCase(301, 1.25f, 240f)]
     [TestCase(310, 3f, 103f)]
-    public void TryFit_LongContent_ClampsWithinPanelAndViewport(int viewportPixels, float canvasScale, float expected)
+    public void TryFit_LongContent_ClampsOnlyWithinViewport(int viewportPixels, float canvasScale, float expected)
     {
         var fits = ButtonTooltipWidth.TryFit(float.MaxValue, 28, viewportPixels, canvasScale, out var width);
 
@@ -37,7 +37,7 @@ public sealed class ButtonTooltipWidthTests
     [TestCase(float.NaN, 28, 200, 1f)]
     [TestCase(float.PositiveInfinity, 28, 200, 1f)]
     [TestCase(50f, -1, 200, 1f)]
-    [TestCase(50f, 350, 1920, 1f)]
+    [TestCase(50f, 1920, 1920, 1f)]
     [TestCase(50f, 28, 0, 1f)]
     [TestCase(50f, 28, -1, 1f)]
     [TestCase(50f, 28, 200, 0f)]
