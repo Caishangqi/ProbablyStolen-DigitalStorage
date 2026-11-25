@@ -5,21 +5,24 @@ Put storage cells in drives and use a terminal to find, store, and retrieve item
 The storage network takes inspiration from [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] and uses Probably Stolen's item, machine, and inventory rules.
 
 [h2]Getting started with Wild[/h2]
-Unlock Digital Storage Basics in Wild's Digital Storage tab to get a controller with a battery, a drive, a terminal, and an empty 1k storage cell. The Data Scientist visits on the same day as the retired farmer and sells storage equipment without buying it back.
+In Wild's Digital Storage tab, unlock Digital Storage Basics for a controller with a battery, a drive, a terminal, and an empty 1k cell. The Data Scientist visits on the retired farmer's day, sells storage gear, and buys standalone components at a discount (up to 800 per visit).
 
-Advanced Data Management gives you a Cell Workbench, an Equal Distribution Module, a Stack Display Module, and a Type Limit Module. The Data Scientist then rotates advanced stock weekly, while Dr. Jackson always brings storage modules and high-capacity components.
+Advanced Data Management gives you a Cell Workbench and one each of the Equal Distribution, Stack Display, and Type Limit Modules. The Data Scientist rotates advanced stock weekly, and Dr. Jackson stocks modules and components. Merchants stock components up to 4k at first, up to 64k after Advanced, and up to 256k after Expert.
+
+Expert Data Management gives you an IO Port. Dr. Jackson and the Data Scientist then each try to stock a 256k component and an IO Port on each visit.
 
 [h2]Machines and setup[/h2]
 [list]
-[*]Controller: put a battery in its power slot to power connected machines. Each network needs exactly one controller.
-[*]Drive: holds 14 individual storage cells and connects to other drives, terminals, and controllers.
-[*]Terminal: searches, sorts, stores, and takes items from the network.
-[*]Cell Workbench: a 3x3 machine for partitions and cell modules. It needs no network connection or power.
+[*]Controller: one per network. Put a battery in its power slot.
+[*]Drive: holds 14 storage cells.
+[*]Terminal: searches, sorts, stores, and retrieves network items.
+[*]Cell Workbench: a standalone, unpowered 3x3 machine for configuring partitions and cell modules.
 [/list]
 
-Put a storage component in an Item Cell Housing to assemble a cell of the same tier. Load it into a drive and connect the drive and terminal to a powered controller.
+Put a storage component in an Item Cell Housing to build a cell of the same tier. Load it into a drive and connect the drive and terminal to a powered controller. The workbench accepts usable, assembled cells you own in a valid format. A cell in the workbench is out of the network.
 
-To configure a cell, move it from the drive to the workbench, where its contents are out of the network. The workbench accepts usable, assembled cells you own in a valid storage format.
+[h2]IO Port[/h2]
+Connect the 3x3 IO Port to a powered network. Load up to six storage cells on the left and choose Cell to network or Network to cell. Set the port to eject cells when they're empty, full, or done transferring, then press Start. Take processed cells from the right. Transfers use network power and respect the destination cell's partition and capacity. Remove all cells and modules before destroying the port.
 
 [h2]Capacity and storage cells[/h2]
 Components and cells come in five tiers:
@@ -30,45 +33,44 @@ Components and cells come in five tiers:
 [*]64k: 65,536 bytes, 16,384 types
 [*]256k: 262,144 bytes, 65,536 types
 [/list]
-Type overhead uses half the capacity when a cell reaches its type limit. Type Limit Modules spread that overhead across more types without adding bytes. Existing cells use the new limits without a save migration.
+Type overhead takes half the capacity at the type limit. Type Limit Modules spread this overhead across more types. Existing cells use the new limits without a save migration.
 
-Items use one byte per eight grid squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 7 bytes (5 for the items and 2 for their type).
+Items use one byte per eight squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 7 bytes (5 for the items and 2 for their type).
 
-Items are grouped by size on locked pages that disappear when empty. The terminal handles all transfers. Items wider or taller than 12 squares do not fit.
+Cells group items by size on locked pages and remove empty pages. Items over 12 squares in either dimension do not fit.
 
-Hover over a cell to see its capacity, partition, and modules. Before removing the component, empty the cell and remove all modules and rules. The housing returns to one empty page, keeping its partition mode and expansion level.
+Hover over a cell to see capacity, partition, and modules. Before removing its component, empty the cell and remove its modules and rules. The housing returns to one empty page and keeps its partition mode and expansion level.
 
 [h2]Cell modules[/h2]
-Cell modules take up 2x2 squares and fit only in cells. Use the workbench's Modules panel to install or remove them.
+Install or remove 2x2 cell modules in the workbench's Modules panel. They fit only in cells.
 [list]
-[*]Type Limit Modules add +80–160 types and +5–10% (Common), +160–320 and +10–20% (Rare), or +320–640 and +20–30% (Epic). Add the flat bonuses to the tier's base limit, then apply the sum of the percentage bonuses and round down. The bay size limits how many you can install. Existing modules keep their rolls and get the higher flat bonus.
-[*]One Equal Distribution Module per cell limits the area each type can occupy. It divides half the cell's bytes, expressed as grid area, by the partition rule limit and rounds up. The quota does not depend on the number of rules you add.
+[*]Type Limit Module rolls: Common +80 to 160 types and +5 to 10%; Rare +160 to 320 and +10 to 20%; Epic +320 to 640 and +20 to 30%. Add flat bonuses to the tier's base limit, apply the sum of the percentages, and round down. Install as many as the bay fits. Existing modules keep their rolls and get the higher flat bonus.
+[*]One Equal Distribution Module per cell caps each type's area at half the cell's byte capacity converted to grid squares, divided by the partition rule limit and rounded up.
 [/list]
 Take items out first if removing a Type Limit Module would put the cell over its type or byte limit.
 
-Native Module Bay Expansion Kits work only on 16k and 64k cells (one level each) and 256k cells (up to two). Each level adds 100 to item value. Expanded housings require a component that supports their expansion level.
+Native Module Bay Expansion Kits work on 16k and 64k cells (one level) and 256k cells (up to two). Each level adds 100 to item value. A component must support its housing's expansion level.
 
 [h2]Partition rules[/h2]
-At the workbench, select Configure Partition and drag an inventory item onto the grid to make a sample rule. The item stays in your inventory.
+At the workbench, open Configure Partition and drag an inventory item onto the grid to create a rule. The sample stays in your inventory.
 
-New cells start in Whitelist mode. Use the mode button to switch to Blacklist. The whitelist admits matches and the blacklist blocks them. An empty list accepts everything in either mode.
+New cells start with a whitelist that admits matches. Switch to a blacklist to reject matches. An empty list accepts everything in either mode.
 
-Double-click a rule to edit its item, type, legality, stolen status, heat, or visible feature conditions. An item matches a rule only if it meets all its conditions. One matching rule is enough. Changes only affect new deposits.
+Double-click a rule to edit item, type, legality, stolen status, heat, or visible features. A match must satisfy every condition in any one rule. Edits affect future deposits only.
 [list]
-[*]Drag rules to move or swap them. Position does not affect matching or storage priority.
-[*]Copy, rename, or delete rules, and undo deletion or clearing.
-[*]Each tier starts with 128 rule slots. Modules still expand these slots at the old rate: one tenth of each advertised flat bonus plus the unchanged percentage bonus, combined the same way as the type limit. Lowering the rule limit keeps existing rules but prevents additions until there is room.
-[*]Overview edits and valid detail edits save automatically. Invalid input shows Not saved.
-[*]Press Back to close the attribute menu, return to the overview, or close the editor. Picking up the cell or closing the workbench also closes it.
+[*]Move or swap rules by dragging. Order does not affect matching or priority.
+[*]Copy, rename, or delete rules. You can undo deletion or clearing.
+[*]All tiers start with 128 rule slots. Use the type limit formula with one tenth of each listed flat bonus and the same percentage bonuses. Lowering the limit keeps existing rules but blocks additions until there is room.
+[*]Valid edits save automatically. Invalid input shows Not saved.
+[*]Back closes the attribute menu, returns to the overview, or closes the editor. Removing the cell or closing the workbench also closes it.
 [/list]
+
 [h2]Networks and priority[/h2]
-Machines connect along shared edges in the same inventory grid, forming chains or branches.
+Machines connect along shared edges in the same inventory grid. If the network is offline, restore power. If controllers conflict, split them into separate networks.
 
-Status shows Online, Offline (unpowered), No controller, or Controller conflict. An offline network stays connected. Restore power or move extra controllers to separate networks as needed.
+Nightly power defaults to 3 for a controller, 2 per drive, 1 per terminal, and 0 per IO Port before transfer fees. Change these in mod settings.
 
-Nightly power usage defaults to 3 for a controller, 2 per drive, and 1 per terminal. Change these values in the mod settings.
-
-Storage tries higher-priority drives first; extraction starts with lower-priority drives. Within a priority group, cells with a matching whitelist rule are preferred. Blacklist admission adds no preference.
+Deposits start with higher-priority drives and withdrawals with lower-priority ones. At equal priority, matching whitelist rules give cells first chance at deposits.
 
 [h2]Finding items[/h2]
 Search part of a name or description, or use a prefix:
@@ -78,11 +80,9 @@ Search part of a name or description, or use a prefix:
 [*][b]$[/b] descriptions and lore.
 [*][b]&[/b] item IDs; enable identifier search in settings first.
 [/list]
-Spaces require all terms, [b]|[/b] matches either group, and [b]-[/b] excludes a term. Double quotes keep phrases together. The search box turns red when nothing matches. Search scope and colors can be adjusted in settings.
+Spaces require all terms, [b]|[/b] matches either group, and [b]-[/b] excludes a term. Double quotes keep phrases together. No matches turn the search box red. Change search scope and colors in settings.
 
-Pinyin supports full spelling, initials, mixed Chinese and English input, and prefix searches. [b]cailiao[/b], [b]cl[/b], and [b]cai料[/b] all find 材料. Settings offer nine keyboard layouts and fuzzy pinyin.
-
-Auto enables pinyin only in Chinese. Choose On or Off to override it.
+Pinyin works with prefixes, full spelling, initials, or mixed Chinese and English input: [b]cailiao[/b], [b]cl[/b], and [b]cai料[/b] find 材料. Settings include nine layouts and fuzzy pinyin. Auto enables it only in Chinese; use On or Off to override.
 
 [h2]Terminal controls[/h2]
 [list]
