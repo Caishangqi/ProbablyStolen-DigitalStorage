@@ -148,7 +148,7 @@ internal static class CellUpgradeInventory
 
     internal static bool NeedsUsage(InstalledModule module) => module.Kind == CellModuleKind.TypeLimit && module.IsValid;
 
-    // The actual bay callback makes its own decision even when the workbench has a ready preview.
+    // The bay callback still checks the removal itself, even when the workbench already shows a ready preview.
     internal static bool CanRemove(GameItem cell, GameGridInventory bay, GameItem item)
     {
         if (item.identifier != TypeLimitId && item.identifier != EqualDistributionId) return true;
