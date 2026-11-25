@@ -1,8 +1,8 @@
-0.7.0
+0.7.1
 
-The new IO Port moves items in bulk between storage cells and network drives.
+The Stack Display Module now uses separate rules for each item ID. This update removes the old terminal-wide rules.
 
-- Load cells into the IO Port's left bank, choose a transfer direction and an ejection condition, then press Start. Processed cells move to the right bank.
-- Unlock Expert Data Management in Wild's network to get an IO Port. From then on, Dr. Jackson and the Data Scientist each try to stock an IO Port and a 256k storage component when they visit. Component stock starts at 4k max and rises to 64k after Advanced Data Management.
-- The Data Scientist now buys standalone storage components at a discount, with a budget of 800 per visit. Assembled cells, housings, IO Ports, and modules are excluded.
-- Terminal subpages now fit the window, borrowed inventory panels support box selection, and the IO Port sidebar follows the terminal's button order.
+- Box-select two or more slots with the same item ID. Use Actions on the right to add their configurable differences as Ignore entries in a new or existing rule. Box-select a single merged slot to edit its rule or remove the entries that merged it.
+- Open Stack display rules to search by item name, ID, or tag key. Rules can be turned on or off individually or in bulk. In the item editor, choose Match or Ignore for each attribute and click Apply to save.
+- The drive's sidebar now opens dedicated priority and module pages. The priority page has a number field and step buttons.
+- Drop several storage cells onto an empty slot in a drive or IO Port to fill the next available slots in the same grid. Dropping cells onto the machine icon fills compatible slots from the first row onward.

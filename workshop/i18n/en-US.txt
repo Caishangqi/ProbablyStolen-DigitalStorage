@@ -2,14 +2,14 @@
 
 Put storage cells in drives and use a terminal to find, store, and retrieve items across the network.
 
-The storage network takes inspiration from [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] and uses Probably Stolen's item, machine, and inventory rules.
+The network draws on [url=https://github.com/AppliedEnergistics/Applied-Energistics-2]Applied Energistics 2[/url] and follows Probably Stolen's item, machine, and inventory rules.
 
 [h2]Getting started with Wild[/h2]
-In Wild's Digital Storage tab, unlock Digital Storage Basics for a controller with a battery, a drive, a terminal, and an empty 1k cell. The Data Scientist visits on the retired farmer's day, sells storage gear, and buys standalone components at a discount (up to 800 per visit).
+In Wild's Digital Storage tab, unlock Digital Storage Basics for a controller with a battery, a drive, a terminal, and an empty 1k cell. The Data Scientist visits on the retired farmer's day to sell gear and buy standalone components at a discount (up to 800 per visit).
 
-Advanced Data Management gives you a Cell Workbench and one each of the Equal Distribution, Stack Display, and Type Limit Modules. The Data Scientist rotates advanced stock weekly, and Dr. Jackson stocks modules and components. Merchants stock components up to 4k at first, up to 64k after Advanced, and up to 256k after Expert.
+Advanced Data Management grants a Cell Workbench, an Equal Distribution Module, a Stack Display Module, and a Type Limit Module. The Data Scientist rotates advanced stock weekly. Dr. Jackson stocks modules and components. The component cap rises from 4k to 64k with Advanced and to 256k with Expert.
 
-Expert Data Management gives you an IO Port. Dr. Jackson and the Data Scientist then each try to stock a 256k component and an IO Port on each visit.
+Expert Data Management grants an IO Port. Dr. Jackson and the Data Scientist then try to stock one IO Port and one 256k component each per visit.
 
 [h2]Machines and setup[/h2]
 [list]
@@ -19,10 +19,10 @@ Expert Data Management gives you an IO Port. Dr. Jackson and the Data Scientist 
 [*]Cell Workbench: a standalone, unpowered 3x3 machine for configuring partitions and cell modules.
 [/list]
 
-Put a storage component in an Item Cell Housing to build a cell of the same tier. Load it into a drive and connect the drive and terminal to a powered controller. The workbench accepts usable, assembled cells you own in a valid format. A cell in the workbench is out of the network.
+Put a component in an Item Cell Housing to assemble a cell of the same tier. Load it into a drive and connect the drive and terminal to a powered controller. The workbench takes usable, assembled cells you own in a valid format. These cells stay outside the network.
 
 [h2]IO Port[/h2]
-Connect the 3x3 IO Port to a powered network. Load up to six storage cells on the left and choose Cell to network or Network to cell. Set the port to eject cells when they're empty, full, or done transferring, then press Start. Take processed cells from the right. Transfers use network power and respect the destination cell's partition and capacity. Remove all cells and modules before destroying the port.
+Connect the 3x3 IO Port to a powered network. Load up to six cells on the left, choose a transfer direction, and pick when to eject (empty, full, or work complete). Press Start and collect processed cells on the right. Transfers use network power and follow the destination's partition and capacity limits. Remove cells and modules before destroying the port.
 
 [h2]Capacity and storage cells[/h2]
 Components and cells come in five tiers:
@@ -33,9 +33,9 @@ Components and cells come in five tiers:
 [*]64k: 65,536 bytes, 16,384 types
 [*]256k: 262,144 bytes, 65,536 types
 [/list]
-Type overhead takes half the capacity at the type limit. Type Limit Modules spread this overhead across more types. Existing cells use the new limits without a save migration.
+Type overhead uses half the capacity at the type limit. Type Limit Modules spread it across more types. Existing cells need no save migration.
 
-Items use one byte per eight squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 7 bytes (5 for the items and 2 for their type).
+Items use one byte per eight squares of combined bounding area, rounded up. Ten identical 2x2 items in an unmodified 1k cell use 7 bytes (5 for items and 2 for type overhead).
 
 Cells group items by size on locked pages and remove empty pages. Items over 12 squares in either dimension do not fit.
 
@@ -52,17 +52,17 @@ Take items out first if removing a Type Limit Module would put the cell over its
 Native Module Bay Expansion Kits work on 16k and 64k cells (one level) and 256k cells (up to two). Each level adds 100 to item value. A component must support its housing's expansion level.
 
 [h2]Partition rules[/h2]
-At the workbench, open Configure Partition and drag an inventory item onto the grid to create a rule. The sample stays in your inventory.
+At the workbench, open Configure Partition and drag an item onto the grid to make a rule. You keep the item.
 
-New cells start with a whitelist that admits matches. Switch to a blacklist to reject matches. An empty list accepts everything in either mode.
+New cells use a whitelist to accept matches. Switch to a blacklist to reject matches. An empty list accepts everything in either mode.
 
-Double-click a rule to edit item, type, legality, stolen status, heat, or visible features. A match must satisfy every condition in any one rule. Edits affect future deposits only.
+Double-click a rule to edit item, type, legality, stolen status, heat, or visible features. An item matches if it meets all conditions in any one rule. Edits affect future deposits only.
 [list]
 [*]Move or swap rules by dragging. Order does not affect matching or priority.
 [*]Copy, rename, or delete rules. You can undo deletion or clearing.
-[*]All tiers start with 128 rule slots. Use the type limit formula with one tenth of each listed flat bonus and the same percentage bonuses. Lowering the limit keeps existing rules but blocks additions until there is room.
+[*]All tiers start with 128 rule slots. Reuse the type limit formula with one tenth of each flat bonus and the same percentages. Lower limits keep existing rules but block new ones until there's room.
 [*]Valid edits save automatically. Invalid input shows Not saved.
-[*]Back closes the attribute menu, returns to the overview, or closes the editor. Removing the cell or closing the workbench also closes it.
+[*]Back closes the menu, returns to the overview, or closes the editor. Removing the cell or closing the workbench also closes the editor.
 [/list]
 
 [h2]Networks and priority[/h2]
@@ -86,13 +86,18 @@ Pinyin works with prefixes, full spelling, initials, or mixed Chinese and Englis
 
 [h2]Terminal controls[/h2]
 [list]
-[*]Use the toolbar to sort or resize the window. Scroll to browse. Tooltips work while searching.
-[*]Left-click takes one item. Right-click takes half the slot's items, rounded up. Shift-click takes all. A stored stack counts as one item.
-[*]Drag from a single slot to place one item, or hold Shift as you start to drag all. Release Shift once dragging. Scroll to add or remove one per notch, or right-click to halve the amount, rounded up.
-[*]Drag items onto the terminal grid or a displayed item to store them. Unstored items stay in place.
-[*]Capacity, type limits, size, partitions or an offline network can prevent insertion.
+[*]Sort or resize with the toolbar. Scroll to browse. Tooltips work while searching.
+[*]Left-click takes one item, right-click takes half the slot (rounded up), and Shift-click takes all. A stack counts as one item.
+[*]Dragging one slot starts with one item. Hold Shift at the start to take all. During the drag, scroll to adjust by one or right-click to halve the amount (rounded up).
+[*]Drop items onto the grid or a displayed item to store them. Unstored items stay in place.
+[*]Capacity, type limits, size, partitions, or an offline network can prevent insertion.
 [/list]
-Terminals and drives can open the native module panel. Native module properties currently do not change digital storage capacity, throughput, or network power usage.
+Terminals and drives have native module panels. Native module properties leave storage capacity, transfer rate, and power usage unchanged.
+
+[h2]Stack Display Module[/h2]
+Install it in the terminal's module bay. Box-select two or more slots with the same item ID and use Actions on the right to add their configurable differences as Ignore entries. Hover over a selected slot to see what keeps the groups apart.
+
+Open Stack display rules on the left to search and toggle rules by item. Choose Match or Ignore for each attribute and click Apply. Each terminal has its own rules for grouping items on screen.
 
 [h2] Module Compatibility [/h2]
 [url=steamcommunity.com/workshop/filedetails/discussion/3836902912/573806979786739121/] Compatibility notes and list [/url]
