@@ -6,5 +6,3 @@ The new IO Port moves items in bulk between storage cells and network drives.
 - Unlock Expert Data Management in Wild's network to get an IO Port. From then on, Dr. Jackson and the Data Scientist each try to stock an IO Port and a 256k storage component when they visit. Component stock starts at 4k max and rises to 64k after Advanced Data Management.
 - The Data Scientist now buys standalone storage components at a discount, with a budget of 800 per visit. Assembled cells, housings, IO Ports, and modules are excluded.
 - Terminal subpages now fit the window, borrowed inventory panels support box selection, and the IO Port sidebar follows the terminal's button order.
-- The Client Demand Highlight integration marks ordinary wanted items in green, stolen items in amber, and contraband in red. During inspections, only stolen items and contraband are highlighted. Items in both categories use red.
-- A single-slot drag starts with one item. Hold Shift as you start to take all, scroll during the drag to adjust by one, or right-click to halve the amount.
