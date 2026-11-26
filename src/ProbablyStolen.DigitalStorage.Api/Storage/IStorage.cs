@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
@@ -46,6 +47,14 @@ public interface IStorage
     /// which case nothing is added: an unreadable network is not an empty one.
     /// </summary>
     StorageStatus GetAvailableStacks(KeyCounter output);
+
+    /// <summary>
+    /// Adds every stored root that <see cref="ExtractRoot"/> may move to <paramref name="output"/>, so a caller with
+    /// its own item scan can offer stored goods. The roots stay where they are: read them, never move them natively.
+    /// Returns <see cref="StorageStatus.Done"/>, or the reason the network could not be read, in which case nothing is
+    /// added: an unreadable network is not an empty one.
+    /// </summary>
+    StorageStatus GetStoredRoots(ICollection<GameItem> output);
 
     /// <summary>Gets a short description for logs.</summary>
     string GetDescription();

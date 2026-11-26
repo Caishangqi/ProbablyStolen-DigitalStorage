@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
@@ -173,6 +174,29 @@ internal sealed class NetworkStorageFacade : IStorage
         if (output == null) throw new ArgumentNullException(nameof(output));
         if (!TryMount(out var mounted, out var refused)) return refused.Status;
         mounted!.Storage.GetAvailableStacks(output);
+        return StorageStatus.Done;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Lists the same pages <see cref="ExtractRoot"/> accepts: pages of mounted cells that are not protected.</remarks>
+    public StorageStatus GetStoredRoots(ICollection<GameItem> output)
+    {
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (!TryMount(out var mounted, out var refused)) return refused.Status;
+        foreach (var (cell, inventory) in mounted!.Inventories)
+        {
+            var pages = CellPages.Pages(cell);
+            var views = inventory.View.Pages;
+            for (var index = 0; index < pages.Count && index < views.Count; index++)
+            {
+                if (views[index].IsProtected) continue;
+                foreach (var root in pages[index].childItems)
+                {
+                    if (root != null) output.Add(root);
+                }
+            }
+        }
+
         return StorageStatus.Done;
     }
 

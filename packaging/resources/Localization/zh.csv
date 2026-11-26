@@ -501,6 +501,11 @@ integration_client_demand_contraband_desc,用红框标出符合客户需求的�
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,为数字物流提示保留 Item Details 空间
 integration_itemdetails_tooltip,给可见的 Item Details 类型标签和内容面板留出空间。检测到 Item Details 正在运行时默认开启。
+integration_dsstocking_section,ds 上货助手
+integration_dsstocking_label,从数字网络取货
+integration_dsstocking_tooltip,一键上货时，也可从仓库内的在线数字网络取货。货物按上货助手自己的优先度、预算和不上货设置挑选，设了「里面的东西不上货」的驱动器或元件不会被取用。离线网络和散放的元件不参与取货。取出和放回都经过网络，与终端存取相同。自动贩卖机补货和打水不从网络取货。
+integration_dsstocking_stacks,整堆上货
+integration_dsstocking_stacks_desc,存入网络前就叠在一起的物品（单个物品数量大于 1）也可上货。这类物品不会拆开，以保留进价和赃物标记：整堆放上柜台，超出预算时由上货助手整堆退回网络。终端的堆叠显示不影响此项。关闭后只上单件物品。
 tooltip_scroll_hint,按住 Alt 并滚动鼠标滚轮查看提示
 terminal_search_tip_title,按物品名称搜索
 terminal_search_tip_tags,用 {0} 搜索标签（{0}材料）

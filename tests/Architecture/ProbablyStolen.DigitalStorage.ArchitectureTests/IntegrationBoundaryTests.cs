@@ -23,7 +23,8 @@ public sealed class IntegrationBoundaryTests
         ("customerstocking", "CustomerStocking.", "CustomerStocking"),
         ("item_details", "ItemDetails.", "ItemDetails"),
         ("brewing_expansion", "BrewingExpansion.", "BrewingExpansion"),
-        ("hollow.clientdemandhighlight", "ClientDemandHighlight.", "ClientDemandHighlight")
+        ("hollow.clientdemandhighlight", "ClientDemandHighlight.", "ClientDemandHighlight"),
+        ("ds_stocking", "DsStocking.", "DsStocking")
     };
 
     private static string RepositoryRoot => typeof(IntegrationBoundaryTests).Assembly

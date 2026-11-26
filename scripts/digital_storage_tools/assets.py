@@ -538,6 +538,8 @@ def check_content(project: Path, output: Path) -> None:
         "integration_client_demand_stolen", "integration_client_demand_stolen_desc",
         "integration_client_demand_contraband", "integration_client_demand_contraband_desc",
         "integration_customerstocking_label", "integration_customerstocking_tooltip",
+        "integration_dsstocking_section", "integration_dsstocking_label", "integration_dsstocking_tooltip",
+        "integration_dsstocking_stacks", "integration_dsstocking_stacks_desc",
         "terminal_button_stacking_tip",
         "terminal_keep_open_tip", "terminal_keep_open_enabled", "terminal_keep_open_disabled",
         "terminal_extract_destination_name", "terminal_extract_destination_desc", "terminal_extract_destination_tip",

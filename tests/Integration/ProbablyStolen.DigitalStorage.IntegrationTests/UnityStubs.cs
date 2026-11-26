@@ -33,3 +33,12 @@ namespace ProbablyStolen.DigitalStorage.Compat.CustomerStocking
         internal const string ModId = "customerstocking";
     }
 }
+
+// DsStockingTargets names DS Stocking Helper members through HarmonyLib, which the core test host does not load.
+namespace ProbablyStolen.DigitalStorage.Compat.DsStocking
+{
+    internal static class DsStockingTargets
+    {
+        internal const string ModId = "ds_stocking";
+    }
+}

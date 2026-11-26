@@ -337,6 +337,8 @@ public sealed class StockingBridgeTests
 
         public StorageStatus GetAvailableStacks(KeyCounter output) => StorageStatus.Done;
 
+        public StorageStatus GetStoredRoots(ICollection<GameItem> output) => StorageStatus.Done;
+
         public string GetDescription() => "fake network";
     }
 

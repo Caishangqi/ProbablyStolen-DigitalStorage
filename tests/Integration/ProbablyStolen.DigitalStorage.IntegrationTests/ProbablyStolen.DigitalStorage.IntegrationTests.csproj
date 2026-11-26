@@ -110,6 +110,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\IStorage.cs" Link="Api\IStorage.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Api\Storage\StorageResult.cs" Link="Api\StorageResult.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\CustomerStocking\StockingBridge.cs" Link="Compat\StockingBridge.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Compat\DsStocking\DsStockingBridge.cs" Link="Compat\DsStockingBridge.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -501,6 +501,11 @@ integration_client_demand_contraband_desc,Use a red outline for contraband the c
 integration_itemdetails_section,Item Details
 integration_itemdetails_label,Keep Item Details clear of Digital Storage tooltips
 integration_itemdetails_tooltip,Reserve space for the visible Item Details badge and contents panel. This option defaults on when Item Details is running.
+integration_dsstocking_section,DS Stocking Helper
+integration_dsstocking_label,Take goods from the digital network
+integration_dsstocking_tooltip,"One-click stocking can also take goods from online digital networks in the warehouse. DS Stocking Helper picks them with its own priorities, budget and keep settings, and leaves out drives or cells set to keep their contents. Offline networks and loose cells are not used. Goods leave and return through the network, as in terminal transfers. Vending machine refills and water bottling do not take from the network."
+integration_dsstocking_stacks,Stock whole stacks
+integration_dsstocking_stacks_desc,"Also stock items that were already stacked when stored (one item with a count above 1). The stack is not split, so it keeps its purchase price and stolen mark. The whole stack goes on the counter, and DS Stocking Helper sends all of it back to the network if that goes over the budget. The terminal's stacking display has no effect here. When this is off, only single items are stocked."
 tooltip_scroll_hint,Hold Alt and use the mouse wheel to scroll
 terminal_search_tip_title,Search by item name
 terminal_search_tip_tags,Search tags with {0} ({0}material)
