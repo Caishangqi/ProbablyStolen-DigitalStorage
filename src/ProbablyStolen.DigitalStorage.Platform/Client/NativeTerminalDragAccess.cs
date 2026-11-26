@@ -14,6 +14,7 @@ internal static class NativeTerminalDragAccess
     private static readonly FieldInfo? ScrollIgnore = typeof(ItemMouseDragHandler).GetField("isScrollIgnore", PrivateInstance);
     private static readonly FieldInfo? Highlights = typeof(ItemMouseDragHandler).GetField("highlightManager", PrivateInstance);
     private static readonly FieldInfo? GroupSelection = typeof(ItemMultiSelectHandler).GetField("selectedItems", PrivateInstance);
+    private static readonly FieldInfo? GroupOffsets = typeof(ItemMultiSelectHandler).GetField("dragOffsets", PrivateInstance);
     private static readonly FieldInfo? GroupHoverItem = typeof(ItemMultiSelectHandler).GetField("hoverItem", PrivateInstance);
     private static readonly FieldInfo? GroupHoverNodes =
         typeof(ItemMultiSelectHandler).GetField("hoverHighlightNodes", PrivateInstance);
@@ -56,6 +57,34 @@ internal static class NativeTerminalDragAccess
         catch
         {
             return System.Array.Empty<GameItemElement>();
+        }
+    }
+
+    /// <summary>
+    /// Gets the item the player grabbed to start the group drag, or null when it cannot be read. Each ghost keeps the
+    /// offset of its centre from the press point, and the press point lies inside the grabbed item, so with items of one
+    /// size on a regular grid the smallest offset belongs to it.
+    /// </summary>
+    internal static GameItemElement? GetGroupAnchor(ItemMultiSelectHandler group)
+    {
+        try
+        {
+            if (GroupOffsets?.GetValue(group) is not Dictionary<GameItemElement, UnityEngine.Vector2> offsets) return null;
+            GameItemElement? anchor = null;
+            var nearest = float.MaxValue;
+            foreach (var pair in offsets)
+            {
+                var distance = pair.Value.sqrMagnitude;
+                if (pair.Key == null || distance >= nearest) continue;
+                nearest = distance;
+                anchor = pair.Key;
+            }
+
+            return anchor;
+        }
+        catch
+        {
+            return null;
         }
     }
 
