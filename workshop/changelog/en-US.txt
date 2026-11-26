@@ -1,8 +1,6 @@
-0.7.2
+0.7.3
 
-The Stack Display Module now supports global rules for all items in a terminal, plus rules for individual items.
+You can now choose whether items taken from the terminal with a left click go to the warehouse or the back counter first.
 
-- An item rule takes precedence over the global rule for the same attribute. Use the terminal's Actions bar to add or remove global rules from a selection.
-- Hover over a search box to see how to use it. The terminal explains active prefixes and operators, plus pinyin when it's on. The stacking rule editor shows what you can search for.
-- Control tooltips can now widen to fit their text.
-- Saved stack display settings from earlier versions are no longer read. Set up your stacking rules again after updating.
+- Change the priority from the terminal toolbar or the mod settings. The warehouse comes first by default. If an item won't fit, the terminal tries the other destination. The back counter is available only while you're in your shop.
+- Drag selected storage cells within the same drive or IO Port bay grid to move them together in their original arrangement.

@@ -194,12 +194,12 @@ terminal_keep_open_tip,Keep Open: {0}
 terminal_keep_open_enabled,On. Esc leaves the terminal open. Click × to close it.
 terminal_keep_open_disabled,Off. Esc can close the terminal.
 terminal_extract_destination_name,Left-Click Destination
-terminal_extract_destination_desc,"Choose where a left click in the storage terminal puts items first. When that place is full, the rest go to the other one. The back counter is used only while you are in your store."
+terminal_extract_destination_desc,"Choose where items go first when you left-click in the storage terminal. If an item won't fit, the terminal tries the other destination. The back counter is available only while you're in your shop."
 terminal_extract_destination_tip,Left Click: {0}
 terminal_extract_warehouse,Warehouse First
 terminal_extract_counter,Back Counter First
-terminal_extract_warehouse_first,"Items go to the warehouse first, then to the back counter."
-terminal_extract_counter_first,"Items go to the back counter first, then to the warehouse."
+terminal_extract_warehouse_first,"Try the warehouse first, then the back counter if an item won't fit."
+terminal_extract_counter_first,"Try the back counter first, then the warehouse if an item won't fit."
 partition_view_size_name,Partition window height
 partition_view_size_desc,How much of the screen height the cell partition window uses. You can also use the button on the left of that window. Your choice is saved.
 terminal_hint_title,Controls
