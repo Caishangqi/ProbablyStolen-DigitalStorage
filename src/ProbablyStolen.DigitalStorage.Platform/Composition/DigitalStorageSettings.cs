@@ -449,7 +449,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         set => SetTerminalOption(_size, value);
     }
 
-    /// <summary>Gets where a left click puts items first; an unknown saved value falls back to the warehouse.</summary>
+    /// <summary>Left-click destination priority. Unknown saved values use the warehouse first.</summary>
     public ExtractionPriority ExtractionPriority
     {
         get => Enum.IsDefined(typeof(ExtractionPriority), _extractionPriority.Value)

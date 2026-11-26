@@ -13,10 +13,7 @@ using ProbablyStolen.DigitalStorage.Compat.CustomerStocking;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
 
-/// <summary>
-/// The Customer Stocking bridge with a network double. Harmony and Customer Stocking are not loaded: the transpiler's
-/// rewrite count is checked by the plugin at runtime and covered by in-game acceptance.
-/// </summary>
+/// <summary>Exercises Customer Stocking transfers through the bridge with an in-memory storage network.</summary>
 [TestFixture]
 public sealed class StockingBridgeTests
 {

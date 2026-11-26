@@ -5,7 +5,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 
-/// <summary>Where a left click in the storage terminal puts items first.</summary>
+/// <summary>Destination priority for left-click extraction from the storage terminal.</summary>
 public enum ExtractionPriority
 {
     /// <summary>The warehouse first, then the back counter.</summary>
@@ -15,7 +15,7 @@ public enum ExtractionPriority
     CounterFirst = 1
 }
 
-/// <summary>A place a left click can put items.</summary>
+/// <summary>An inventory that can receive items from a terminal left click.</summary>
 public enum ExtractionDestination
 {
     /// <summary>The player's warehouse.</summary>
@@ -25,47 +25,47 @@ public enum ExtractionDestination
     Counter
 }
 
-/// <summary>The order in which a left click fills its destinations.</summary>
+/// <summary>The order in which the terminal tries inventories for each extracted item.</summary>
 public static class ExtractionOrder
 {
     private static readonly ExtractionDestination[] WarehouseFirst = { ExtractionDestination.Warehouse, ExtractionDestination.Counter };
     private static readonly ExtractionDestination[] CounterFirst = { ExtractionDestination.Counter, ExtractionDestination.Warehouse };
 
-    /// <summary>Gets every destination, the preferred one first; an unknown priority falls back to the warehouse.</summary>
+    /// <summary>Lists destinations in order. An unknown priority uses the warehouse first.</summary>
     public static IReadOnlyList<ExtractionDestination> For(ExtractionPriority priority) =>
         priority == ExtractionPriority.CounterFirst ? CounterFirst : WarehouseFirst;
 
-    /// <summary>Gets the other priority.</summary>
+    /// <summary>Switches the preferred destination between the warehouse and the back counter.</summary>
     public static ExtractionPriority Next(ExtractionPriority priority) =>
         priority == ExtractionPriority.CounterFirst ? ExtractionPriority.WarehouseFirst : ExtractionPriority.CounterFirst;
 }
 
-/// <summary>Registers the storage view button that switches where a left click puts items first.</summary>
+/// <summary>The storage terminal toolbar control for extraction priority.</summary>
 public static class ExtractDestinationFeature
 {
-    /// <summary>The rail action identifier.</summary>
+    /// <summary>The toolbar action key for switching extraction priority.</summary>
     public const string ActionId = "extract_destination";
 
-    /// <summary>The tooltip key; its argument names the current priority.</summary>
+    /// <summary>The tooltip key for the currently preferred inventory.</summary>
     public const string TooltipKey = "terminal_extract_destination_tip";
 
-    /// <summary>Registers the button.</summary>
-    /// <param name="registry">The registry.</param>
-    /// <param name="getValue">Reads the shared priority.</param>
-    /// <param name="setValue">Stores the shared priority.</param>
+    /// <summary>Adds the destination switch to the storage view toolbar.</summary>
+    /// <param name="registry">The registry that owns the terminal actions.</param>
+    /// <param name="getValue">Reads the priority shared by all storage terminals.</param>
+    /// <param name="setValue">Updates the shared priority.</param>
     public static void Register(TerminalRegistry registry, Func<ExtractionPriority> getValue, Action<ExtractionPriority> setValue)
     {
         if (registry == null) throw new ArgumentNullException(nameof(registry));
         if (getValue == null) throw new ArgumentNullException(nameof(getValue));
         if (setValue == null) throw new ArgumentNullException(nameof(setValue));
 
-        // After the sort order (0) and sort direction (10) buttons, before stacking rules (20).
+        // Keep the destination switch between the sort buttons and stacking rules.
         registry.AddAction(new TerminalAction(ActionId, 15, DockSide.Left, ActionPlacement.Rail,
             ActionScope.View(TerminalRegistry.StorageTerminalName), _ => true, _ => Appearance(getValue()),
             _ => setValue(ExtractionOrder.Next(getValue()))));
     }
 
-    /// <summary>Gets the button appearance for a priority.</summary>
+    /// <summary>Uses the preferred inventory's icon and tooltip on the destination switch.</summary>
     public static ButtonAppearance Appearance(ExtractionPriority priority) => priority == ExtractionPriority.CounterFirst
         ? new ButtonAppearance("button_extract_counter", TooltipKey, "terminal_extract_counter_first")
         : new ButtonAppearance("button_extract_warehouse", TooltipKey, "terminal_extract_warehouse_first");

@@ -427,9 +427,8 @@ internal sealed class StorageService
     }
 
     /// <summary>
-    /// Moves at most <paramref name="pieces"/> stored roots of one type into the warehouse and the back counter, the one
-    /// <paramref name="priority"/> prefers first. A root neither can take whole stays stored, so no item is split and no
-    /// more pieces move than asked.
+    /// Extracts up to <paramref name="pieces"/> whole items of one type. The chosen <paramref name="priority"/> sets
+    /// which inventory is tried first for each item. An item that neither inventory can fit stays in storage.
     /// </summary>
     internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces, ExtractionPriority priority,
         TransferOperation operation)
@@ -488,9 +487,8 @@ internal sealed class StorageService
     }
 
     /// <summary>
-    /// Gets where a left click puts items: the warehouse and the back counter in the chosen order. Away from the store
-    /// the same back counter window serves as another trader's counter and is cleared on leaving, so it only counts
-    /// while the player is in the store.
+    /// Uses the back counter only in the player's shop. Elsewhere the game can reuse that inventory for another
+    /// trader's counter and clear it when the player leaves.
     /// </summary>
     private static IRootSink ClickDestinations(ExtractionPriority priority, TransferOperation operation)
     {

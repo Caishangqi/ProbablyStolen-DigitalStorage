@@ -61,9 +61,8 @@ internal static class NativeTerminalDragAccess
     }
 
     /// <summary>
-    /// Gets the item the player grabbed to start the group drag, or null when it cannot be read. Each ghost keeps the
-    /// offset of its centre from the press point, and the press point lies inside the grabbed item, so with items of one
-    /// size on a regular grid the smallest offset belongs to it.
+    /// The native drag stores each ghost's centre offset from the press point. For equal-sized items on a regular
+    /// grid, the centre closest to that point belongs to the grabbed item.
     /// </summary>
     internal static GameItemElement? GetGroupAnchor(ItemMultiSelectHandler group)
     {

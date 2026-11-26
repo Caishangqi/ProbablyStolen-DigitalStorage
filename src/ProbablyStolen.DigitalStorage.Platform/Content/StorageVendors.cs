@@ -13,8 +13,8 @@ using ProbablyStolen.DigitalStorage.Platform.Localization;
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 /// <summary>
-/// The data scientist buys and sells approved digital storage goods. The game queues her on the retired farmer's day
-/// once the starter digital storage upgrade is unlocked. Dr. Jackson stocks on his regular visits.
+/// The data scientist sells storage equipment and buys standalone storage components. After the starter upgrade,
+/// she visits on the retired farmer's day. Dr. Jackson stocks storage equipment on his regular visits.
 /// </summary>
 internal sealed class StorageVendors : IDisposable
 {

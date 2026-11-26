@@ -8,23 +8,16 @@ using UnityEngine;
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
 /// <summary>
-/// Handles a group drag dropped onto a cell bay of a drive or IO Port. The native group drop offers every item to the
-/// single inventory under the pointer, and each bay holds one cell, so only the first would move.
-/// <list type="bullet">
-/// <item>A group that already sits in this bay grid moves as a block before the native drop: the grabbed cell goes to
-/// the bay under the pointer and the others keep their offsets, as the ghosts show. The native drop then finds that bay
-/// taken and changes nothing. A block that does not fit is left to the native drop.</item>
-/// <item>A group from elsewhere dropped onto an empty bay is spread after the native drop: each item it left where it
-/// was goes to the next empty sibling.</item>
-/// </list>
-/// Every move uses the same insertion as the native drop, so every bay rule still applies. Every entry point swallows
-/// its own failures: the native drag must finish whatever happens here.
+/// A native group drop targets one bay, which holds only one storage cell. Within a drive or IO Port grid, shift a
+/// selection before the drop so it keeps its shape. If the block cannot fit, leave the drop to the game.
+/// For a selection from another inventory, let the game fill the target bay first, then try empty bays in that grid
+/// for the remaining cells. All moves use native insertion rules. Failures in this handler let the native drag finish.
 /// </summary>
 public static class MachineBayGroupDrop
 {
     private static readonly string[] Machines = { DriveItem.ItemId, IoPortItem.ItemId };
 
-    /// <summary>Called before <c>ItemMultiSelectHandler.EndGroupDrag</c>; returns the pending spread, or null.</summary>
+    /// <summary>Shifts cells already in the grid or records cells from elsewhere before the native drop.</summary>
     public static object? Begin(ItemMultiSelectHandler group)
     {
         try
@@ -32,7 +25,7 @@ public static class MachineBayGroupDrop
             if (group == null || !group.IsGroupDragging) return null;
             var position = Input.mousePosition;
             var selection = NativeTerminalDragAccess.GetGroupItems(group);
-            // The same raycasts the native group drop makes first, in the same frame; it ignores a selected item there.
+            // Match the native hit test so a selected item under the pointer does not hide its bay.
             if (RenderHandler.RaycastElement<GameItem>(position) is { } hit &&
                 !(hit is GameItemElement element && selection.Contains(element))) return null;
             if (RenderHandler.RaycastFindParentElement<GameInventory>(position) is not GameSlotInventory target ||
@@ -62,7 +55,7 @@ public static class MachineBayGroupDrop
         }
     }
 
-    /// <summary>Called after <c>ItemMultiSelectHandler.EndGroupDrag</c>; places what the native drop left behind.</summary>
+    /// <summary>After the native drop, tries other bays for cells still in their original inventory.</summary>
     public static void Complete(object? state)
     {
         if (state is not Spread spread) return;
@@ -103,8 +96,7 @@ public static class MachineBayGroupDrop
             Array.IndexOf(cells, anchor.parentInventory), Array.IndexOf(cells, target));
         if (plan == null) return;
 
-        // Each destination is empty by the time its cell moves. A refused move stops the block, leaving every cell in
-        // a bay it was accepted by.
+        // Stop on the first refused move. Cells that already moved stay in their new bays.
         foreach (var (from, to) in plan)
         {
             var item = itemAt[from];
@@ -115,7 +107,7 @@ public static class MachineBayGroupDrop
         }
     }
 
-    // Every cell of the grid, row by row, with null where the grid holds no bay.
+    // Keep gaps in the grid so block shifts preserve the spacing between bays.
     private static GameSlotInventory?[] Cells(GridPixelElement grid)
     {
         var cells = new GameSlotInventory?[grid.gridWidth * grid.gridHeight];

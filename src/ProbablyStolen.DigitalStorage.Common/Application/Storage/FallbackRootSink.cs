@@ -9,16 +9,15 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 namespace ProbablyStolen.DigitalStorage.Common.Application.Storage;
 
 /// <summary>
-/// Offers each root to several destinations in a fixed order and stops at the first that takes it, so the preferred
-/// destination still receives every later root it has room for. Only a refusal passes the root on: a move that failed
-/// and returned the root, or one that left it without a verified owner, ends the step there, because offering that root
-/// again could move it twice.
+/// Tries the preferred destination again for every item. Only a destination's refusal hands the item to the next
+/// destination. A move that returned the item or left its ownership uncertain ends the transfer attempt to avoid
+/// moving the same item twice.
 /// </summary>
 public sealed class FallbackRootSink : IRootSink
 {
     private readonly IRootSink[] _destinations;
 
-    /// <summary>Creates a destination that tries <paramref name="destinations"/> in order.</summary>
+    /// <summary>Tries <paramref name="destinations"/> in the order supplied.</summary>
     public FallbackRootSink(IEnumerable<IRootSink> destinations)
     {
         if (destinations == null) throw new ArgumentNullException(nameof(destinations));
@@ -28,7 +27,7 @@ public sealed class FallbackRootSink : IRootSink
             throw new ArgumentException("Destinations cannot be null.", nameof(destinations));
     }
 
-    /// <summary>Accepts one root at the first destination that takes it.</summary>
+    /// <summary>Stops at the first destination that accepts the item or reports a move failure.</summary>
     public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
     {
         var step = TransferStep.Rejected(StoreRejection.PhysicalLimit);

@@ -5,24 +5,22 @@ using System.Linq;
 namespace ProbablyStolen.DigitalStorage.Client.Machines;
 
 /// <summary>
-/// Moves a group of cells that already sit in one bay grid as a block: the grabbed cell goes to the bay under the
-/// pointer and every other cell keeps its offset from it, as the drag ghosts show.
+/// Plans a block move within one bay grid. The grabbed cell lands under the pointer and the other cells keep their
+/// offsets from it.
 /// </summary>
 public static class BayGroupShift
 {
     /// <summary>
-    /// Plans the moves for the shift, or returns null when any cell would leave the grid, land outside a bay or land on
-    /// a cell that is not part of the group. Cells are numbered row by row (<c>y * columns + x</c>).
+    /// Plans a shift in a grid indexed row by row (<c>y * columns + x</c>). Returns null if the group stays in place
+    /// or any destination is outside the grid, lacks a bay, or holds a cell outside the group.
     /// </summary>
-    /// <param name="columns">The grid width.</param>
-    /// <param name="isBay">For each cell, whether it holds a bay.</param>
-    /// <param name="isBlocked">For each cell, whether its bay holds a cell outside the group.</param>
-    /// <param name="group">The cells the group occupies now.</param>
-    /// <param name="anchor">The grabbed cell, one of <paramref name="group"/>.</param>
-    /// <param name="target">The cell under the pointer.</param>
-    /// <returns>
-    /// The moves in an order where each destination is already empty: the cells furthest along the shift go first.
-    /// </returns>
+    /// <param name="columns">The grid width in slots.</param>
+    /// <param name="isBay">Which positions contain bays.</param>
+    /// <param name="isBlocked">Which bays hold cells outside the group.</param>
+    /// <param name="group">The occupied positions in the group.</param>
+    /// <param name="anchor">The grabbed position in <paramref name="group"/>.</param>
+    /// <param name="target">The position under the pointer.</param>
+    /// <returns>Moves starting at the leading edge so each destination is vacant when its turn comes.</returns>
     public static IReadOnlyList<(int From, int To)>? Plan(int columns, IReadOnlyList<bool> isBay,
         IReadOnlyList<bool> isBlocked, IReadOnlyList<int> group, int anchor, int target)
     {
