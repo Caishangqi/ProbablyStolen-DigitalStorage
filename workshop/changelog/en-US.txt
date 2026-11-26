@@ -1,4 +1,4 @@
-0.7.3
+0.7.4
 
 You can now choose whether items taken from the terminal with a left click go to the warehouse or the back counter first.
 

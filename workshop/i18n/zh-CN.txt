@@ -107,6 +107,9 @@
 [h2] 模组兼容性 [/h2]
 [url=steamcommunity.com/workshop/filedetails/discussion/3836902912/573806979786739121/] 兼容性说明和列表 [/url]
 
+[h2] 未来更新线路图 [/h2]
+[url=steamcommunity.com/workshop/filedetails/discussion/3836902912/573807613531289887/] 线路图和内容列表 [/url]
+
 [h2]问题与反馈[/h2]
 [list]
 [*]QQ群:[b] 1058183851 [/b]
