@@ -208,6 +208,14 @@ internal sealed class IntegrationHost : IDisposable
         foreach (var entry in _entries)
         {
             if (entry.State != IntegrationState.Disabled) continue;
+            // The loader's enabled list is the saved mod order, which keeps a mod after it was uninstalled. Every mod
+            // folder is listed once all mods are loaded, so a mod missing there gets no settings, as if not enabled.
+            if (!_environment.IsModInstalled(entry.ModId))
+            {
+                entry.State = IntegrationState.Absent;
+                continue;
+            }
+
             try
             {
                 entry.Version = _environment.ModVersion(entry.ModId) ?? string.Empty;

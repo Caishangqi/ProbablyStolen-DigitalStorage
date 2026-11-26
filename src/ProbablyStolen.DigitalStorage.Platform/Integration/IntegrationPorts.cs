@@ -7,7 +7,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Integration;
 /// <summary>Where an integration plugin stands; one log line is written per plugin and state.</summary>
 internal enum IntegrationState
 {
-    /// <summary>The required mod is not enabled; the plugin is never called and nothing is logged.</summary>
+    /// <summary>The required mod is not enabled or not installed; the plugin is never called and nothing is logged.</summary>
     Absent,
 
     /// <summary>The required mod is enabled, but the plugin's settings switch is off.</summary>
@@ -34,6 +34,9 @@ internal interface IIntegrationEnvironment
 
     /// <summary>Gets whether the mod is running now.</summary>
     bool IsModRunning(string modId);
+
+    /// <summary>Gets whether the loader found the mod's folder; complete only once every mod is loaded.</summary>
+    bool IsModInstalled(string modId);
 
     /// <summary>Gets the mod version from its manifest, or null.</summary>
     string? ModVersion(string modId);

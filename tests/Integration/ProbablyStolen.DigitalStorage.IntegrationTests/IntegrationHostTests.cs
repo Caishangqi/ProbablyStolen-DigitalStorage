@@ -415,6 +415,25 @@ public sealed class IntegrationHostTests
     }
 
     [Test]
+    public void UninstalledModLeftInTheEnabledList_GetsNoSettings_AndIsNeverCalled()
+    {
+        _environment.Installed.Clear();
+        _environment.Running.Clear();
+        _environment.Versions.Clear();
+        var plugin = new FakePlugin();
+
+        var host = Started(plugin);
+        host.OnGameLoaded();
+        host.OnSettingsApplied();
+        host.Dispose();
+
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Absent));
+        Assert.That(plugin.Calls, Is.Empty);
+        Assert.That(_settings.Defined, Is.Empty, "An unsubscribed mod still in the saved mod order shows no header.");
+        Assert.That(_log, Is.Empty);
+    }
+
+    [Test]
     public void VerifiedVersion_DefaultsOn_RegistersOnceModsAreLoadedAndPatches()
     {
         var plugin = new FakePlugin { Patch = (r) => r.Patch(Target, Prefix) };
@@ -493,6 +512,7 @@ public sealed class IntegrationHostTests
         var plugin = new BrewingExpansionPlugin();
         _environment.Enabled.Add(plugin.RequiredModId);
         _environment.Running.Add(plugin.RequiredModId);
+        _environment.Installed.Add(plugin.RequiredModId);
         _environment.Versions[plugin.RequiredModId] = "3.6.8.6";
         _settings.Values[plugin.PluginUid] = false;
 
@@ -884,6 +904,10 @@ public sealed class IntegrationHostTests
         public bool IsModEnabled(string modId) => Enabled.Contains(modId);
 
         public bool IsModRunning(string modId) => Running.Contains(modId);
+
+        internal HashSet<string> Installed { get; } = new() { "other_mod" };
+
+        public bool IsModInstalled(string modId) => Installed.Contains(modId);
 
         public string? ModVersion(string modId) => Versions.TryGetValue(modId, out var version) ? version : null;
     }

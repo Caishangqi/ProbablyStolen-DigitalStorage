@@ -13,6 +13,10 @@ internal sealed class NativeIntegrationEnvironment : IIntegrationEnvironment
     public bool IsModRunning(string modId) => ModHelper.IsModRunning(modId);
 
     /// <inheritdoc />
+    /// <remarks><c>ModLoader.Mods</c> lists every discovered mod, enabled or not, as it is loaded.</remarks>
+    public bool IsModInstalled(string modId) => ModLoader.Mods.Exists(mod => mod.Manifest.ID == modId);
+
+    /// <inheritdoc />
     public string? ModVersion(string modId) => ModLoader.Mods.Find(mod => mod.Manifest.ID == modId)?.Manifest.ModVersion;
 }
 
