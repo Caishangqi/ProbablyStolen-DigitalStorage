@@ -100,7 +100,8 @@ internal sealed class TerminalItem
             _windows.Attach(item, moduleTypes: ModuleTypes);
             var storage = new StorageTerminalServices(_text, _view,
                 () => _networkPower.ReadTerminalInventory(item),
-                (entry, pieces, operation) => _networkPower.ExtractPiecesToPlayer(item, entry.Key, pieces, operation),
+                (entry, pieces, operation) =>
+                    _networkPower.ExtractPiecesToPlayer(item, entry.Key, pieces, _view.ExtractionPriority, operation),
                 (batch, target, operation) => _networkPower.ExtractBatch(item, batch, target, operation),
                 TerminalFeatures.AttributeCaptures,
                 (items, diagnostic) => _networkPower.StoreSelected(item, items, diagnostic),

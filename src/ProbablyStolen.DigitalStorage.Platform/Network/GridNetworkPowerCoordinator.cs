@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
 using ProbablyStolen.DigitalStorage.Common.Domain.Network;
@@ -80,8 +81,9 @@ internal sealed class GridNetworkPowerCoordinator
         return refusals;
     }
 
-    internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces, TransferOperation operation) =>
-        _storage.ExtractPieces(terminal, key, pieces, operation);
+    internal TerminalExtractionResult ExtractPiecesToPlayer(GameItem terminal, ItemKey key, long pieces,
+        ExtractionPriority priority, TransferOperation operation) =>
+        _storage.ExtractPieces(terminal, key, pieces, priority, operation);
 
     internal TerminalExtractionResult ExtractBatch(GameItem terminal, TerminalDragBatch batch,
         InventoryDropTarget target, TransferOperation operation) => _storage.ExtractBatchTo(terminal, batch, target, operation);

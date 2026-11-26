@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using ProbablyStolen.DigitalStorage.Api.Integration;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.StorageTerminal;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
@@ -38,6 +39,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     internal const string SortDirectionKey = StorageTerminalFeature.SortDirectionName;
     internal const string SizeKey = TerminalStyleFeature.SettingName;
     internal const string PartitionSizeKey = PartitionTerminalFeature.SizeSettingName;
+    internal const string ExtractionPriorityKey = "terminal_extract_destination";
     // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
@@ -78,6 +80,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<TerminalSize> _size;
     private readonly ConfigEntry<TerminalSize> _partitionSize;
     private readonly ConfigEntry<bool> _terminalKeepOpen;
+    private readonly ConfigEntry<ExtractionPriority> _extractionPriority;
     private bool _invalidPinyinModeLogged;
 
     internal DigitalStorageSettings(string modId, ModText text, LogCategories logCategories)
@@ -160,6 +163,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("terminal_view_direction_name"), () => text.Get("terminal_view_direction_desc"));
         _terminalKeepOpen = config.Define("terminal_keep_open", false, view,
             () => text.Get("terminal_keep_open_name"), tooltip: () => text.Get("terminal_keep_open_desc"));
+        _extractionPriority = config.DefineEnum(ExtractionPriorityKey, ExtractionPriority.WarehouseFirst, view,
+            () => text.Get("terminal_extract_destination_name"), () => text.Get("terminal_extract_destination_desc"));
         _size = config.DefineEnum(SizeKey, TerminalSize.Small, view,
             () => text.Get("terminal_view_size_name"), () => text.Get("terminal_view_size_desc"));
         _partitionSize = config.DefineEnum(PartitionSizeKey, TerminalSize.Medium, view,
@@ -173,7 +178,8 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
             (_identifierSearchMode, search), (_searchHighlighting, search),
-            (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view), (_terminalKeepOpen, view)
+            (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view), (_terminalKeepOpen, view),
+            (_extractionPriority, view)
         })
         {
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
@@ -441,6 +447,15 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     {
         get => TerminalViewPolicy.Normalize(_size.Value);
         set => SetTerminalOption(_size, value);
+    }
+
+    /// <summary>Gets where a left click puts items first; an unknown saved value falls back to the warehouse.</summary>
+    public ExtractionPriority ExtractionPriority
+    {
+        get => Enum.IsDefined(typeof(ExtractionPriority), _extractionPriority.Value)
+            ? _extractionPriority.Value
+            : ExtractionPriority.WarehouseFirst;
+        set => SetTerminalOption(_extractionPriority, value);
     }
 
     public TerminalSize PartitionSize

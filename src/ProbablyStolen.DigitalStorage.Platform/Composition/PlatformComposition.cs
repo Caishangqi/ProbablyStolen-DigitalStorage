@@ -223,7 +223,8 @@ public sealed class PlatformComposition : IDisposable
         var controller = new ControllerItem(appearance, windows);
         var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
             networkPowerSettings.GetItemIdentityLog, networkPowerSettings.GetTerminalKeepOpen,
-            networkPowerSettings.SetTerminalKeepOpen);
+            networkPowerSettings.SetTerminalKeepOpen, () => networkPowerSettings.ExtractionPriority,
+            value => networkPowerSettings.ExtractionPriority = value);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,

@@ -7,6 +7,7 @@ using System.Threading;
 using ProbablyStolen.DigitalStorage.Api.Config;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Search;
 using ProbablyStolen.DigitalStorage.Common.Application.Queries;
@@ -426,10 +427,12 @@ internal sealed class StorageService
     }
 
     /// <summary>
-    /// Moves at most <paramref name="pieces"/> stored roots of one type into the player's inventory. A root the
-    /// inventory cannot take whole stays stored, so no item is split and no more pieces move than asked.
+    /// Moves at most <paramref name="pieces"/> stored roots of one type into the warehouse and the back counter, the one
+    /// <paramref name="priority"/> prefers first. A root neither can take whole stays stored, so no item is split and no
+    /// more pieces move than asked.
     /// </summary>
-    internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces, TransferOperation operation)
+    internal TerminalExtractionResult ExtractPieces(GameItem terminal, ItemKey key, long pieces, ExtractionPriority priority,
+        TransferOperation operation)
     {
         if (pieces <= 0)
         {
@@ -451,7 +454,7 @@ internal sealed class StorageService
         }
 
         // Extraction starts at the lowest priority, so drives with higher priority keep their items longest.
-        var destination = new PieceLimitSink(new InventoryRootSink(EmporiumEntry.Instance.invElement, wholeRootOnly: true, operation: operation), pieces);
+        var destination = new PieceLimitSink(ClickDestinations(priority, operation), pieces);
         _contentsUncertain = false;
         var failed = false;
         try
@@ -482,6 +485,26 @@ internal sealed class StorageService
         return TerminalExtractionResult.Create(
             moved >= pieces ? TerminalExtractionStatus.Success : TerminalExtractionStatus.Partial,
             pieces, moved, "terminal_storage_extracted");
+    }
+
+    /// <summary>
+    /// Gets where a left click puts items: the warehouse and the back counter in the chosen order. Away from the store
+    /// the same back counter window serves as another trader's counter and is cleared on leaving, so it only counts
+    /// while the player is in the store.
+    /// </summary>
+    private static IRootSink ClickDestinations(ExtractionPriority priority, TransferOperation operation)
+    {
+        var store = EmporiumEntry.Instance;
+        var sinks = new List<IRootSink>();
+        foreach (var destination in ExtractionOrder.For(priority))
+        {
+            if (destination == ExtractionDestination.Warehouse)
+                sinks.Add(new InventoryRootSink(store.invElement, wholeRootOnly: true, operation: operation));
+            else if (MapUIManager.Instance == null || !MapUIManager.Instance.IsOutside)
+                sinks.Add(new InventoryRootSink(store.backInvinvElement, wholeRootOnly: true, operation: operation));
+        }
+
+        return new FallbackRootSink(sinks);
     }
 
     /// <summary>Moves a display-ordered batch of whole roots into the resolved destination.</summary>

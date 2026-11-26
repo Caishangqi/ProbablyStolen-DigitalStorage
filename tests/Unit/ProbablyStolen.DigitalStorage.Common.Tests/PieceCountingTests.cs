@@ -4,6 +4,7 @@ using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Common.Application.Storage;
 using ProbablyStolen.DigitalStorage.Common.Contracts.Storage;
+using ProbablyStolen.DigitalStorage.Common.Contracts.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Common.Tests;
@@ -79,6 +80,78 @@ public sealed class PieceCountingTests
     public void PieceLimitSink_RefusesAPositiveLimitOnly()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>((System.Action)(() => _ = new PieceLimitSink(new MemoryInventory(), 0)));
+    }
+
+    [Test]
+    public void FallbackRootSink_FillsThePreferredDestinationFirstThenTheNext()
+    {
+        var cell = NewCell();
+        var source = new MemoryInventory();
+        for (var i = 0; i < 5; i++) source.With(OneByThree, "exotic_fuel", 10 + i);
+        cell.Insert(source, Actionable.Modulate, Player);
+        var warehouse = new MemoryInventory { Capacity = 2 };
+        var counter = new MemoryInventory();
+        var limited = new PieceLimitSink(new FallbackRootSink(new IRootSink[] { warehouse, counter }), 4);
+
+        cell.Extract(Fuel, long.MaxValue, limited, Actionable.Modulate, Player);
+
+        Assert.That(limited.Accepted, Is.EqualTo(4));
+        Assert.That(warehouse.Roots, Has.Count.EqualTo(2));
+        Assert.That(counter.Roots, Has.Count.EqualTo(2));
+        Assert.That(Pieces(cell).Get(Fuel), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void FallbackRootSink_StopsWhenEveryDestinationIsFull()
+    {
+        var cell = NewCell();
+        cell.Insert(new MemoryInventory().With(OneByThree, "exotic_fuel", 1).With(OneByThree, "exotic_fuel", 2),
+            Actionable.Modulate, Player);
+        var first = new MemoryInventory { Capacity = 0 };
+        var second = new MemoryInventory { Capacity = 1 };
+        var limited = new PieceLimitSink(new FallbackRootSink(new IRootSink[] { first, second }), 5);
+
+        var result = cell.Extract(Fuel, long.MaxValue, limited, Actionable.Modulate, Player);
+
+        Assert.That(limited.Accepted, Is.EqualTo(1));
+        Assert.That(second.Roots, Has.Count.EqualTo(1));
+        Assert.That(result.StoppedBy.Rejection, Is.EqualTo(StoreRejection.PhysicalLimit));
+        Assert.That(Pieces(cell).Get(Fuel), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void FallbackRootSink_DoesNotOfferAReturnedRootAgain()
+    {
+        var returning = new FixedSink(TransferStep.Returned);
+        var next = new FixedSink(TransferStep.Moved);
+        var sink = new FallbackRootSink(new IRootSink[] { returning, next });
+
+        var step = sink.Accept(default, Actionable.Modulate, Player);
+
+        Assert.That(step.Outcome, Is.EqualTo(TransferOutcome.Returned));
+        Assert.That(next.Calls, Is.Zero);
+    }
+
+    [Test]
+    public void FallbackRootSink_RequiresDestinations()
+    {
+        Assert.Throws<System.ArgumentException>((System.Action)(() => _ = new FallbackRootSink(new IRootSink[0])));
+        Assert.Throws<System.ArgumentException>((System.Action)(() => _ = new FallbackRootSink(new IRootSink[] { null! })));
+    }
+
+    private sealed class FixedSink : IRootSink
+    {
+        private readonly TransferStep _step;
+
+        internal FixedSink(TransferStep step) => _step = step;
+
+        internal int Calls { get; private set; }
+
+        public TransferStep Accept(RootSnapshot root, Actionable mode, IActionSource source)
+        {
+            Calls++;
+            return _step;
+        }
     }
 
     private static BasicCellInventory NewCell()

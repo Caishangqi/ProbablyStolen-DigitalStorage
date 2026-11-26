@@ -193,6 +193,13 @@ terminal_keep_open_desc,开启后按 Esc 会保留存储终端。右上角的 ×
 terminal_keep_open_tip,保持打开：{0}
 terminal_keep_open_enabled,已开启。按 Esc 保留终端，点击 × 可关闭。
 terminal_keep_open_disabled,已关闭。按 Esc 可关闭终端。
+terminal_extract_destination_name,左键取出位置
+terminal_extract_destination_desc,选择存储终端左键取出的物品先放到哪里。那里放满后，剩下的放到另一处。只有在自己店里时才会用到后柜台。
+terminal_extract_destination_tip,左键取出：{0}
+terminal_extract_warehouse,仓库优先
+terminal_extract_counter,后柜台优先
+terminal_extract_warehouse_first,先放仓库，满了再放后柜台。
+terminal_extract_counter_first,先放后柜台，满了再放仓库。
 partition_view_size_name,分区窗口高度
 partition_view_size_desc,元件分区窗口占屏幕高度的比例。也可用分区窗口左侧按钮切换，设置会自动保存。
 terminal_hint_title,操作

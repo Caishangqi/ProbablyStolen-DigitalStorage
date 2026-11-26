@@ -830,6 +830,42 @@
       }
     },
     {
+      "path": "Textures/button_extract_warehouse.png",
+      "image": {
+        "source": [
+          16,
+          16
+        ],
+        "runtime": [
+          16,
+          16
+        ],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
+      "path": "Textures/button_extract_counter.png",
+      "image": {
+        "source": [
+          16,
+          16
+        ],
+        "runtime": [
+          16,
+          16
+        ],
+        "interface": true,
+        "visible": true,
+        "sheetCells": 0,
+        "openCenters": false,
+        "sheetCellSize": null
+      }
+    },
+    {
       "path": "Textures/Items/digital_scientist.png",
       "image": {
         "source": [

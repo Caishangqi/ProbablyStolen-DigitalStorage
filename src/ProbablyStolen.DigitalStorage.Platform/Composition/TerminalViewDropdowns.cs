@@ -23,7 +23,11 @@ public static class TerminalViewDropdowns
             ["Ascending"] = "terminal_direction_asc", ["Descending"] = "terminal_direction_desc"
         }),
         (DigitalStorageSettings.SizeKey, SizeLabels()),
-        (DigitalStorageSettings.PartitionSizeKey, SizeLabels())
+        (DigitalStorageSettings.PartitionSizeKey, SizeLabels()),
+        (DigitalStorageSettings.ExtractionPriorityKey, new Dictionary<string, string>
+        {
+            ["WarehouseFirst"] = "terminal_extract_warehouse", ["CounterFirst"] = "terminal_extract_counter"
+        })
     };
     private static bool _failureLogged;
 

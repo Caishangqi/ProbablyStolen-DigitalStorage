@@ -12,7 +12,9 @@ internal sealed class EmporiumEntry
     internal readonly GameGridInventory invElement;
     internal EmporiumEntry(GameGridInventory inventory) => invElement = inventory;
     internal IEnumerable<GameItem> GetAllItems() => throw new InvalidOperationException("unexpected load audit");
-    internal readonly GraphNodeStorage? backInvinvElement = null;
+#nullable disable annotations
+    internal readonly GameGridInventory backInvinvElement = null;
+#nullable restore annotations
     internal readonly GraphNodeStorage? frontInvinvElement = null;
     internal readonly GraphNodeStorage? docInvElement = null;
     internal readonly GraphNodeStorage? showcaseElement = null;
@@ -21,6 +23,12 @@ internal sealed class EmporiumEntry
     internal readonly GraphNodeStorage? afterhourWindow = null;
     internal readonly GraphNodeStorage? vendingFountainElement = null;
     internal readonly GraphNodeStorage? vendingMachineElement = null;
+}
+
+internal sealed class MapUIManager
+{
+    internal static MapUIManager? Instance { get; set; }
+    internal bool IsOutside { get; set; }
 }
 
 internal sealed class PlayerStore
