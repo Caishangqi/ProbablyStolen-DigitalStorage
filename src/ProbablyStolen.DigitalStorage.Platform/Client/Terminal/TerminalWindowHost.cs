@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
@@ -31,6 +32,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private readonly Action<string> _writeDiagnostic;
     private readonly Func<IReadOnlyCollection<string>>? _moduleIdentifiers;
     private readonly Func<Action<NetworkChanged>, IDisposable>? _subscribeNetwork;
+    private readonly SlotMetricsService _slotMetrics;
+    private SlotMetrics _slots = SlotMetrics.Default;
     private TerminalDiagnostics? _diagnostics;
     private GameItem? _terminal;
     private CustomUIWindow? _window;
@@ -52,17 +55,18 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private StoragePresentationPipeline? _pipeline;
 
     internal TerminalWindowHost(TerminalRegistry registry, StorageTerminalServices storage, ITerminalViewSettings settings,
-        Func<bool> testViewEnabled, ButtonIcons icons) : this(registry, storage.Text, settings, testViewEnabled, storage.DiagnosticsEnabled,
-        storage.WriteDiagnostic, null, icons, storage.SubscribeNetwork)
+        Func<bool> testViewEnabled, ButtonIcons icons, SlotMetricsService slotMetrics) : this(registry, storage.Text, settings,
+        testViewEnabled, storage.DiagnosticsEnabled, storage.WriteDiagnostic, null, icons, slotMetrics, storage.SubscribeNetwork)
     {
     }
 
     internal TerminalWindowHost(TerminalRegistry registry, ModText text, ITerminalViewSettings settings,
         Func<bool> testViewEnabled, Func<bool> diagnosticsEnabled, Action<string> writeDiagnostic,
-        Func<IReadOnlyCollection<string>>? installedModules, ButtonIcons icons,
+        Func<IReadOnlyCollection<string>>? installedModules, ButtonIcons icons, SlotMetricsService slotMetrics,
         Func<Action<NetworkChanged>, IDisposable>? subscribeNetwork = null)
     {
         Icons = icons ?? throw new ArgumentNullException(nameof(icons));
+        _slotMetrics = slotMetrics ?? throw new ArgumentNullException(nameof(slotMetrics));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -78,6 +82,12 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     /// <summary>The button icons of this window, for pages that add icon buttons.</summary>
     internal ButtonIcons ButtonIcons => Icons;
+
+    /// <summary>The slot measurements this window was built with; a change rebuilds the window.</summary>
+    internal SlotMetrics SlotMetrics => _slots;
+
+    /// <summary>The shared slot measurements, for the page that changes them.</summary>
+    internal SlotMetricsService SlotMetricsService => _slotMetrics;
 
     private readonly ModText _text;
 
@@ -98,6 +108,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     TerminalDiagnostics? ITerminalViewHost.Diagnostics => _diagnostics;
 
     int ITerminalViewHost.Rows => _rows;
+
+    SlotMetrics ITerminalViewHost.SlotMetrics => _slots;
 
     ButtonIcons ITerminalViewHost.Icons => Icons;
 
@@ -122,9 +134,9 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     protected virtual TerminalSize HostSize => _settings.Size;
 
-    protected virtual int HostHeight => TerminalWindowMetrics.GetHeight(_rows);
+    protected virtual int HostHeight => TerminalWindowMetrics.GetHeight(_slots, _rows);
 
-    protected virtual float HostWidth => TerminalWindowMetrics.Width;
+    protected virtual float HostWidth => TerminalWindowMetrics.GetWidth(_slots);
 
     protected virtual GameItem? PositionOwner => _terminal;
 
@@ -246,6 +258,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private void Build()
     {
         _diagnostics = new TerminalDiagnostics(_diagnosticsEnabled, WriteDiagnostic);
+        // Before this window subscribes: a change found here rebuilds the other open windows, not this one.
+        _slots = _slotMetrics.Refresh();
         _rows = CountRows();
         var builder = CustomUIManager.Instance.CreateWindow(HostWindowId, Text.Get(HostTitleKey),
             "overlay", null, CustomUIManager.Style.Machinery);
@@ -279,7 +293,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             CreateFeatureData());
         var host = _host;
         foreach (var bar in docks.Bars)
-            _docks.Add(DockView.Create(_window, Text, Icons, bar, () => host.Context, RefreshButtons));
+            _docks.Add(DockView.Create(_window, Text, Icons, _slots, bar, () => host.Context, RefreshButtons));
+        _slotMetrics.Changed += OnSlotMetricsChanged;
     }
 
     internal bool IsWindowMoveArea(Vector2 point)
@@ -313,7 +328,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private int CountRows()
     {
         var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
-        return TerminalWindowMetrics.GetRows(HostSize, LetterboxManager.GameAreaHeight,
+        return TerminalWindowMetrics.GetRows(HostSize, _slots, LetterboxManager.GameAreaHeight,
             canvas == null ? 0f : canvas.scaleFactor);
     }
 
@@ -351,6 +366,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         var position = _window.Rect.anchoredPosition;
         var terminal = _host.CurrentTerminal;
         var state = _currentView?.StoreState();
+        var top = TopPage?.Screen;
         _rebuilding = true;
         try { _window.Close(); }
         finally { _rebuilding = false; }
@@ -358,6 +374,13 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         if (_window == null || _host == null) return;
         _window.Rect.anchoredPosition = position;
         if (_host.CurrentTerminal == terminal) _currentView?.RestoreState(state);
+        if (top?.Reopen() is { } page) PushScreen(page);
+    }
+
+    private void OnSlotMetricsChanged(object? sender, SlotMetricsChangedEventArgs change)
+    {
+        if (_window == null || _closing || _rebuilding || change.Current.Equals(_slots)) return;
+        RebuildForSize();
     }
 
     protected virtual void SubscribeSources()
@@ -556,7 +579,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private ScreenPage? TopPage => _pages.Count == 0 ? null : _pages[_pages.Count - 1];
 
     private float DockExtent(DockSide side) =>
-        _registry.FindDock(side) == null ? 0f : TerminalWindowMetrics.DockWidth + TerminalWindowMetrics.DockGap;
+        _registry.FindDock(side) == null ? 0f : TerminalWindowMetrics.GetDockWidth(_slots) + TerminalWindowMetrics.DockGap;
 
     private static RectTransform CreatePageContainer(CustomUIWindow window, RectTransform host)
     {
@@ -677,6 +700,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _closing = true;
         try
         {
+            _slotMetrics.Changed -= OnSlotMetricsChanged;
             _host?.Close();
             // Close already released them; this covers a host that failed before getting there.
             for (var index = _pages.Count - 1; index >= 0; index--) RemovePage(_pages[index]);

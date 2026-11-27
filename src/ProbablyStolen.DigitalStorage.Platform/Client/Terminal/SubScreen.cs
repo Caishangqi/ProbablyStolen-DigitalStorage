@@ -58,6 +58,12 @@ internal abstract class SubScreen : ITerminalBackHandler, ITerminalScreen
 
     public virtual bool HandleBack() => false;
 
+    /// <summary>
+    /// Gets a fresh copy of this page to show again after the window rebuilds under it, or null when the page closes with
+    /// the old window.
+    /// </summary>
+    internal virtual SubScreen? Reopen() => null;
+
     /// <summary>Runs when another page is pushed above this one; its controls stay and are only hidden.</summary>
     internal virtual void OnCovered()
     {

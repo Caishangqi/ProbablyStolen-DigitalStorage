@@ -31,6 +31,7 @@ namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 public sealed class PlatformComposition : IDisposable
 {
     private readonly ButtonIcons _buttonIcons;
+    private readonly SlotMetricsService _slotMetrics;
     private readonly ModLog _log;
     private readonly StartupStatusPresenter _statusPresenter;
     private readonly string _modId;
@@ -75,8 +76,10 @@ public sealed class PlatformComposition : IDisposable
         NativeCustomerCatalog customers,
         TerminalSearchComposition search, CellWorkbenchItem workbench,
         DigitalStorageContentService contentApi, DigitalStorageRuntime runtime, IoPortCoordinator ioPortCoordinator,
-        ButtonIcons buttonIcons, CompatibilityDiagnostics compatibility, IntegrationDecorationCatalog decorations)
+        ButtonIcons buttonIcons, SlotMetricsService slotMetrics, CompatibilityDiagnostics compatibility,
+        IntegrationDecorationCatalog decorations)
     {
+        _slotMetrics = slotMetrics ?? throw new ArgumentNullException(nameof(slotMetrics));
         _compatibility = compatibility;
         _decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
         _buttonIcons = buttonIcons;
@@ -167,6 +170,7 @@ public sealed class PlatformComposition : IDisposable
         var inventory = new DriveCellInventory(recipe);
         var categories = new BuiltinLogCategories();
         var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text, categories.Registry);
+        var slotMetrics = new SlotMetricsService(networkPowerSettings, message => log.Warning(message));
         var diagnosticLogger = new DiagnosticLogger(categories.Registry, networkPowerSettings.GetLogSettings,
             (level, message) =>
             {
@@ -219,7 +223,7 @@ public sealed class PlatformComposition : IDisposable
             itemContent.Changed);
         var housing = new MaterialItem(cell);
         var drive = new DriveItem(appearance, windows, inventory, networkEvents, text,
-            () => DriveWindow.Create(text, networkPowerSettings, buttonIcons, message => log.Log(message)));
+            () => DriveWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, message => log.Log(message)));
         var controller = new ControllerItem(appearance, windows);
         var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
             networkPowerSettings.GetItemIdentityLog, networkPowerSettings.GetTerminalKeepOpen,
@@ -228,10 +232,12 @@ public sealed class PlatformComposition : IDisposable
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
             networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
             search.Service,
-            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, transferDiagnostics,
+            networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, slotMetrics,
+            transferDiagnostics,
             compatibility, decorations, identity.Id);
         var workbench = new CellWorkbenchItem(text, appearance,
-            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message), buttonIcons),
+            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message),
+                buttonIcons, slotMetrics),
             PartitionWindow.CloseFor,
             message => log.Log(message));
         var modules = new CellModuleFactory(appearance, itemContent.Changed, text, message => log.Error(message));
@@ -245,7 +251,8 @@ public sealed class PlatformComposition : IDisposable
             message => log.Error(message),
             () => new IoPortTooltipContributor(text, networkPowerSettings, coordinator.ReadDisplay));
         var ioPort = new IoPortItem(appearance, windows,
-            _ => IoPortWindow.Create(text, networkPowerSettings, buttonIcons, coordinator, message => log.Log(message)),
+            _ => IoPortWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, coordinator,
+                message => log.Log(message)),
             coordinator, text);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
             modules, new TerminalModuleFactory(appearance), ioPort, itemContent, log);
@@ -254,8 +261,9 @@ public sealed class PlatformComposition : IDisposable
             networkPowerSettings, new StorageVendors(text, log, goods, customers),
             new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
             contentApi,
-            new DigitalStorageRuntime(networkPower, networkScanner, message => log.Warning(message),
-                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), coordinator, buttonIcons, compatibility, decorations);
+            new DigitalStorageRuntime(networkPower, networkScanner, slotMetrics, message => log.Warning(message),
+                () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), coordinator, buttonIcons,
+            slotMetrics, compatibility, decorations);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
         return composition;
     }
@@ -462,6 +470,8 @@ public sealed class PlatformComposition : IDisposable
             _integrations?.OnSettingsApplied();
             if (_settings.ReadBuiltInChanges())
             {
+                // Open windows rebuild when a slot, margin or dock button size changed.
+                _slotMetrics.Refresh();
                 _pinyinLifecycle.OnConfigApplied();
                 _log.Log("Digital Storage: configuration applied; open network views refresh now.");
                 _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));

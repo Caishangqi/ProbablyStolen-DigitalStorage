@@ -1,3 +1,4 @@
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 
@@ -18,4 +19,10 @@ internal interface ITerminalViewSettings
     TerminalSize PartitionSize { get; set; }
 
     ExtractionPriority ExtractionPriority { get; set; }
+
+    SizeTier SlotSize { get; set; }
+
+    IconMarginTier IconMargin { get; set; }
+
+    SizeTier DockButtonSize { get; set; }
 }

@@ -23,7 +23,7 @@ internal sealed class DiagnosticTerminalView : ITerminalView
     {
         _container = container ?? throw new ArgumentNullException(nameof(container));
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window.CustomWindow, container);
-        DiagnosticText.Add(builder, _window.Text.Get("terminal_diagnostics_view_text"));
+        DiagnosticText.Add(builder, _window.Text.Get("terminal_diagnostics_view_text"), _window);
     }
 
     /// <inheritdoc />
@@ -83,7 +83,7 @@ internal sealed class DiagnosticScreen : SubScreen
     /// <inheritdoc />
     protected override bool BuildContent(CustomUIBuilder builder)
     {
-        DiagnosticText.Add(builder, Window.Text.Get("terminal_diagnostics_screen_text"));
+        DiagnosticText.Add(builder, Window.Text.Get("terminal_diagnostics_screen_text"), Window);
         return true;
     }
 }
@@ -91,10 +91,10 @@ internal sealed class DiagnosticScreen : SubScreen
 /// <summary>A wrapped placeholder line for the diagnostic view and page.</summary>
 internal static class DiagnosticText
 {
-    internal static void Add(CustomUIBuilder builder, string text)
+    internal static void Add(CustomUIBuilder builder, string text, TerminalWindowHost window)
     {
         builder.AddLabel(text);
-        TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.GridWidth, 40f);
+        TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.GetGridWidth(window.SlotMetrics), 40f);
         if (builder.Last.text == null) return;
         builder.Last.text.fontSize = 14f;
         builder.Last.text.enableWordWrapping = true;

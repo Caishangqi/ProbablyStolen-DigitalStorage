@@ -37,22 +37,22 @@ internal sealed class IoPortWindow : TerminalWindowHost
     internal IoPortTerminalView? View { get; set; }
 
     private IoPortWindow(TerminalRegistry registry, ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        IoPortCoordinator coordinator, Action<string> log)
-        : base(registry, text, settings, () => false, () => false, log, null, icons)
+        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, Action<string> log)
+        : base(registry, text, settings, () => false, () => false, log, null, icons, slotMetrics)
     {
         _coordinator = coordinator;
     }
 
     /// <summary>Creates the window of one machine with its own registry.</summary>
     internal static IoPortWindow Create(ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        IoPortCoordinator coordinator, Action<string> log)
+        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, Action<string> log)
     {
         var registry = IoPortTerminalFeature.CreateRegistry((IConfigManager)settings, log,
             owner => new IoPortTerminalView((IoPortWindow)owner),
             owner => new TerminalModulesScreen((IoPortWindow)owner),
             context => ((IoPortWindow)context.Window).ReadSettings()?.CompletionMode,
             (context, mode) => ((IoPortWindow)context.Window).Change(settings => settings.WithCompletionMode(mode)));
-        return new IoPortWindow(registry, text, settings, icons, coordinator, log);
+        return new IoPortWindow(registry, text, settings, icons, slotMetrics, coordinator, log);
     }
 
     internal IoPortCoordinator Coordinator => _coordinator;

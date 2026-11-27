@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using UnityEngine;
 using UnityEngine.UI;
@@ -54,8 +55,8 @@ internal sealed class SlotDecorationLayer
             rect.SetSiblingIndex(sibling++);
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(ItemSlotGrid.SlotPadding, ItemSlotGrid.SlotPadding);
-            rect.offsetMax = new Vector2(-ItemSlotGrid.SlotPadding, -ItemSlotGrid.SlotPadding);
+            rect.offsetMin = new Vector2(SlotMetrics.BorderPadding, SlotMetrics.BorderPadding);
+            rect.offsetMax = new Vector2(-SlotMetrics.BorderPadding, -SlotMetrics.BorderPadding);
             image.sprite = sprite;
             // Overlays are grayscale; the tint multiplies them, the same way the game colors palette text.
             image.color = RenderHandler.GetColorFromPalette((RenderHandler.ColorPalette)decoration.TintRgb);

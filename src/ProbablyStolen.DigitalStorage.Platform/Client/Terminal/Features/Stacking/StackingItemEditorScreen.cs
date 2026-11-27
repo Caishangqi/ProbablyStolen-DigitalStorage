@@ -57,7 +57,8 @@ internal sealed class StackingItemEditorScreen : SubScreen
 
     internal override bool FitsContent => true;
 
-    private static float BodyWidth => TerminalWindowMetrics.GridWidth + 36f;
+    // Stacking pages keep the original width; only the slot grids follow the slot size setting.
+    private static float BodyWidth => TerminalWindowMetrics.GetGridWidth(ProbablyStolen.DigitalStorage.Api.Client.SlotMetrics.Default) + 36f;
 
     protected override bool BuildContent(CustomUIBuilder builder)
     {

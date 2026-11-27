@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Api.Integration;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
@@ -40,6 +41,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     internal const string SizeKey = TerminalStyleFeature.SettingName;
     internal const string PartitionSizeKey = PartitionTerminalFeature.SizeSettingName;
     internal const string ExtractionPriorityKey = "terminal_extract_destination";
+    internal const string SlotSizeKey = "terminal_slot_size";
+    internal const string IconMarginKey = "terminal_icon_margin";
+    internal const string DockButtonSizeKey = "terminal_dock_button_size";
     // ConfigEntry.Section has an internal setter.
     private static readonly MethodInfo? SectionSetter =
         typeof(ConfigEntry).GetProperty(nameof(ConfigEntry.Section))?.GetSetMethod(nonPublic: true);
@@ -81,6 +85,9 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<TerminalSize> _partitionSize;
     private readonly ConfigEntry<bool> _terminalKeepOpen;
     private readonly ConfigEntry<ExtractionPriority> _extractionPriority;
+    private readonly ConfigEntry<SizeTier> _slotSize;
+    private readonly ConfigEntry<IconMarginTier> _iconMargin;
+    private readonly ConfigEntry<SizeTier> _dockButtonSize;
     private bool _invalidPinyinModeLogged;
 
     internal DigitalStorageSettings(string modId, ModText text, LogCategories logCategories)
@@ -169,6 +176,12 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("terminal_view_size_name"), () => text.Get("terminal_view_size_desc"));
         _partitionSize = config.DefineEnum(PartitionSizeKey, TerminalSize.Medium, view,
             () => text.Get("partition_view_size_name"), () => text.Get("partition_view_size_desc"));
+        _slotSize = config.DefineEnum(SlotSizeKey, SizeTier.Default, view,
+            () => text.Get("terminal_slot_size_name"), () => text.Get("terminal_slot_size_desc"));
+        _iconMargin = config.DefineEnum(IconMarginKey, IconMarginTier.Standard, view,
+            () => text.Get("terminal_icon_margin_name"), () => text.Get("terminal_icon_margin_desc"));
+        _dockButtonSize = config.DefineEnum(DockButtonSizeKey, SizeTier.Default, view,
+            () => text.Get("terminal_dock_button_size_name"), () => text.Get("terminal_dock_button_size_desc"));
         foreach (var (entry, section) in new (ConfigEntry, string)[]
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power), (_ioPortPowerUsage, power),
@@ -179,7 +192,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
             (_identifierSearchMode, search), (_searchHighlighting, search),
             (_sortOrder, view), (_sortDirection, view), (_size, view), (_partitionSize, view), (_terminalKeepOpen, view),
-            (_extractionPriority, view)
+            (_extractionPriority, view), (_slotSize, view), (_iconMargin, view), (_dockButtonSize, view)
         })
         {
             _sections.Add(new KeyValuePair<ConfigEntry, string>(entry, section));
@@ -462,6 +475,27 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     {
         get => TerminalViewPolicy.Normalize(_partitionSize.Value, TerminalSize.Medium);
         set => SetTerminalOption(_partitionSize, value);
+    }
+
+    /// <summary>The slot size of the terminal and the partition editor. Unknown saved values use the default size.</summary>
+    public SizeTier SlotSize
+    {
+        get => Enum.IsDefined(typeof(SizeTier), _slotSize.Value) ? _slotSize.Value : SizeTier.Default;
+        set => SetTerminalOption(_slotSize, value);
+    }
+
+    /// <summary>The icon margin of the terminal and the partition editor. Unknown saved values use the standard margin.</summary>
+    public IconMarginTier IconMargin
+    {
+        get => Enum.IsDefined(typeof(IconMarginTier), _iconMargin.Value) ? _iconMargin.Value : IconMarginTier.Standard;
+        set => SetTerminalOption(_iconMargin, value);
+    }
+
+    /// <summary>The dock button size of every terminal-style window. Unknown saved values use the default size.</summary>
+    public SizeTier DockButtonSize
+    {
+        get => Enum.IsDefined(typeof(SizeTier), _dockButtonSize.Value) ? _dockButtonSize.Value : SizeTier.Default;
+        set => SetTerminalOption(_dockButtonSize, value);
     }
 
     /// <summary>Reads a terminal rail setting from the global config entry of the same name.</summary>

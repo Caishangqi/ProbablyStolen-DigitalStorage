@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using TMPro;
 using UnityEngine;
@@ -26,27 +27,24 @@ internal enum SlotTone
 /// <summary>
 /// A grid of item slots on a <see cref="CustomUIBuilder"/>: a border panel per slot holding a button, the mirrored
 /// native item layers, a fallback sprite and an optional quantity badge. The terminal shows badges;
-/// partition rules do not.
+/// partition rules do not. Every part inside a slot is sized by the grid's <see cref="SlotMetrics"/>.
 /// </summary>
 internal sealed class ItemSlotGrid
 {
-    /// <summary>The border width between a slot panel and its button.</summary>
-    internal const float SlotPadding = 2f;
-
     private readonly ItemPictureCapture _pictures;
     private readonly bool _showBadge;
-    private readonly float _cellPixels;
+    private readonly SlotMetrics _slots;
     private CustomUIElement?[] _buttons = Array.Empty<CustomUIElement?>();
     private CustomUIElement?[] _badges = Array.Empty<CustomUIElement?>();
     private Image?[] _icons = Array.Empty<Image?>();
     private RectTransform?[] _views = Array.Empty<RectTransform?>();
     private List<Image>[] _layers = Array.Empty<List<Image>>();
 
-    internal ItemSlotGrid(ItemPictureCapture pictures, bool showBadge, float cellPixels)
+    internal ItemSlotGrid(ItemPictureCapture pictures, bool showBadge, SlotMetrics slots)
     {
         _pictures = pictures ?? throw new ArgumentNullException(nameof(pictures));
         _showBadge = showBadge;
-        _cellPixels = cellPixels;
+        _slots = slots ?? throw new ArgumentNullException(nameof(slots));
     }
 
     /// <summary>Gets the number of built slots.</summary>
@@ -71,20 +69,23 @@ internal sealed class ItemSlotGrid
         for (var index = 0; index < count; index++)
         {
             var slotIndex = index;
-            builder.BeginPanel(_cellPixels, _cellPixels, padding: SlotPadding, spacing: 0f, id: null);
+            builder.BeginPanel(_slots.SlotPixels, _slots.SlotPixels, padding: SlotMetrics.BorderPadding, spacing: 0f, id: null);
             if (index == 0) Root = builder.Last.Rect.parent as RectTransform;
             ConfigureBorder(builder.Last);
             builder.AddPointerButton(string.Empty, () => click(slotIndex), null);
+            // The panel's layout sizes the button to its preferred size and centers it; without one, the button keeps
+            // the native prefab size and an empty slot shows a wide border once the slot is larger than that.
+            builder.Last.SetPreferredSize(_slots.ButtonPixels, _slots.ButtonPixels);
             if (secondaryClick != null)
                 builder.Last.root.AddComponent<TerminalSlotClick>().Initialize(() => secondaryClick(slotIndex));
             _buttons[index] = builder.Last;
-            _icons[index] = ConfigureButton(builder.Last);
-            _views[index] = CreateItemView(builder.Last);
+            _icons[index] = ConfigureButton(builder.Last, _slots.IconInset);
+            _views[index] = CreateItemView(builder.Last, _slots.IconInset);
             _layers[index] = new List<Image>();
             if (_showBadge)
             {
                 builder.AddLabel(string.Empty, null);
-                ConfigureBadge(builder.Last);
+                ConfigureBadge(builder.Last, _slots);
                 _badges[index] = builder.Last;
             }
 
@@ -145,7 +146,7 @@ internal sealed class ItemSlotGrid
     internal void SetEntry(int index, ItemPicture? picture, bool showPicture, bool interactable, string? badgeText)
     {
         var button = Button(index);
-        button?.SetVisible(true).SetPreferredSize(_cellPixels - 4f, _cellPixels - 4f);
+        button?.SetVisible(true);
         TerminalTooltipPresenter.SetText(button, string.Empty);
         if (button?.button != null) button.button.interactable = interactable;
         ShowPicture(index, picture, showPicture);
@@ -281,7 +282,7 @@ internal sealed class ItemSlotGrid
         slot.image.raycastTarget = false;
     }
 
-    private static Image ConfigureButton(CustomUIElement button)
+    private static Image ConfigureButton(CustomUIElement button, float inset)
     {
         button.image.sprite = null;
         button.image.color = new Color32(35, 32, 45, 255);
@@ -291,8 +292,8 @@ internal sealed class ItemSlotGrid
         var rect = (RectTransform)icon.transform;
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
-        rect.offsetMin = new Vector2(6f, 6f);
-        rect.offsetMax = new Vector2(-6f, -6f);
+        rect.offsetMin = new Vector2(inset, inset);
+        rect.offsetMax = new Vector2(-inset, -inset);
         icon.preserveAspect = true;
         icon.raycastTarget = false;
         icon.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
@@ -300,30 +301,30 @@ internal sealed class ItemSlotGrid
     }
 
     /// <summary>Creates the container that holds the mirrored native item layers, over the icon area.</summary>
-    private static RectTransform CreateItemView(CustomUIElement button)
+    private static RectTransform CreateItemView(CustomUIElement button, float inset)
     {
         var view = (RectTransform)new GameObject("terminal_item_view", typeof(RectTransform)).transform;
         view.SetParent(button.root.transform, false);
         view.anchorMin = Vector2.zero;
         view.anchorMax = Vector2.one;
-        view.offsetMin = new Vector2(6f, 6f);
-        view.offsetMax = new Vector2(-6f, -6f);
+        view.offsetMin = new Vector2(inset, inset);
+        view.offsetMax = new Vector2(-inset, -inset);
         view.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
         return view;
     }
 
-    private static void ConfigureBadge(CustomUIElement badge)
+    private static void ConfigureBadge(CustomUIElement badge, SlotMetrics slots)
     {
         var layout = badge.root.GetComponent<LayoutElement>() ?? badge.root.AddComponent<LayoutElement>();
         layout.ignoreLayout = true;
         badge.Rect.anchorMin = Vector2.zero;
         badge.Rect.anchorMax = Vector2.one;
-        badge.Rect.offsetMin = new Vector2(3f, 2f);
-        badge.Rect.offsetMax = new Vector2(-3f, -2f);
+        badge.Rect.offsetMin = new Vector2(slots.BadgeOffsetX, slots.BadgeOffsetY);
+        badge.Rect.offsetMax = new Vector2(-slots.BadgeOffsetX, -slots.BadgeOffsetY);
         if (badge.text != null)
         {
             badge.text.alignment = TextAlignmentOptions.BottomRight;
-            badge.text.fontSize = 12f;
+            badge.text.fontSize = slots.BadgeFontSize;
             badge.text.raycastTarget = false;
         }
     }

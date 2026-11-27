@@ -42,7 +42,7 @@ internal sealed class ButtonIcons : IDisposable
             "button_size_small", "button_size_medium", "button_size_tall", "button_size_full",
             "button_modules", "button_whitelist", "button_blacklist", "button_clear", "button_delete", "button_stack",
             "button_edit", "button_priority", "button_add_global", "button_delete_global",
-            "button_keep_open_off", "button_keep_open_on",
+            "button_keep_open_off", "button_keep_open_on", "button_settings",
             IoStart, IoPause, IoCancel, ToLeft, ToRight, IoFinishEmpty, IoFinishFull, IoFinishDone,
             Add, SampleAttributes
         }) TryCreate(key, out _);

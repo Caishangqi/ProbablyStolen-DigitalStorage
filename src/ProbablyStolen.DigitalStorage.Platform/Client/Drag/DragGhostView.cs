@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Interaction.Drag;
 using TMPro;
 using UnityEngine;
@@ -19,13 +20,15 @@ internal sealed class DragGhostView : IDisposable
     private readonly List<Image> _layers = new();
     private readonly List<DragGhostView> _children = new();
     private readonly List<DragGhostOffset> _offsets = new();
-    private readonly float _size;
+    private readonly SlotMetrics _slots;
 
-    internal DragGhostView(RectTransform parent, ItemPictureCapture pictures, float size)
+    /// <summary>Creates a hidden ghost one slot of <paramref name="slots"/> wide.</summary>
+    internal DragGhostView(RectTransform parent, ItemPictureCapture pictures, SlotMetrics slots)
     {
         _parent = parent ?? throw new ArgumentNullException(nameof(parent));
         _pictures = pictures ?? throw new ArgumentNullException(nameof(pictures));
-        _size = size;
+        _slots = slots ?? throw new ArgumentNullException(nameof(slots));
+        var size = slots.SlotPixels;
         var root = new GameObject("drag_ghost", typeof(RectTransform));
         root.transform.SetParent(parent, false);
         root.AddComponent<LayoutElement>().ignoreLayout = true;
@@ -38,15 +41,15 @@ internal sealed class DragGhostView : IDisposable
         _icon.transform.SetParent(root.transform, false);
         _icon.preserveAspect = true;
         _icon.raycastTarget = false;
-        Stretch(_icon.rectTransform, 4f);
+        Stretch(_icon.rectTransform, slots.Scaled(4));
         _view = (RectTransform)new GameObject("drag_view", typeof(RectTransform)).transform;
         _view.SetParent(root.transform, false);
-        Stretch(_view, 4f);
+        Stretch(_view, slots.Scaled(4));
         _amount = new GameObject("drag_amount", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
         _amount.transform.SetParent(root.transform, false);
-        Stretch(_amount.rectTransform, 2f);
+        Stretch(_amount.rectTransform, slots.Scaled(2));
         _amount.alignment = TextAlignmentOptions.BottomRight;
-        _amount.fontSize = 12f;
+        _amount.fontSize = slots.BadgeFontSize;
         _amount.raycastTarget = false;
         root.SetActive(false);
     }
@@ -63,7 +66,7 @@ internal sealed class DragGhostView : IDisposable
     {
         _offsets.Clear();
         _offsets.AddRange(offsets);
-        while (_children.Count < pictures.Count) _children.Add(new DragGhostView(_root, _pictures, _size));
+        while (_children.Count < pictures.Count) _children.Add(new DragGhostView(_root, _pictures, _slots));
         for (var index = 0; index < _children.Count; index++)
         {
             if (index < pictures.Count) _children[index].SetPicture(pictures[index], null, 1f);

@@ -31,6 +31,7 @@ internal sealed class TerminalItem
     /// <summary>Universal modules as on vanilla machines, plus modules made for the terminal.</summary>
     private static readonly string[] ModuleTypes = { "MODULE_TYPE_UNIVERSAL", StackingModule.TerminalModuleType };
     private readonly ButtonIcons _icons;
+    private readonly SlotMetricsService _slotMetrics;
     private readonly TransferDiagnostics _transfers;
     private readonly CompatibilityDiagnostics _compatibility;
     private readonly IntegrationDecorationCatalog _decorations;
@@ -52,9 +53,10 @@ internal sealed class TerminalItem
         GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, ModLog log,
         NativeNetworkEvents events,
         TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
-        ButtonIcons icons, TransferDiagnostics transfers, CompatibilityDiagnostics compatibility,
-        IntegrationDecorationCatalog decorations, string modId)
+        ButtonIcons icons, SlotMetricsService slotMetrics, TransferDiagnostics transfers,
+        CompatibilityDiagnostics compatibility, IntegrationDecorationCatalog decorations, string modId)
     {
+        _slotMetrics = slotMetrics ?? throw new ArgumentNullException(nameof(slotMetrics));
         _modId = modId;
         _transfers = transfers;
         _compatibility = compatibility;
@@ -111,7 +113,7 @@ internal sealed class TerminalItem
                 key => _networkPower.Storage.FindPreviewSample(item, key), RenderStoredTooltip,
                 _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers,
                 _decorations, _modId);
-            new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons).Attach(item);
+            new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons, _slotMetrics).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 (source, amount) => _networkPower.StoreSingle(item, source, amount), _text, message => _log.Log(message)).Attach();
             return item;

@@ -79,7 +79,7 @@ public sealed class StorageMenuTests
     public void PausedView_KeepsRemovedSlotUntilResumeThenResortsCurrentKeys()
     {
         var menu = new StorageMenu();
-        var screen = new StorageScreen(3, 1, 24);
+        var screen = new StorageScreen(3, 1);
         menu.BroadcastChanges(Snapshot(true, ("apple", 2), ("banana", 3)));
         screen.SetEntriesInOrder(Entries(menu));
         menu.SetPaused(true);

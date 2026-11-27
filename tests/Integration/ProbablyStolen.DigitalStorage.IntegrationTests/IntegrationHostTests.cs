@@ -1011,5 +1011,7 @@ public sealed class IntegrationHostTests
         public IGridHelper Grids => throw new NotSupportedException();
 
         public IExternalAccess ExternalAccess => throw new NotSupportedException();
+
+        public ProbablyStolen.DigitalStorage.Api.Client.ISlotMetricsProvider SlotMetrics => throw new NotSupportedException();
     }
 }

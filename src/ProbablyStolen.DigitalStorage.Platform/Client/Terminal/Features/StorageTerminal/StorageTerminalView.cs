@@ -32,7 +32,6 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Storag
 internal sealed class StorageTerminalView : ITerminalView
 {
     private const int Columns = TerminalWindowMetrics.Columns;
-    private const int CellPixels = TerminalWindowMetrics.CellPixels;
     private const float PreviewRefreshInterval = 0.2f;
     private const float Gap = 4f;
     private static readonly char[] LineBreaks = { (char)13, (char)10 };
@@ -106,12 +105,12 @@ internal sealed class StorageTerminalView : ITerminalView
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _hoverTooltip = TerminalTooltipPresenter.Service?.CreateTooltip(this);
-        _screen = new StorageScreen(Columns, TerminalWindowMetrics.Rows, CellPixels, services.Search);
+        _screen = new StorageScreen(Columns, TerminalWindowMetrics.Rows, services.Search);
         _pictureCapture = new ItemPictureCapture(new PictureSourceChain<GameItem>(services.FindSample),
             message => services.WriteDiagnostic(message), "terminal");
         _pictures = new TerminalSnapshotCache<ItemPicture>(entry => _pictureCapture.Capture(entry.Key, entry.SpriteKey),
             (entry, error) => _pictureCapture.Failed(entry.Key, entry.SpriteKey, error));
-        _grid = new ItemSlotGrid(_pictureCapture, showBadge: true, CellPixels);
+        _grid = new ItemSlotGrid(_pictureCapture, showBadge: true, host.SlotMetrics);
         _decorations = new SlotDecorationLayer(_grid, key => _host.Icons.Overlay(key), services.WriteDiagnostic);
         _potentialTargetHighlight = new TerminalPotentialTargetHighlightView(services.WriteDiagnostic);
         _attributes = new EntryAttributeReader(services.AttributeCaptures, services.FindSample, services.WriteDiagnostic);
@@ -132,7 +131,10 @@ internal sealed class StorageTerminalView : ITerminalView
         var rows = _host.Rows;
         _screen.SetRows(rows);
         var text = _services.Text;
-        var bodyWidth = TerminalWindowMetrics.GridWidth + Gap + TerminalWindowMetrics.ScrollbarWidth;
+        var slots = _host.SlotMetrics;
+        var gridWidth = TerminalWindowMetrics.GetGridWidth(slots);
+        var gridHeight = TerminalWindowMetrics.GetGridHeight(slots, rows);
+        var bodyWidth = gridWidth + Gap + TerminalWindowMetrics.ScrollbarWidth;
         var builder = new CustomUIBuilder(CustomUIManager.Instance, Window, container);
         builder.BeginColumn(spacing: 6f);
 
@@ -150,10 +152,11 @@ internal sealed class StorageTerminalView : ITerminalView
         _searchInput = builder.Last.input;
         _inputHighlighter = _searchInput == null ? null : new TerminalInputHighlighter(_searchInput, _services.Search,
             _screen.HasSearchResults);
-        TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.GridWidth);
+        TerminalControls.SetSize(builder.Last, gridWidth, TerminalWindowMetrics.GetSearchHeight(slots));
+        TerminalControls.GrowText(builder.Last, TerminalWindowMetrics.TextStep(slots));
 
         builder.BeginRow(spacing: Gap);
-        builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
+        builder.BeginGrid(Columns, slots.SlotPixels, slots.SlotPixels, spacing: TerminalWindowMetrics.CellSpacing);
         // New slot panels hold no overlays yet, whatever the layer drew on the previous ones.
         _decorations.Reset();
         _grid.Build(builder, Columns * rows,
@@ -169,7 +172,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _grid.DisableClickTint();
         builder.End();
         _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
-            TerminalWindowMetrics.GetGridHeight(rows), TerminalWindowMetrics.ScrollbarHandle, row =>
+            gridHeight, TerminalWindowMetrics.ScrollbarHandle, row =>
             {
                 CancelDrag();
                 _screen.SetScroll(row);
@@ -179,24 +182,24 @@ internal sealed class StorageTerminalView : ITerminalView
 
         builder.AddLabel(string.Empty);
         _status = builder.Last;
-        // One line; the full text stays in the tooltip. Part of TerminalWindowMetrics.Chrome.
-        TerminalControls.SetSize(_status, bodyWidth, 20f);
+        // One line; the full text stays in the tooltip. Part of TerminalWindowMetrics.GetChrome.
+        TerminalControls.SetSize(_status, bodyWidth, TerminalWindowMetrics.GetStatusHeight(slots));
         if (_status.text != null)
         {
-            _status.text.fontSize = 14f;
+            _status.text.fontSize = TerminalWindowMetrics.GetStatusFontSize(slots);
             _status.text.overflowMode = TextOverflowModes.Ellipsis;
         }
 
         builder.End();
 
-        _dropHighlight = _grid.CreateDropHighlight(TerminalWindowMetrics.GridWidth, TerminalWindowMetrics.GetGridHeight(rows));
+        _dropHighlight = _grid.CreateDropHighlight(gridWidth, gridHeight);
         // The drop handler sits on the window root: its raycast treats every hit under that root as the terminal or
         // its frame. It answers only while this view is shown.
         _dropInput = Window.root.AddComponent<TerminalDropInputHandler>();
         _dropInput.Initialize(Window, () => !_suspended && _host.IsCurrentSession(), StoreSelection, Diagnostics,
             ShowDragHint, StoreSingle, _services.StoreRefusals, SetDropHighlight, IsPointerOverSlots);
         _dragGhost = new DragGhostView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
-            "The terminal window root must be a RectTransform."), _pictureCapture, CellPixels);
+            "The terminal window root must be a RectTransform."), _pictureCapture, slots);
         _selectionBand = new TerminalSelectionBandView(Window.root.transform as RectTransform ?? throw new InvalidOperationException(
             "The terminal window root must be a RectTransform."));
         _dragTargetResolver = new TerminalDragTargetResolver(Window, () => !_suspended && _host.IsCurrentSession(),

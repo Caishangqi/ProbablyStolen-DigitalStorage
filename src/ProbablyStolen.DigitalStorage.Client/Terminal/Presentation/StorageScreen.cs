@@ -10,20 +10,11 @@ namespace ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 /// <summary>Represents one fixed-size terminal slot with no native item ownership.</summary>
 public sealed class TerminalSlotView
 {
-    internal TerminalSlotView(int index, DisplayEntry? group, int cellPixels)
+    internal TerminalSlotView(int index, DisplayEntry? group)
     {
         Index = index;
         Group = group;
-        if (group == null)
-        {
-            return;
-        }
-
-        var entry = group.Representative;
-        var maximum = Math.Max(entry.SpriteWidth, entry.SpriteHeight);
-        SpriteWidthPixels = Math.Max(1, cellPixels * entry.SpriteWidth / maximum);
-        SpriteHeightPixels = Math.Max(1, cellPixels * entry.SpriteHeight / maximum);
-        QuantityBadge = TerminalQuantityFormatter.Format(group.Total);
+        if (group != null) QuantityBadge = TerminalQuantityFormatter.Format(group.Total);
     }
 
     /// <summary>Gets the stable zero-based slot index.</summary>
@@ -37,12 +28,6 @@ public sealed class TerminalSlotView
 
     /// <summary>Gets the stored pieces of the slot, zero for an empty slot or placeholder.</summary>
     public long Amount => Group?.Total ?? 0;
-
-    /// <summary>Gets the equal-aspect fitted width for the fixed cell.</summary>
-    public int SpriteWidthPixels { get; }
-
-    /// <summary>Gets the equal-aspect fitted height for the fixed cell.</summary>
-    public int SpriteHeightPixels { get; }
 
     /// <summary>Gets the quantity badge text, or an empty string for an empty slot.</summary>
     public string QuantityBadge { get; } = string.Empty;
@@ -135,16 +120,13 @@ public sealed class StorageScreenPage
 public sealed class StorageScreen
 {
     /// <summary>Creates a fixed-column screen model.</summary>
-    public StorageScreen(int columns = TerminalWindowMetrics.Columns, int rows = 4, int cellPixels = 32,
-        TerminalSearchService? search = null)
+    public StorageScreen(int columns = TerminalWindowMetrics.Columns, int rows = 4, TerminalSearchService? search = null)
     {
         if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));
         if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
-        if (cellPixels <= 0) throw new ArgumentOutOfRangeException(nameof(cellPixels));
         _search = search ?? CreateDefaultSearch();
         Columns = columns;
         Rows = rows;
-        CellPixels = cellPixels;
     }
 
     private readonly TerminalSearchService _search;
@@ -165,9 +147,6 @@ public sealed class StorageScreen
 
     /// <summary>Gets the number of visible rows.</summary>
     public int Rows { get; private set; }
-
-    /// <summary>Gets the fixed sprite cell size in logical pixels.</summary>
-    public int CellPixels { get; }
 
     /// <summary>Gets the revision of the current visible group and slot mapping.</summary>
     public long ViewRevision => _viewRevision;
@@ -321,7 +300,7 @@ public sealed class StorageScreen
         for (var index = 0; index < slotCount; index++)
         {
             var group = index < visible.Length ? visible[index] : null;
-            slots.Add(new TerminalSlotView(index, group, CellPixels));
+            slots.Add(new TerminalSlotView(index, group));
         }
 
         var state = _baseState == TerminalDisplayState.Ready && filtered.Length == 0

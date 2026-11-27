@@ -62,6 +62,9 @@ internal interface ITerminalViewHost
     /// <summary>The grid rows for the current terminal size.</summary>
     int Rows { get; }
 
+    /// <summary>The slot measurements the window was built with.</summary>
+    ProbablyStolen.DigitalStorage.Api.Client.SlotMetrics SlotMetrics { get; }
+
     /// <summary>Whether the window still belongs to the loaded game; closes the window when it does not.</summary>
     bool IsCurrentSession();
 

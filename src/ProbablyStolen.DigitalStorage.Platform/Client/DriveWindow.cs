@@ -23,7 +23,8 @@ internal sealed class DriveWindow : TerminalWindowHost
     private readonly MemoryTerminalStore _currentView = new();
 
     private DriveWindow(TerminalRegistry registry, ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        Action<string> log) : base(registry, text, settings, () => false, () => false, log, null, icons)
+        SlotMetricsService slotMetrics, Action<string> log)
+        : base(registry, text, settings, () => false, () => false, log, null, icons, slotMetrics)
     {
     }
 
@@ -31,13 +32,14 @@ internal sealed class DriveWindow : TerminalWindowHost
     internal DriveTerminalView? View { get; set; }
 
     /// <summary>Creates the window of one drive with its own registry.</summary>
-    internal static DriveWindow Create(ModText text, ITerminalViewSettings settings, ButtonIcons icons, Action<string> log)
+    internal static DriveWindow Create(ModText text, ITerminalViewSettings settings, ButtonIcons icons,
+        SlotMetricsService slotMetrics, Action<string> log)
     {
         var registry = DriveTerminalFeature.CreateRegistry((IConfigManager)settings, log,
             owner => new DriveTerminalView((DriveWindow)owner),
             owner => new TerminalModulesScreen((DriveWindow)owner),
             owner => new DrivePriorityScreen((DriveWindow)owner));
-        return new DriveWindow(registry, text, settings, icons, log);
+        return new DriveWindow(registry, text, settings, icons, slotMetrics, log);
     }
 
     protected override string HostWindowId => HostId;

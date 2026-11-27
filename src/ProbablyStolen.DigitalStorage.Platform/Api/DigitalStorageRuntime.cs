@@ -1,7 +1,9 @@
 using System;
 using ProbablyStolen.DigitalStorage.Api;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
@@ -13,14 +15,17 @@ internal sealed class DigitalStorageRuntime : IDigitalStorageRuntime
 {
     private readonly ExternalAccessScope _access;
     private readonly GridHelper _grids;
+    private readonly SlotMetricsService _slotMetrics;
 
     /// <param name="networkPower">Network scanning, power and terminal storage operations.</param>
     /// <param name="scanner">The network scanner.</param>
+    /// <param name="slotMetrics">The slot measurements of the terminal and the partition editor.</param>
     /// <param name="log">Writes a warning.</param>
     /// <param name="contentsChanged">Tells open views that stored items moved through the API.</param>
-    internal DigitalStorageRuntime(GridNetworkPowerCoordinator networkPower, NativeNetworkScanner scanner, Action<string> log,
-        Action contentsChanged)
+    internal DigitalStorageRuntime(GridNetworkPowerCoordinator networkPower, NativeNetworkScanner scanner,
+        SlotMetricsService slotMetrics, Action<string> log, Action contentsChanged)
     {
+        _slotMetrics = slotMetrics ?? throw new ArgumentNullException(nameof(slotMetrics));
         if (networkPower == null) throw new ArgumentNullException(nameof(networkPower));
         if (scanner == null) throw new ArgumentNullException(nameof(scanner));
         if (log == null) throw new ArgumentNullException(nameof(log));
@@ -38,6 +43,9 @@ internal sealed class DigitalStorageRuntime : IDigitalStorageRuntime
 
     /// <inheritdoc />
     public IExternalAccess ExternalAccess => _access;
+
+    /// <inheritdoc />
+    public ISlotMetricsProvider SlotMetrics => _slotMetrics;
 
     /// <summary>Forgets work left from the previous game; call before integrations see the new one.</summary>
     internal void OnGameLoading() => _access.DiscardPending();

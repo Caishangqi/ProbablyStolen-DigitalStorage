@@ -200,6 +200,25 @@ terminal_extract_warehouse,仓库优先
 terminal_extract_counter,后柜台优先
 terminal_extract_warehouse_first,先试仓库，放不下再试后柜台。
 terminal_extract_counter_first,先试后柜台，放不下再试仓库。
+terminal_slot_size_name,槽位大小
+terminal_slot_size_desc,终端和元件分区窗口中物品槽位的大小。屏幕放不下这个尺寸的窗口时，会改用能放下的最大尺寸。也可以在终端的设置页修改。
+terminal_icon_margin_name,物品图标边距
+terminal_icon_margin_desc,物品图标与槽位边缘的间距。边距越小，图标越大，窗口宽度不变。
+terminal_dock_button_size_name,侧边按钮大小
+terminal_dock_button_size_desc,终端、元件分区、驱动器和 IO 端口窗口两侧按钮的大小。也可以在终端的设置页修改。
+size_tier_default,默认
+size_tier_small,小
+size_tier_medium,中
+size_tier_large,大
+icon_margin_compact,紧凑
+icon_margin_standard,标准
+icon_margin_loose,宽松
+terminal_button_display_settings_tip,显示设置
+display_settings_slot_size,槽位大小
+display_settings_icon_margin,物品图标边距
+display_settings_dock_button_size,侧边按钮大小
+display_settings_reduced,屏幕放不下这个尺寸，当前使用“{0}”。
+display_settings_note,修改会立即应用到已打开的窗口，并自动保存。
 partition_view_size_name,分区窗口高度
 partition_view_size_desc,元件分区窗口占屏幕高度的比例。也可用分区窗口左侧按钮切换，设置会自动保存。
 terminal_hint_title,操作

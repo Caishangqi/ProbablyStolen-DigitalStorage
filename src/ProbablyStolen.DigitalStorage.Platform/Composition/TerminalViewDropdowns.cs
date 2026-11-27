@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.DisplaySettings;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
@@ -27,7 +28,13 @@ public static class TerminalViewDropdowns
         (DigitalStorageSettings.ExtractionPriorityKey, new Dictionary<string, string>
         {
             ["WarehouseFirst"] = "terminal_extract_warehouse", ["CounterFirst"] = "terminal_extract_counter"
-        })
+        }),
+        (DigitalStorageSettings.SlotSizeKey, DisplaySettingsFeature.Sizes.ToDictionary(
+            tier => tier.ToString(), DisplaySettingsFeature.SizeLabelKey)),
+        (DigitalStorageSettings.IconMarginKey, DisplaySettingsFeature.IconMargins.ToDictionary(
+            margin => margin.ToString(), DisplaySettingsFeature.IconMarginLabelKey)),
+        (DigitalStorageSettings.DockButtonSizeKey, DisplaySettingsFeature.Sizes.ToDictionary(
+            tier => tier.ToString(), DisplaySettingsFeature.SizeLabelKey))
     };
     private static bool _failureLogged;
 

@@ -1,4 +1,5 @@
 using System;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -9,9 +10,13 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 
 internal static class TerminalButtonView
 {
-    internal static CustomUIElement Add(CustomUIBuilder builder, ModText text, ButtonIcons icons, ButtonState state, Action onClick)
+    /// <summary>Adds a dock button at the dock button size of <paramref name="slots"/>.</summary>
+    internal static CustomUIElement Add(CustomUIBuilder builder, ModText text, ButtonIcons icons, SlotMetrics slots,
+        ButtonState state, Action onClick)
     {
-        var button = AddIcon(builder, icons, state.Appearance.IconKey, state.Selected, onClick, TerminalWindowMetrics.DockButton);
+        var side = TerminalWindowMetrics.GetDockButton(slots);
+        var button = AddIcon(builder, icons, state.Appearance.IconKey, state.Selected, onClick, side, side,
+            TerminalWindowMetrics.GetDockIcon(slots));
         var appearance = state.Appearance;
         TerminalTooltipPresenter.SetButtonText(button, appearance.TooltipArgKey == null
             ? text.Get(appearance.TooltipKey)
@@ -23,7 +28,11 @@ internal static class TerminalButtonView
         Action onClick, float size) => AddIcon(builder, icons, key, selected, onClick, size, size);
 
     internal static CustomUIElement AddIcon(CustomUIBuilder builder, ButtonIcons icons, string key, bool selected,
-        Action onClick, float width, float height)
+        Action onClick, float width, float height) => AddIcon(builder, icons, key, selected, onClick, width, height, 32f);
+
+    /// <summary>Adds an icon button; the icon is <paramref name="iconSide"/> wide unless the button is too small for it.</summary>
+    internal static CustomUIElement AddIcon(CustomUIBuilder builder, ButtonIcons icons, string key, bool selected,
+        Action onClick, float width, float height, float iconSide)
     {
         builder.AddPointerButton(string.Empty, onClick, null);
         var element = builder.Last;
@@ -34,7 +43,7 @@ internal static class TerminalButtonView
         image.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
         image.rectTransform.anchorMin = image.rectTransform.anchorMax = image.rectTransform.pivot = new Vector2(0.5f, 0.5f);
         image.rectTransform.anchoredPosition = Vector2.zero;
-        var iconSize = Mathf.Min(32f, Mathf.Min(width, height) - 4f);
+        var iconSize = Mathf.Min(iconSide, Mathf.Min(width, height) - 4f);
         image.rectTransform.sizeDelta = new Vector2(iconSize, iconSize);
         image.raycastTarget = false;
         image.sprite = icons.Get(key);

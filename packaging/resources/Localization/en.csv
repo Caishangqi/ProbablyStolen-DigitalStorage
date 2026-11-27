@@ -200,6 +200,25 @@ terminal_extract_warehouse,Warehouse First
 terminal_extract_counter,Back Counter First
 terminal_extract_warehouse_first,"Try the warehouse first, then the back counter if an item won't fit."
 terminal_extract_counter_first,"Try the back counter first, then the warehouse if an item won't fit."
+terminal_slot_size_name,Slot size
+terminal_slot_size_desc,"How large item slots are in the terminal and the cell partition window. If the window does not fit your screen at this size, the largest size that fits is used. You can also change it on the terminal settings page."
+terminal_icon_margin_name,Item icon margin
+terminal_icon_margin_desc,"Space between each item picture and the edge of its slot. A smaller margin makes pictures larger and keeps the window the same width."
+terminal_dock_button_size_name,Side button size
+terminal_dock_button_size_desc,"How large the buttons beside the terminal, cell partition, drive and IO Port windows are. You can also change it on the terminal settings page."
+size_tier_default,Default
+size_tier_small,Small
+size_tier_medium,Medium
+size_tier_large,Large
+icon_margin_compact,Compact
+icon_margin_standard,Standard
+icon_margin_loose,Loose
+terminal_button_display_settings_tip,Display settings
+display_settings_slot_size,Slot size
+display_settings_icon_margin,Item icon margin
+display_settings_dock_button_size,Side button size
+display_settings_reduced,"This size does not fit your screen, so {0} is used."
+display_settings_note,Changes apply to open windows right away and are saved.
 partition_view_size_name,Partition window height
 partition_view_size_desc,How much of the screen height the cell partition window uses. You can also use the button on the left of that window. Your choice is saved.
 terminal_hint_title,Controls

@@ -15,6 +15,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 using ProbablyStolen.DigitalStorage.Platform.Client.Drag;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
+using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.DisplaySettings;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using TMPro;
@@ -31,12 +32,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 {
     private new const string WindowId = "digital_storage_partition";
     private const int Columns = TerminalWindowMetrics.Columns;
-    private const float CellPixels = TerminalWindowMetrics.CellPixels;
     private const float Gap = 3f;
-    private static readonly float GridWidth = TerminalWindowMetrics.GridWidth;
-    private static readonly float BodyWidth = GridWidth + TerminalWindowMetrics.ScrollbarGap +
-        TerminalWindowMetrics.ScrollbarWidth;
-    private const float WindowWidth = TerminalWindowMetrics.Width;
     private const float CountWidth = 110f;
     private static PartitionWindow? _current;
     private readonly ModText _text;
@@ -83,7 +79,8 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private object[] _messageArgs = Array.Empty<object>();
 
     private PartitionWindow(TerminalRegistry registry, ModText text, GameItem cell, ITerminalViewSettings view,
-        TerminalSearchService search, Action<string> log, ButtonIcons icons) : base(registry, text, view, () => false, () => false, log, null, icons)
+        TerminalSearchService search, Action<string> log, ButtonIcons icons, SlotMetricsService slotMetrics)
+        : base(registry, text, view, () => false, () => false, log, null, icons, slotMetrics)
     {
         _text = text;
         _view = view;
@@ -113,7 +110,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     /// <summary>Opens the editor for a cell, closing any other partition editor first.</summary>
     internal static void Open(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
-        Action<string> log, ButtonIcons icons)
+        Action<string> log, ButtonIcons icons, SlotMetricsService slotMetrics)
     {
         if (CustomUIManager.Instance == null) return;
         if (!icons.Ready)
@@ -126,8 +123,9 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
             owner => new PartitionTerminalView((PartitionWindow)owner),
             context => ((PartitionWindow)context.Window).DraftMode,
             context => ((PartitionWindow)context.Window).ToggleMode(),
-            context => ((PartitionWindow)context.Window).ClearPartitions());
-        var window = new PartitionWindow(registry, text, cell, view, search, log, icons);
+            context => ((PartitionWindow)context.Window).ClearPartitions(),
+            owner => new DisplaySettingsScreen((PartitionWindow)owner));
+        var window = new PartitionWindow(registry, text, cell, view, search, log, icons, slotMetrics);
         _current = window;
         window.Open();
     }
@@ -224,7 +222,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
         var frame = _window.Rect.rect.height - content.rect.height;
         var height = Mathf.Ceil(LayoutUtility.GetPreferredHeight(content) + frame);
-        if (height > 0f) _window.SetSize(TerminalWindowMetrics.Width, height);
+        if (height > 0f) _window.SetSize(TerminalWindowMetrics.GetWidth(SlotMetrics), height);
     }
 
     private void RefreshStatus()
@@ -253,6 +251,10 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     private int VisibleRows => _rows;
 
+    private float GridWidth => TerminalWindowMetrics.GetGridWidth(SlotMetrics);
+
+    private float BodyWidth => GridWidth + TerminalWindowMetrics.ScrollbarGap + TerminalWindowMetrics.ScrollbarWidth;
+
     private int Visible => Columns * _rows;
 
     private int TotalRows => Math.Max(VisibleRows, (_draft.Capacity + Columns - 1) / Columns);
@@ -263,7 +265,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private int CountRows()
     {
         var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();
-        return TerminalWindowMetrics.GetRows(_view.PartitionSize, LetterboxManager.GameAreaHeight,
+        return TerminalWindowMetrics.GetRows(_view.PartitionSize, SlotMetrics, LetterboxManager.GameAreaHeight,
             canvas == null ? 0f : canvas.scaleFactor);
     }
 
@@ -273,8 +275,9 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _scrollRow = Math.Max(0, Math.Min(MaxScroll, _scrollRow));
         builder.BeginRow(Gap);
 
-        builder.BeginGrid(Columns, CellPixels, CellPixels, spacing: TerminalWindowMetrics.CellSpacing);
-        _grid = new ItemSlotGrid(_pictures, showBadge: false, CellPixels);
+        var slot = SlotMetrics.SlotPixels;
+        builder.BeginGrid(Columns, slot, slot, spacing: TerminalWindowMetrics.CellSpacing);
+        _grid = new ItemSlotGrid(_pictures, showBadge: false, SlotMetrics);
         // Presses, drags and releases are read every frame (Tick); a button click alone cannot tell a drag apart.
         _grid.Build(builder, Visible, _ => { });
         // Slot drags must not reach the window's drag handler. Disable the button's press tint because slot tones
@@ -284,7 +287,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _grid.DisableClickTint();
         builder.End();
         _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
-            TerminalWindowMetrics.GetGridHeight(VisibleRows), TerminalWindowMetrics.ScrollbarHandle, row =>
+            TerminalWindowMetrics.GetGridHeight(SlotMetrics, VisibleRows), TerminalWindowMetrics.ScrollbarHandle, row =>
             {
                 _pointer.Cancel();
                 EndRuleDrag();
@@ -292,7 +295,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
                 FillGrid();
             });
         builder.End();
-        _dropHighlight = _grid.CreateDropHighlight(GridWidth, TerminalWindowMetrics.GetGridHeight(VisibleRows));
+        _dropHighlight = _grid.CreateDropHighlight(GridWidth, TerminalWindowMetrics.GetGridHeight(SlotMetrics, VisibleRows));
         FillGrid();
     }
 

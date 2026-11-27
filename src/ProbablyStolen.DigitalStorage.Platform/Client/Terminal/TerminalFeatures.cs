@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Diagnostics;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.DisplaySettings;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.ExtractDestination;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.KeepOpen;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.Modules;
@@ -10,6 +11,7 @@ using ProbablyStolen.DigitalStorage.Client.Terminal.Features.TerminalStyle;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Diagnostics;
+using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.DisplaySettings;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Modules;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Stacking;
 
@@ -36,6 +38,7 @@ internal static class TerminalFeatures
         StorageTerminalFeature.Register(registry, window => ((TerminalWindowHost)window).CreateStorageView());
         ModulesFeature.Register(registry, window => new TerminalModulesScreen((TerminalWindowHost)window));
         TerminalStyleFeature.Register(registry);
+        DisplaySettingsFeature.Register(registry, 12, window => new DisplaySettingsScreen((TerminalWindowHost)window));
         KeepOpenFeature.Register(registry, keepOpen, setKeepOpen);
         ExtractDestinationFeature.Register(registry, extraction, setExtraction);
         StackingFeature.Register(registry, new StackingPlatform(), log, identityLogEnabled);

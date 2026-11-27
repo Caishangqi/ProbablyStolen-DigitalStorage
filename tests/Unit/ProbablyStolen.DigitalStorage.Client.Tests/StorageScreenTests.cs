@@ -12,9 +12,9 @@ namespace ProbablyStolen.DigitalStorage.Client.Tests;
 public sealed class StorageScreenTests
 {
     [Test]
-    public void Page_AlwaysKeepsFixedSlotsAndFitsSpriteWithoutDistortion()
+    public void Page_AlwaysKeepsFixedSlots()
     {
-        var screen = new StorageScreen(columns: 2, rows: 2, cellPixels: 32);
+        var screen = new StorageScreen(columns: 2, rows: 2);
         screen.SetEntries(new[]
         {
             Entry("alpha", 4, "Alpha", "sprite_alpha", 2, 1),
@@ -29,8 +29,6 @@ public sealed class StorageScreenTests
         Assert.That(page.MaxScroll, Is.Zero);
         Assert.That(page.Slots, Has.Count.EqualTo(4));
         Assert.That(page.Slots[0].Entry!.DisplayName, Is.EqualTo("Alpha"));
-        Assert.That(page.Slots[0].SpriteWidthPixels, Is.EqualTo(32));
-        Assert.That(page.Slots[0].SpriteHeightPixels, Is.EqualTo(16));
         Assert.That(page.Slots[3].Entry, Is.Null);
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
@@ -21,11 +22,13 @@ internal sealed class FlyoutView
     private readonly ButtonIcons _icons;
     private readonly ModText _text;
     private readonly DockSide _side;
+    private readonly SlotMetrics _slots;
     private RectTransform? _root;
 
-    internal FlyoutView(CustomUIWindow window, ModText text, ButtonIcons icons, DockSide side)
+    internal FlyoutView(CustomUIWindow window, ModText text, ButtonIcons icons, SlotMetrics slots, DockSide side)
     {
         _side = side;
+        _slots = slots ?? throw new ArgumentNullException(nameof(slots));
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _icons = icons ?? throw new ArgumentNullException(nameof(icons));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -40,8 +43,8 @@ internal sealed class FlyoutView
         Hide();
         if (entries.Count == 0) return;
         var windowRoot = _window.Rect;
-        var geometry = SelectionPanelLayout.Compute(entries.Count, TerminalWindowMetrics.DockButton,
-            TerminalWindowMetrics.DockButton, TerminalWindowMetrics.DockSpacing, Padding);
+        var side = TerminalWindowMetrics.GetDockButton(_slots);
+        var geometry = SelectionPanelLayout.Compute(entries.Count, side, side, TerminalWindowMetrics.DockSpacing, Padding);
 
         var corners = new Vector3[4];
         trigger.GetWorldCorners(corners);
@@ -69,11 +72,11 @@ internal sealed class FlyoutView
         for (var index = 0; index < entries.Count; index++)
         {
             var entry = entries[index];
-            var button = TerminalButtonView.Add(builder, _text, _icons, entry, () => select(entry.Id));
+            var button = TerminalButtonView.Add(builder, _text, _icons, _slots, entry, () => select(entry.Id));
             var rect = button.root.GetComponent<RectTransform>();
             button.root.GetComponent<LayoutElement>().ignoreLayout = true;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
-            rect.sizeDelta = new Vector2(TerminalWindowMetrics.DockButton, TerminalWindowMetrics.DockButton);
+            rect.sizeDelta = new Vector2(side, side);
             rect.anchoredPosition = new Vector2(geometry.ButtonX(index), -geometry.ButtonY(index));
         }
 

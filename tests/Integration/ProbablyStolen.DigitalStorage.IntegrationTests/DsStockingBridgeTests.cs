@@ -463,5 +463,7 @@ public sealed class DsStockingBridgeTests
         public IGridHelper Grids { get; }
 
         public IExternalAccess ExternalAccess => Access;
+
+        public ProbablyStolen.DigitalStorage.Api.Client.ISlotMetricsProvider SlotMetrics => throw new NotSupportedException();
     }
 }

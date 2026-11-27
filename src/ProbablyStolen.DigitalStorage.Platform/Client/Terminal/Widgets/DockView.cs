@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
@@ -23,6 +24,7 @@ internal sealed class DockView : MonoBehaviour
     private CustomUIWindow? _window;
     private ButtonIcons? _icons;
     private ModText? _text;
+    private SlotMetrics _slots = SlotMetrics.Default;
     private VerticalButtonBar? _bar;
     private Func<TerminalContext>? _context;
     private Action? _changed;
@@ -32,10 +34,11 @@ internal sealed class DockView : MonoBehaviour
 
     /// <summary>
     /// Adds the dock of <paramref name="bar"/> to <paramref name="window"/>, outside its frame on the bar's side with the
-    /// top edges aligned. <paramref name="changed"/> runs after a press, so every dock of the window rebuilds.
+    /// top edges aligned. Its buttons take the dock button size of <paramref name="slots"/>. <paramref name="changed"/>
+    /// runs after a press, so every dock of the window rebuilds.
     /// </summary>
-    internal static DockView Create(CustomUIWindow window, ModText text, ButtonIcons icons, VerticalButtonBar bar,
-        Func<TerminalContext> context, Action changed)
+    internal static DockView Create(CustomUIWindow window, ModText text, ButtonIcons icons, SlotMetrics slots,
+        VerticalButtonBar bar, Func<TerminalContext> context, Action changed)
     {
         var left = bar.Side == DockSide.Left;
         var dock = new GameObject(left ? "dock_left" : "dock_right", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -61,11 +64,12 @@ internal sealed class DockView : MonoBehaviour
         view._window = window;
         view._icons = icons;
         view._text = text;
+        view._slots = slots ?? throw new ArgumentNullException(nameof(slots));
         view._bar = bar;
         view._context = context;
         view._changed = changed ?? throw new ArgumentNullException(nameof(changed));
         view._rail = rail;
-        view._flyout = new FlyoutView(window, text, icons, bar.Side);
+        view._flyout = new FlyoutView(window, text, icons, slots, bar.Side);
         return view;
     }
 
@@ -124,10 +128,10 @@ internal sealed class DockView : MonoBehaviour
         }
 
         var builder = new CustomUIBuilder(CustomUIManager.Instance, _window, _rail);
-        builder.BeginPanel(TerminalWindowMetrics.DockWidth, -1f, TextAnchor.UpperCenter, TerminalWindowMetrics.DockPadding,
-            TerminalWindowMetrics.DockSpacing);
+        builder.BeginPanel(TerminalWindowMetrics.GetDockWidth(_slots), -1f, TextAnchor.UpperCenter,
+            TerminalWindowMetrics.DockPadding, TerminalWindowMetrics.DockSpacing);
         builder.AddHeader(_text.Get(_bar.TitleKey(context)));
-        TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.DockButton, 18f);
+        TerminalControls.SetSize(builder.Last, TerminalWindowMetrics.GetDockButton(_slots), 18f);
         if (builder.Last.text != null)
         {
             builder.Last.text.fontSize = 12f;
@@ -138,7 +142,7 @@ internal sealed class DockView : MonoBehaviour
         foreach (var state in buttons)
         {
             var id = state.Id;
-            var button = TerminalButtonView.Add(builder, _text, _icons, state, () => Press(id));
+            var button = TerminalButtonView.Add(builder, _text, _icons, _slots, state, () => Press(id));
             _buttons[id] = button.root.GetComponent<RectTransform>();
         }
 

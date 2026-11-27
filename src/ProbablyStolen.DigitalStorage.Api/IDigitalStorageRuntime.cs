@@ -1,3 +1,4 @@
+using ProbablyStolen.DigitalStorage.Api.Client;
 using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Storage;
 
@@ -15,6 +16,9 @@ public interface IDigitalStorageRuntime
 
     /// <summary>Gets the scoped access for other mods' item scans.</summary>
     IExternalAccess ExternalAccess { get; }
+
+    /// <summary>Gets the slot measurements of the storage terminal and the partition editor.</summary>
+    ISlotMetricsProvider SlotMetrics { get; }
 }
 
 /// <summary>Keys under which the runtime is exposed.</summary>

@@ -10,7 +10,8 @@ internal sealed class TerminalWindow : TerminalWindowHost
     private readonly StorageTerminalServices _storage;
 
     internal TerminalWindow(TerminalRegistry registry, StorageTerminalServices storage, ITerminalViewSettings settings,
-        Func<bool> testViewEnabled, ButtonIcons icons) : base(registry, storage, settings, testViewEnabled, icons)
+        Func<bool> testViewEnabled, ButtonIcons icons, SlotMetricsService slotMetrics)
+        : base(registry, storage, settings, testViewEnabled, icons, slotMetrics)
     {
         _storage = storage;
     }

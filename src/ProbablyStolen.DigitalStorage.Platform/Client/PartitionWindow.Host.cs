@@ -25,7 +25,9 @@ internal sealed partial class PartitionWindow
     protected override string HostWindowId => WindowId;
     protected override string HostTitleKey => "partition_title";
     protected override TerminalSize HostSize => _view.PartitionSize;
-    protected override int HostHeight => TerminalWindowMetrics.GetHeight(CountRows()) - 38;
+    // The partition overview has no search row; the frame fits its content once shown (FitHeight).
+    protected override int HostHeight =>
+        TerminalWindowMetrics.GetHeight(SlotMetrics, CountRows()) - TerminalWindowMetrics.GetSearchHeight(SlotMetrics) - 6;
     protected override GameItem? PositionOwner => _workbench;
     protected override ICurrentTerminalStore CreateCurrentTerminalStore() => _currentViewStore;
 
@@ -109,11 +111,14 @@ internal sealed partial class PartitionWindow
         _body = root.CurrentContainer;
         root.End();
         root.BeginRow(Gap);
+        var textStep = TerminalWindowMetrics.TextStep(SlotMetrics);
         root.AddLabel(string.Empty, "status");
         SetWidth(root.Last, BodyWidth - Gap - CountWidth);
+        TerminalControls.GrowText(root.Last, textStep);
         _status = root.Last;
         root.AddLabel(string.Empty, "count");
         SetWidth(root.Last, CountWidth);
+        TerminalControls.GrowText(root.Last, textStep);
         _count = root.Last;
         if (root.Last.text != null) root.Last.text.alignment = TextAlignmentOptions.TopRight;
         root.End();
@@ -121,7 +126,7 @@ internal sealed partial class PartitionWindow
         window.root.AddComponent<SampleDropHandler>().Initialize(window, InputShield, OnSample, IsGridSampleTarget, OwnsWheel);
         window.root.AddComponent<FrameHandler>().Initialize(Tick);
         _ghost?.Dispose();
-        _ghost = new DragGhostView(window.Rect, _pictures, CellPixels);
+        _ghost = new DragGhostView(window.Rect, _pictures, SlotMetrics);
         if (_opened.Repaired) Message("partition_repaired", _opened.DroppedRules);
         Render();
     }

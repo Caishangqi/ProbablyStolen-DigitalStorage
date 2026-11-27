@@ -1,4 +1,5 @@
 using System;
+using ProbablyStolen.DigitalStorage.Client.Terminal.Features.DisplaySettings;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Widgets;
@@ -6,7 +7,9 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Partition;
 
 namespace ProbablyStolen.DigitalStorage.Client.Terminal.Features.Partition;
 
-/// <summary>Registers the partition view, its mode and clear actions, and its global view size setting.</summary>
+/// <summary>
+/// Registers the partition view, its mode and clear actions, its global view size setting and the display settings page.
+/// </summary>
 public static class PartitionTerminalFeature
 {
     /// <summary>The partition overview view identifier.</summary>
@@ -34,26 +37,27 @@ public static class PartitionTerminalFeature
     /// <summary>Creates an isolated, frozen registry for a partition window.</summary>
     public static TerminalRegistry CreateRegistry(IConfigManager config, Action<string> diagnostic,
         Func<object, object> createView, Func<TerminalContext, PartitionMode> readMode,
-        Action<TerminalContext> toggleMode, Action<TerminalContext> clear)
+        Action<TerminalContext> toggleMode, Action<TerminalContext> clear, Func<object, ITerminalScreen> createSettings)
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
         if (diagnostic == null) throw new ArgumentNullException(nameof(diagnostic));
         var registry = new TerminalRegistry(config, diagnostic, TerminalName);
-        Register(registry, createView, readMode, toggleMode, clear);
+        Register(registry, createView, readMode, toggleMode, clear, createSettings);
         registry.Freeze();
         return registry;
     }
 
-    /// <summary>Registers the partition view, mode, size, and view-scoped clear button.</summary>
+    /// <summary>Registers the partition view, mode, size, display settings, and view-scoped clear button.</summary>
     public static void Register(TerminalRegistry registry, Func<object, object> createView,
         Func<TerminalContext, PartitionMode> readMode, Action<TerminalContext> toggleMode,
-        Action<TerminalContext> clear)
+        Action<TerminalContext> clear, Func<object, ITerminalScreen> createSettings)
     {
         if (registry == null) throw new ArgumentNullException(nameof(registry));
         if (createView == null) throw new ArgumentNullException(nameof(createView));
         if (readMode == null) throw new ArgumentNullException(nameof(readMode));
         if (toggleMode == null) throw new ArgumentNullException(nameof(toggleMode));
         if (clear == null) throw new ArgumentNullException(nameof(clear));
+        if (createSettings == null) throw new ArgumentNullException(nameof(createSettings));
 
         registry.AddDock(DockSide.Left, StorageTerminal.StorageTerminalFeature.LeftDockTitleKey);
         registry.AddTerminal(new TerminalDefinition(TerminalName, 0, "partition_title", _ => true, createView));
@@ -63,7 +67,8 @@ public static class PartitionTerminalFeature
                 readMode(context) == PartitionMode.Blacklist ? "partition_mode_blacklist" : "partition_mode_whitelist"),
             toggleMode));
         registry.AddSetting(ViewSize, 1, DockSide.Left, ActionPlacement.Rail, ActionScope.AllViews);
-        registry.AddAction(new TerminalAction(ClearActionName, 2, DockSide.Left, ActionPlacement.Rail, ActionScope.View(TerminalName), _ => true,
+        DisplaySettingsFeature.Register(registry, 2, createSettings);
+        registry.AddAction(new TerminalAction(ClearActionName, 3, DockSide.Left, ActionPlacement.Rail, ActionScope.View(TerminalName), _ => true,
             _ => new ButtonAppearance("button_clear", "partition_clear"), clear));
     }
 }

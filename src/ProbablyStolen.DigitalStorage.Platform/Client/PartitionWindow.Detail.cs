@@ -14,6 +14,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client;
 internal sealed partial class PartitionWindow
 {
     private const float ControlHeight = RuleCardWidgets.ControlHeight;
+    // The rule page header keeps the original slot size; only the overview grid follows the slot size setting.
+    private const float RulePicturePixels = ProbablyStolen.DigitalStorage.Api.Client.SlotMetrics.BaseSlotPixels;
     private const float FieldWidth = 108f;
     private const float OperatorWidth = 76f;
     private const float ValueWidth = 140f;
@@ -110,7 +112,7 @@ internal sealed partial class PartitionWindow
             // A failed save leaves the detail page; redraw so later edits never reach a discarded copy.
             if (_detail == null) Render();
         }, "rule_name");
-        SetSize(builder.Last, BodyWidth - 2 * 6f - ControlHeight - CellPixels, ControlHeight);
+        SetSize(builder.Last, BodyWidth - 2 * 6f - ControlHeight - RulePicturePixels, ControlHeight);
         InputEllipsis.Attach(builder.Last);
         builder.End();
     }
@@ -124,7 +126,7 @@ internal sealed partial class PartitionWindow
         slot.pixelsPerUnitMultiplier = 0.5f;
         slot.raycastTarget = false;
         var layout = slot.gameObject.AddComponent<LayoutElement>();
-        layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight = CellPixels;
+        layout.minWidth = layout.preferredWidth = layout.minHeight = layout.preferredHeight = RulePicturePixels;
         var icon = new GameObject("partition_rule_icon", typeof(RectTransform)).AddComponent<Image>();
         icon.transform.SetParent(slot.transform, false);
         icon.preserveAspect = true;
