@@ -1,5 +1,7 @@
-0.7.5
+0.7.6
 
-The terminal has a new Display settings page.
+You can now scroll the terminal while box-selecting. Items stay selected when they scroll out of view. Also support open_beta 1.0.0.16.
 
-- Adjust slot size, item icon margins, and side button size. Changes take effect in open windows right away and are saved automatically.
+- The selection stays in place when you scroll after releasing the mouse. Drag from any visible selected slot to take out the whole selection, including items offscreen.
+- Builds and patch binding checks passed against Steam's public branch (0.46D) and open_beta (1.0.0.16). If an optional patch can't bind, only the affected feature is disabled. If a patch needed to protect save data can't bind, the mod won't start.
+- Developer tools can snapshot game assemblies and check patch bindings on both branches. ZIP filenames now include the build branch and build ID. The IO Port integration test was also updated.
