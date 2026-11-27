@@ -181,7 +181,7 @@ class ContentContractTests(unittest.TestCase):
         self.assertIn("Add(IoPortItem.ItemId, () => Create(ioPort.Create));", registration)
         self.assertIn('["digital_storage.io_port"] = ("digital_storage:vanilla_standard", "digital_storage:native_standard", 2)', content)
         self.assertIn("new IoPortCoordinator(networkScanner, networkPower.Storage, transferDiagnostics, networkEvents,", composition)
-        self.assertIn("IoPortWindow.Create(text, networkPowerSettings, buttonIcons, coordinator", composition)
+        self.assertIn("IoPortWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, coordinator", composition)
         self.assertIn("new IoPortItem(appearance, windows,", composition)
         self.assertIn("_appearance.EnsureReady(IoPortItem.SpriteKey);", composition)
         for subscription in (
