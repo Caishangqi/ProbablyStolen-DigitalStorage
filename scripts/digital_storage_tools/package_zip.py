@@ -14,7 +14,9 @@ from zipfile import BadZipFile, ZIP_STORED, ZipFile
 
 from .assets import ContentValidationError, plain_path
 from .commands import local_environment
+from .decompile import WorkflowError
 from .environment import parse_arguments, resolve_environment
+from .game_refs import read_package_build
 from .package import PackageValidationError, file_inventory_entry, load_layouts, validate_manifest_stream, validate_package_directory
 
 
@@ -22,10 +24,24 @@ ARCHIVE_ROOT = "DigitalStorage"
 _VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}\Z")
 
 
-def _archive_name(version: str) -> str:
+_BUILD_SUFFIX = re.compile(r"-(?P<branch>[A-Za-z0-9_.]{1,64})-(?P<build>[0-9]{1,20})\Z")
+
+
+def _archive_name(version: str, build: tuple[str, str]) -> str:
+    """Names the ZIP after the mod version and the Steam branch and build its assemblies were compiled against."""
     if not _VERSION.fullmatch(version) or version.endswith("."):
         raise PackageValidationError(f"ModVersion is not safe for a ZIP filename: {version!r}")
-    return f"DigitalStorage-v{version}.zip"
+    branch, build_id = build
+    if not _BUILD_SUFFIX.fullmatch(f"-{branch}-{build_id}"):
+        raise PackageValidationError(f"Steam branch or build is not safe for a ZIP filename: {branch!r} {build_id!r}")
+    return f"DigitalStorage-v{version}-{branch}-{build_id}.zip"
+
+
+def _check_archive_name(name: str, version: str) -> None:
+    prefix = f"DigitalStorage-v{version}"
+    if not (name.startswith(prefix) and name.endswith(".zip") and _BUILD_SUFFIX.fullmatch(name[len(prefix):-4])):
+        raise PackageValidationError(
+            f"ZIP filename must match ModVersion and the build: expected '{prefix}-<branch>-<buildid>.zip'.")
 
 
 def verify_package_zip(path: Path) -> list[dict[str, object]]:
@@ -58,9 +74,7 @@ def verify_package_zip(path: Path) -> list[dict[str, object]]:
 
             with archive.open(entries[f"{ARCHIVE_ROOT}/manifest.xml"]) as stream:
                 version = validate_manifest_stream(stream, layout["assemblies"])
-            expected_name = _archive_name(version)
-            if path.name != expected_name:
-                raise PackageValidationError(f"ZIP filename must match ModVersion: expected {expected_name!r}.")
+            _check_archive_name(path.name, version)
 
             inventory = []
             for member_name, relative in expected.items():
@@ -75,8 +89,8 @@ def verify_package_zip(path: Path) -> list[dict[str, object]]:
         raise PackageValidationError(f"Package ZIP could not be read: {error}") from error
 
 
-def create_package_zip(package_directory: Path, output_directory: Path) -> Path:
-    """Archive a validated package and publish the checked ZIP under its versioned filename."""
+def create_package_zip(package_directory: Path, output_directory: Path, build: tuple[str, str]) -> Path:
+    """Archive a validated package and publish the checked ZIP under its version and build filename."""
     package_directory = plain_path(package_directory)
     output_directory = plain_path(output_directory)
     if output_directory.is_relative_to(package_directory):
@@ -84,7 +98,7 @@ def create_package_zip(package_directory: Path, output_directory: Path) -> Path:
     source = validate_package_directory(package_directory)
     with (package_directory / "manifest.xml").open("rb") as stream:
         version = validate_manifest_stream(stream, load_layouts()["assemblies"])
-    destination = output_directory / _archive_name(version)
+    destination = output_directory / _archive_name(version, build)
     output_directory.mkdir(parents=True, exist_ok=True)
     if os.path.lexists(destination):
         raise PackageValidationError(f"ZIP already exists: {destination}")
@@ -114,8 +128,10 @@ def create_main(argv: Sequence[str] | None = None) -> int:
         environment_args = ["--package-dir", args.package_dir] if args.package_dir else []
         environment = resolve_environment(parse_arguments(environment_args), environ=local_environment(),
                                           for_release_archive=True)
-        output = create_package_zip(environment.package_directory, environment.output_directory / "release")
-    except (ValueError, OSError) as error:
+        build = read_package_build(environment.output_directory, environment.package_directory,
+                                   load_layouts()["assemblies"])
+        output = create_package_zip(environment.package_directory, environment.output_directory / "release", build)
+    except (ValueError, OSError, WorkflowError) as error:
         print(f"Package ZIP error: {error}", file=sys.stderr)
         return 2
     print(f"[PASS] Package ZIP created and verified: {output}")

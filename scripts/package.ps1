@@ -74,6 +74,9 @@ try {
     }
 
     Write-Host "Game directory: $env:DIGITAL_STORAGE_GAME_DIR"
+    # The assemblies compile against the installed branch; the record names it, and package-zip puts it in the ZIP name.
+    $packageBuildRecord = Join-Path $environment.output_directory 'package-build.json'
+    if (Test-Path -LiteralPath $packageBuildRecord) { Remove-Item -LiteralPath $packageBuildRecord -Force }
     Write-Host "Package directory: $destination"
     $buildScript = Join-Path $repositoryRoot 'scripts/build.ps1'
     $buildArguments = @(
@@ -144,6 +147,11 @@ try {
             Write-Warning "The validated prior package remains at '$backupDirectory': $($_.Exception.Message)"
         }
     }
+
+    $recordArguments = @($toolPath, 'internal-package-build', '--game-dir', $environment.game_directory,
+        '--package-dir', $destination, '--output-dir', $environment.output_directory)
+    & $python -B @recordArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the game build the package was compiled against.' }
 
     Write-Host "[PASS] Package created at $destination"
 }

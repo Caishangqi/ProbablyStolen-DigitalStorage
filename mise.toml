@@ -53,6 +53,10 @@ run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-integr
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-architecture'
 
+[tasks.test-bindings]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-bindings'
+
 [tasks.test-all]
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py test-all'
@@ -132,6 +136,14 @@ run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py verify-pack
 [tasks.decompile]
 dir = '{{config_root}}'
 run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py decompile'
+
+[tasks.snapshot-game]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py snapshot-game'
+
+[tasks.check-game-bindings]
+dir = '{{config_root}}'
+run = '"{{config_root}}/.venv/Scripts/python.exe" -B scripts/tool.py check-game-bindings'
 
 [tasks.extract-assets]
 dir = '{{config_root}}'

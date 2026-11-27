@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Core', 'Platform', 'ApiCore', 'Api', 'Common', 'Client', 'Integration', 'Architecture')]
+    [ValidateSet('All', 'Core', 'Platform', 'ApiCore', 'Api', 'Common', 'Client', 'Integration', 'Architecture', 'Bindings')]
     [string]$Target = 'All',
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
@@ -88,7 +88,7 @@ function Protect-TestReport {
 
 Push-Location $repositoryRoot
 try {
-    $gameRequired = $Target -in @('Platform', 'Api', 'All')
+    $gameRequired = $Target -in @('Platform', 'Api', 'Bindings', 'All')
     $resolverArguments = @($toolPath, 'environment', '--target', $(if ($gameRequired) { 'game' } else { 'core' }), '--json')
     if ($ArtifactsPath) { $resolverArguments += @('--artifacts-path', $ArtifactsPath) }
     if ($GameDirectory) { $resolverArguments += @('--game-dir', $GameDirectory) }
@@ -102,6 +102,8 @@ try {
     $testProjects = @($core | Where-Object { $_ -like 'tests/*' })
     $platform = 'tests/Unit/ProbablyStolen.DigitalStorage.Platform.Tests/ProbablyStolen.DigitalStorage.Platform.Tests.csproj'
     $api = 'tests/Unit/ProbablyStolen.DigitalStorage.Api.Tests/ProbablyStolen.DigitalStorage.Api.Tests.csproj'
+    # Looks up every patch target in the installed build; mise run check-game-bindings covers each saved snapshot.
+    $bindings = 'tests/Compatibility/ProbablyStolen.DigitalStorage.GameBindingTests/ProbablyStolen.DigitalStorage.GameBindingTests.csproj'
     if ($Target -in @('Api', 'All')) {
         & $python -B $toolPath verify-api-review
         if ($LASTEXITCODE -ne 0) { throw 'Api reviewed inputs changed; independent review is required.' }
@@ -134,7 +136,7 @@ try {
     $solutionList = & dotnet.exe sln (Join-Path $repositoryRoot 'DigitalStorage.sln') list
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect solution inventory.' }
     $solutionTests = @($solutionList | Where-Object { $_ -match '^tests[\\/].*\.csproj$' } | ForEach-Object { $_.Replace('\', '/') })
-    $declaredTests = @($testProjects) + @($platform, $api)
+    $declaredTests = @($testProjects) + @($platform, $api, $bindings)
     $diskTests = @(& $python -B $toolPath inventory-tests)
     if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate test projects safely.' }
     if ($diskTests.Count -ne $declaredTests.Count -or @(Compare-Object $diskTests $declaredTests).Count -ne 0) {
@@ -145,9 +147,10 @@ try {
     }
     $projects = @(switch ($Target) {
         'Core' { $testProjects }
-        'All' { $testProjects; $platform; $api }
+        'All' { $testProjects; $platform; $api; $bindings }
         'Platform' { $platform }
         'Api' { $api }
+        'Bindings' { $bindings }
         'ApiCore' { @($testProjects | Where-Object { [System.IO.Path]::GetFileName($_) -eq 'ProbablyStolen.DigitalStorage.Api.Core.Tests.csproj' }) }
         default { @($testProjects | Where-Object { [System.IO.Path]::GetFileName($_) -eq "ProbablyStolen.DigitalStorage.$Target.Tests.csproj" -or [System.IO.Path]::GetFileName($_) -eq "ProbablyStolen.DigitalStorage.${Target}Tests.csproj" }) }
     })
@@ -176,7 +179,7 @@ try {
         }
     }
     if ($Target -eq 'All') {
-        foreach ($project in @($platform, $api)) {
+        foreach ($project in @($platform, $api, $bindings)) {
             Invoke-DotNet @('restore', $project, '--locked-mode')
             Invoke-DotNet @('build', $project, '--configuration', $Configuration, '--no-restore')
         }

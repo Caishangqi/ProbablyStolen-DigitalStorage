@@ -45,7 +45,7 @@ def _iter_tests(suite):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from .commands import PUBLIC
-    commands = ("environment", "assets", "internal-deployment", "internal-workshop-upload", "verify-layout", "inventory-tests", "verify-platform-review", "verify-api-review", "validate-trx") + PUBLIC
+    commands = ("environment", "assets", "internal-deployment", "internal-workshop-upload", "internal-package-build", "verify-layout", "inventory-tests", "verify-platform-review", "verify-api-review", "validate-trx") + PUBLIC
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command in commands:
         subparsers.add_parser(command, add_help=command in ("verify-layout", "test-tools-unit", "test-tools-integration"))
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("check-assets", "prepare-assets"):
         remaining = ["--check" if args.command == "check-assets" else "--write", *remaining]
         return assets.main(remaining)
-    if args.command in ("decompile", "extract-assets"):
+    if args.command in ("decompile", "extract-assets", "snapshot-game", "check-game-bindings", "internal-package-build"):
         import os
         from .commands import local_environment
         try:
@@ -145,6 +145,12 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, OSError) as error:
             print(f"Configuration error: {error}", file=sys.stderr)
             return 2
+    if args.command in ("snapshot-game", "check-game-bindings", "internal-package-build"):
+        from . import game_refs
+        if args.command == "check-game-bindings" and remaining:
+            parser.error("check-game-bindings takes no arguments")
+        action = {"snapshot-game": "snapshot", "check-game-bindings": "check", "internal-package-build": "record-package"}
+        return game_refs.main([action[args.command], *remaining])
     commands = {"environment": environment.main, "assets": assets.main, "decompile": decompile.main,
                 "extract-assets": extract_assets.main, "verify-package": package.main,
                 "internal-deployment": deployment.main, "internal-workshop-upload": workshop.main}

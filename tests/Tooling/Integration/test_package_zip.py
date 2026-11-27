@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 import stat
 import struct
@@ -13,10 +15,12 @@ from digital_storage_tools.commands import ROOT
 from digital_storage_tools.package import SOURCE_MANIFEST_PATH, PackageValidationError, load_layouts
 from digital_storage_tools.package_zip import create_package_zip, verify_package_zip
 
+BUILD = ("open_beta", "26772488")
+
 
 class ReleaseZipTests(unittest.TestCase):
     version = "42.0.1"
-    archive_name = f"DigitalStorage-v{version}.zip"
+    archive_name = f"DigitalStorage-v{version}-{BUILD[0]}-{BUILD[1]}.zip"
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="digital-storage-zip-")
@@ -33,6 +37,12 @@ class ReleaseZipTests(unittest.TestCase):
         start = manifest.index("<ModVersion>") + len("<ModVersion>")
         end = manifest.index("</ModVersion>", start)
         (self.package / "manifest.xml").write_text(manifest[:start] + self.version + manifest[end:], encoding="utf-8")
+
+    def write_build_record(self):
+        assemblies = {name: hashlib.sha256((self.package / name).read_bytes()).hexdigest()
+                      for name in load_layouts()["assemblies"]}
+        record = {"schemaVersion": 1, "steamBranch": BUILD[0], "steamBuildId": BUILD[1], "assemblies": assemblies}
+        (self.root / "package-build.json").write_text(json.dumps(record), encoding="utf-8")
 
     def run_cli(self, *args, **overrides):
         env = os.environ.copy()
@@ -51,6 +61,7 @@ class ReleaseZipTests(unittest.TestCase):
                 archive.writestr(extra, b"extra")
 
     def test_release_cli_creates_and_verifies_zip_without_overwriting(self):
+        self.write_build_record()
         result = self.run_cli("package-zip", "--package-dir", str(self.package))
         self.assertEqual(result.returncode, 0, result.stderr)
         path = self.output / self.archive_name
@@ -69,7 +80,7 @@ class ReleaseZipTests(unittest.TestCase):
     def test_source_allowlist_failure_creates_no_archive(self):
         (self.package / "unknown.dll").write_bytes(b"not a product DLL")
         with self.assertRaisesRegex(PackageValidationError, "unknown.dll"):
-            create_package_zip(self.package, self.output)
+            create_package_zip(self.package, self.output, BUILD)
         self.assertFalse(self.output.exists())
 
     def test_verifier_reports_missing_and_unexpected_members_without_extracting(self):
@@ -99,6 +110,26 @@ class ReleaseZipTests(unittest.TestCase):
             archive.writestr(link, "target")
         with self.assertRaisesRegex(PackageValidationError, "regular files"):
             verify_package_zip(path)
+
+    def test_release_cli_requires_a_build_record_of_this_package(self):
+        missing = self.run_cli("package-zip", "--package-dir", str(self.package))
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("No package build record", missing.stderr)
+        self.write_build_record()
+        assembly = self.package / load_layouts()["assemblies"][0]
+        assembly.write_bytes(assembly.read_bytes() + b"rebuilt")
+        changed = self.run_cli("package-zip", "--package-dir", str(self.package))
+        self.assertEqual(changed.returncode, 2)
+        self.assertIn("changed since they were built", changed.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_verifier_requires_the_build_in_the_filename(self):
+        path = self.root / self.archive_name
+        self.write_archive(path)
+        untagged = self.root / f"DigitalStorage-v{self.version}.zip"
+        path.rename(untagged)
+        with self.assertRaisesRegex(PackageValidationError, "<branch>-<buildid>"):
+            verify_package_zip(untagged)
 
     def test_create_refuses_derived_release_directory_inside_protected_root(self):
         result = self.run_cli("package-zip", "--package-dir", str(self.package),

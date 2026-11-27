@@ -23,6 +23,9 @@
 !/uv.lock
 !/workshop/
 
+# game-refs/ holds per-branch copies of the game's managed DLLs for compiling and binding checks. It stays out of the
+# allowlist above and must never be admitted. Test projects need no entry: everything under /tests/ is admitted.
+
 # Local secrets and per-machine settings inside admitted directories.
 .env
 .env.*

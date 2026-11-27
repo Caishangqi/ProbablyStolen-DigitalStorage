@@ -41,6 +41,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStora
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.Api.Tests", "tests\Unit\ProbablyStolen.DigitalStorage.Api.Tests\ProbablyStolen.DigitalStorage.Api.Tests.csproj", "{2121B07A-64B2-4B60-94A5-1C1E822621CA}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Compatibility", "Compatibility", "{13EF492F-7336-9B2A-DEDA-4EA42E1C48F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProbablyStolen.DigitalStorage.GameBindingTests", "tests\Compatibility\ProbablyStolen.DigitalStorage.GameBindingTests\ProbablyStolen.DigitalStorage.GameBindingTests.csproj", "{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -219,6 +223,18 @@ Global
 		{2121B07A-64B2-4B60-94A5-1C1E822621CA}.Release|x64.Build.0 = Release|Any CPU
 		{2121B07A-64B2-4B60-94A5-1C1E822621CA}.Release|x86.ActiveCfg = Release|Any CPU
 		{2121B07A-64B2-4B60-94A5-1C1E822621CA}.Release|x86.Build.0 = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|x64.Build.0 = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Debug|x86.Build.0 = Debug|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|x64.ActiveCfg = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|x64.Build.0 = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|x86.ActiveCfg = Release|Any CPU
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -241,5 +257,7 @@ Global
 		{5CD0C95E-3C18-4FFC-881E-B370A02619B4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{FB54A405-33ED-4104-B442-AB78DE5DDE99} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 		{2121B07A-64B2-4B60-94A5-1C1E822621CA} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
+		{13EF492F-7336-9B2A-DEDA-4EA42E1C48F3} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{0E02438B-AC52-4017-A21E-53E0D0AC8E9A} = {13EF492F-7336-9B2A-DEDA-4EA42E1C48F3}
 	EndGlobalSection
 EndGlobal
