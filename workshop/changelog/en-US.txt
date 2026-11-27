@@ -1,6 +1,5 @@
-0.7.4
+0.7.5
 
-You can now choose whether items taken from the terminal with a left click go to the warehouse or the back counter first.
+The terminal has a new Display settings page.
 
-- Change the priority from the terminal toolbar or the mod settings. The warehouse comes first by default. If an item won't fit, the terminal tries the other destination. The back counter is available only while you're in your shop.
-- Drag selected storage cells within the same drive or IO Port bay grid to move them together in their original arrangement.
+- Adjust slot size, item icon margins, and side button size. Changes take effect in open windows right away and are saved automatically.
