@@ -1,6 +1,7 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Compatibility;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -116,7 +117,8 @@ internal sealed class CellWorkbenchItem
             {
                 var cell = slot.childItem;
                 RefreshSummary();
-                if (cell == null) configure.Disable();
+                // Without the close patches an open editor would outlive its cell's removal from the slot.
+                if (cell == null || !GamePatchStatus.IsActive(GameFeature.PartitionEditorClose)) configure.Disable();
                 else configure.Enable();
                 if (cell != null && CellUpgradeInventory.Bay(cell) is { } bay && CellUpgradeInventory.BayHolder(cell) is { } home)
                     bayView.Show(bay, home);

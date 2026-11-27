@@ -3,13 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using HarmonyLib;
+using ProbablyStolen.DigitalStorage.Platform.Compatibility;
 using ProbablyStolen.DigitalStorage.Platform.Client;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Patches;
 
-[HarmonyPatch(typeof(ItemMouseHandler), "OnEventUpdate", new Type[] { })]
 internal static class WorkbenchModuleHighlightPatch
 {
+    internal static GamePatchGroup Group() => new GamePatchGroup(GameFeature.WorkbenchModuleHighlight, GamePatchTier.Enhancement,
+        new GamePatch("ItemMouseHandler.OnEventUpdate",
+            () => AccessTools.Method(typeof(ItemMouseHandler), "OnEventUpdate", Type.EmptyTypes),
+            transpiler: AccessTools.Method(typeof(WorkbenchModuleHighlightPatch), nameof(Transpiler))))
+        .Requires("ItemMouseHandler.currentItem",
+            () => AccessTools.Field(typeof(ItemMouseHandler), "currentItem")?.FieldType == typeof(GameItem));
+
     internal static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
         var code = instructions.ToList();

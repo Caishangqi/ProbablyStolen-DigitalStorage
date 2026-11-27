@@ -2,32 +2,35 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using ProbablyStolen.DigitalStorage.Platform.Client;
+using ProbablyStolen.DigitalStorage.Platform.Compatibility;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Patches;
 
 /// <summary>
-/// Lets native box selection start over native panels shown inside a draggable mod window. The native check runs
-/// unchanged; the postfix only corrects its answer over a borrowed panel, through <see cref="BorrowedPanelInput"/>.
+/// Lets native box selection start over native panels shown inside a draggable mod window, and select there under
+/// the running build's native rule (<see cref="BorrowedPanelInput.Scope"/>). The native checks run unchanged; the
+/// patches only correct their answer over a borrowed panel, through <see cref="BorrowedPanelInput"/>. Both band
+/// patches are applied, and the one that does not match the running build's rule returns at once.
 /// </summary>
-[HarmonyPatch(typeof(ItemMultiSelectHandler), "IsPointerOverDragSurface")]
 internal static class BorrowedPanelBandPatch
 {
-    private static void Postfix(Vector2 screenPosition, ref bool __result) =>
+    internal static GamePatchGroup Group() => new GamePatchGroup(GameFeature.BorrowedPanelBand, GamePatchTier.Enhancement,
+            new GamePatch("ItemMultiSelectHandler.IsPointerOverDragSurface",
+                () => AccessTools.Method(typeof(ItemMultiSelectHandler), "IsPointerOverDragSurface"),
+                postfix: AccessTools.Method(typeof(BorrowedPanelBandPatch), nameof(SurfacePostfix))),
+            new GamePatch("ItemMultiSelectHandler.ComputeBandItems",
+                () => AccessTools.Method(typeof(ItemMultiSelectHandler), "ComputeBandItems"),
+                prefix: AccessTools.Method(typeof(BorrowedPanelBandPatch), nameof(GridPrefix)),
+                postfix: AccessTools.Method(typeof(BorrowedPanelBandPatch), nameof(WindowPostfix))))
+        .Requires("ItemMultiSelectHandler.bandWindow or bandInventory/bandLocksOnTouch",
+            () => BorrowedPanelInput.Scope != BandScope.None);
+
+    private static void SurfacePostfix(Vector2 screenPosition, ref bool __result) =>
         __result = BorrowedPanelInput.IsDragSurface(screenPosition, __result);
-}
 
-/// <summary>Rebuilds the selection within a borrowed panel's window when the native graph cannot identify it.</summary>
-[HarmonyPatch(typeof(ItemMultiSelectHandler), "ComputeBandItems")]
-internal static class BorrowedPanelBandItemsPatch
-{
-    private static void Postfix(PixelWindow? ___bandWindow, Rect bandRect, List<GameItemElement> __result) =>
-        BorrowedPanelInput.AddBorrowedItems(___bandWindow, bandRect, __result);
-}
+    private static void WindowPostfix(ItemMultiSelectHandler __instance, Rect bandRect, List<GameItemElement> __result) =>
+        BorrowedPanelInput.AddBorrowedItems(__instance, bandRect, __result);
 
-/// <summary>Prefers the first eligible bay among ties in registered machine grids.</summary>
-[HarmonyPatch(typeof(GridPixelElement), nameof(GridPixelElement.TryFindOneValidInventorySlot))]
-internal static class ForwardFillGridPatch
-{
-    private static bool Prefix(GridPixelElement __instance, GameItem item, ref SlotMarker? __result) =>
-        !ForwardFillGrids.TryFind(__instance, item, out __result);
+    private static void GridPrefix(ItemMultiSelectHandler __instance, Rect bandRect) =>
+        BorrowedPanelInput.LockBorrowedGrid(__instance, bandRect);
 }

@@ -11,8 +11,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 /// then reattaches children by inventory index; the vanilla storage bay expansion relies on the same call.
 /// Pages are rebuilt from the recorded layout, or from
 /// the schema 1 page count, whatever the cell's migration state, so locked cells keep their items when saved.
-/// The Harmony postfix that calls <see cref="Restore"/> lives in the IMod assembly, the only assembly the game's
-/// loader patches.
+/// The Harmony postfix that calls <see cref="Restore"/> is applied under this mod's Harmony id
+/// (<c>"mod." + manifest ID</c>), which the loader removes when it stops the mod.
 /// </summary>
 public static class CellPageRestore
 {
@@ -32,7 +32,7 @@ public static class CellPageRestore
         return failure;
     }
 
-    /// <summary>Records the Harmony ID the game's loader uses for this mod (<c>"mod." + manifest ID</c>).</summary>
+    /// <summary>Records the Harmony ID this mod's patches are applied under (<c>"mod." + manifest ID</c>).</summary>
     internal static void SetModId(string modId) => _harmonyId = "mod." + modId;
 
     /// <summary>Rebuilds the recorded pages of one decoded item; other items are ignored.</summary>
@@ -60,7 +60,7 @@ public static class CellPageRestore
         }
     }
 
-    /// <summary>Storing requires the decode hook to be patched by the loader's Harmony instance.</summary>
+    /// <summary>Storing requires the decode hook to be patched under this mod's Harmony ID.</summary>
     internal static bool IsApplied()
     {
         if (_harmonyId == null)

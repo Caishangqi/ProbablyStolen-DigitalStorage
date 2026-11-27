@@ -307,7 +307,7 @@ class ContentContractTests(unittest.TestCase):
             self.assertTrue(english[key])
             self.assertTrue(chinese[key])
         patch = (REPOSITORY / "src" / "ProbablyStolen.DigitalStorage.Mod/Patches/ModConfigWindowPatch.cs").read_text(encoding="utf-8")
-        self.assertIn("HarmonyPatch(typeof(ModConfigWindow), nameof(ModConfigWindow.Open))", patch)
+        self.assertIn("AccessTools.Method(typeof(ModConfigWindow), nameof(ModConfigWindow.Open))", patch)
         self.assertIn("PinyinModeDropdown.Localize(mod, __result)", patch)
 
     def test_assembled_cell_sprite_refreshes_live_view_without_move(self):
@@ -346,8 +346,13 @@ class ContentContractTests(unittest.TestCase):
     def test_borrowed_panels_scope_selection_to_the_visible_window(self):
         original = REPOSITORY / "src" / self.platform.name
         panel_input = (original / "Client/BorrowedPanelInput.cs").read_text(encoding="utf-8")
-        self.assertIn("bandWindow != null || _bandOrigin == null", panel_input)
+        self.assertIn("Scope != BandScope.Window || handler == null || _bandOrigin == null", panel_input)
+        self.assertIn("if (BandWindow!.GetValue(handler) != null) return;", panel_input)
         self.assertIn("_bandOrigin.TryGetTarget", panel_input)
+        # Builds that lock the first touched grid: borrowed grids compete under the native rule, nearer one wins.
+        self.assertIn("Scope != BandScope.Grid || handler == null || _bandOrigin == null", panel_input)
+        self.assertIn("PressDistance(native, press) <= nearest) return;", panel_input)
+        self.assertIn("BandInventory.SetValue(handler, borrowed);", panel_input)
         self.assertIn("selected.FindAll", panel_input)
         self.assertIn("if (!ReferenceEquals(window, origin)) continue;", panel_input)
         self.assertIn("TopHit((Vector2)arguments[4])", panel_input)

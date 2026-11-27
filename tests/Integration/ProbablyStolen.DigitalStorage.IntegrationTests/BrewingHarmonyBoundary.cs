@@ -12,6 +12,9 @@ internal static class AccessTools
     internal static MethodInfo? Method(Type type, string name) => type.GetMethod(name,
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
 
+    internal static MethodInfo? Method(Type type, string name, Type[] parameters) => type.GetMethod(name,
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static, null, parameters, null);
+
     internal static FieldInfo? Field(Type type, string name) => type.GetField(name,
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
 }

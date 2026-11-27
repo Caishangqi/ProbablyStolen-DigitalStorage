@@ -2,14 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
+using ProbablyStolen.DigitalStorage.Platform.Compatibility;
 using ProbablyStolen.DigitalStorage.Platform.Composition;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 
 namespace ProbablyStolen.DigitalStorage.Mod.Patches;
 
-[HarmonyPatch(typeof(ModConfigWindow), nameof(ModConfigWindow.Open))]
 internal static class ModConfigWindowPatch
 {
+    internal static GamePatchGroup Group() => new(GameFeature.ModConfigWindow, GamePatchTier.Enhancement,
+        new GamePatch("ModConfigWindow.Open", () => AccessTools.Method(typeof(ModConfigWindow), nameof(ModConfigWindow.Open)),
+            postfix: AccessTools.Method(typeof(ModConfigWindowPatch), nameof(Postfix))));
+
     private const string TooltipLinkPrefix = "modcfg:";
     private static readonly Dictionary<string, CustomUIWindow> OpenWindows = new(StringComparer.Ordinal);
     private static Action<LoadedMod?, CustomUIWindow?>? _groupLogSettings;

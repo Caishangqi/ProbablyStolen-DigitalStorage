@@ -28,6 +28,9 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\CellModuleFactory.cs" Link="Content\CellModuleFactory.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\TypeLimitModuleText.cs" Link="Content\TypeLimitModuleText.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Client\TypeLimitModuleTooltipBridge.cs" Link="Client\TypeLimitModuleTooltipBridge.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Compatibility\GamePatchGroup.cs" Link="Compatibility\GamePatchGroup.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Compatibility\GameFeature.cs" Link="Compatibility\GameFeature.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Compatibility\GamePatchInstaller.cs" Link="Compatibility\GamePatchInstaller.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Mod\Patches\TypeLimitModuleTooltipPatch.cs" Link="Patches\TypeLimitModuleTooltipPatch.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellPages.View.cs" Link="Storage\CellPages.View.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\WorkbenchCellSummary.cs" Link="Content\WorkbenchCellSummary.cs" />

@@ -17,7 +17,6 @@ internal sealed class SampleDropHandler : EmptyActionHandler
     private TreeNodeRender? _shield;
     private bool _consumedRelease;
     private Func<bool>? _ownsWheel;
-    private ItemMouseDragHandler? _wheelDrag;
     private InputActionManager? _manager;
     private ItemMouseDragHandler? _quarantinedDrag;
     private Action<GameItem>? _sample;
@@ -42,21 +41,12 @@ internal sealed class SampleDropHandler : EmptyActionHandler
     }
 
     // This handler outranks the native drag (RefreshPriority) and InputActionManager hands every handler the same
-    // wheel delta in priority order, so the drag reads the scroll suppression set here. It is restored after the
-    // frame, so outside the window the wheel works as usual.
+    // wheel delta in priority order, so the claim is set before the native drag reads the wheel in the same frame.
     protected override void OnEventMouseScroll(Vector2 scrollDelta)
     {
         var drag = ItemMouseDragHandler.current;
-        if (drag == null || !drag.IsDraggingItem || _wheelDrag != null || _ownsWheel?.Invoke() != true) return;
-        if (NativeTerminalDragAccess.SetScrollIgnore(drag, true) == false) _wheelDrag = drag;
-    }
-
-    private void RestoreWheel()
-    {
-        var drag = _wheelDrag;
-        _wheelDrag = null;
-        // Leave the native suppression enabled while the player holds its key.
-        if (drag != null && !Input.GetKey(drag.scrollIgnoreKey)) NativeTerminalDragAccess.SetScrollIgnore(drag, false);
+        if (drag == null || !drag.IsDraggingItem || _ownsWheel?.Invoke() != true) return;
+        DragWheel.Claim();
     }
 
     private void Start() => EnsureRegistered();
@@ -86,7 +76,6 @@ internal sealed class SampleDropHandler : EmptyActionHandler
 
     private void LateUpdate()
     {
-        RestoreWheel();
         if (_quarantinedDrag != null)
         {
             var drag = _quarantinedDrag;
@@ -177,7 +166,6 @@ internal sealed class SampleDropHandler : EmptyActionHandler
 
     private void OnDisable()
     {
-        RestoreWheel();
         _manager?.actionHandlers.Remove(this);
     }
 
@@ -196,4 +184,18 @@ internal sealed class SampleDropHandler : EmptyActionHandler
 
         _quarantinedDrag = null;
     }
+}
+
+/// <summary>
+/// The wheel over a sample window adjusts that window, not the held item: the native drag skips its wheel handling in
+/// a frame the window claimed the wheel.
+/// </summary>
+public static class DragWheel
+{
+    private static int _claimedFrame = -1;
+
+    /// <summary>Gets whether a sample window claimed the wheel in this frame.</summary>
+    public static bool IsClaimed => _claimedFrame == Time.frameCount;
+
+    internal static void Claim() => _claimedFrame = Time.frameCount;
 }
