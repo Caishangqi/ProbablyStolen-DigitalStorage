@@ -85,6 +85,9 @@ internal sealed class StorageTerminalView : ITerminalView
     private bool _multiGhostPrepared;
     private bool _potentialTargetsPrepared;
     private TerminalSelectionBandView? _selectionBand;
+    // Where the band was pressed and the first visible row then; a scroll moves the band's fixed corner with the rows.
+    private PointerPoint _bandOrigin;
+    private int _bandScroll;
     private TerminalInventoryRefreshHandler? _refreshHandler;
     private IDisposable? _networkSubscription;
     private long _searchRevision;
@@ -174,9 +177,11 @@ internal sealed class StorageTerminalView : ITerminalView
         _scrollbar = TerminalScrollbar.Create(builder.CurrentContainer, TerminalWindowMetrics.ScrollbarWidth,
             gridHeight, TerminalWindowMetrics.ScrollbarHandle, row =>
             {
-                CancelDrag();
+                // A band in progress and a kept selection both span rows, so scrolling keeps them.
+                if (_dragController?.Phase is not (TerminalDragPhase.Selecting or TerminalDragPhase.Selected)) CancelDrag();
                 _screen.SetScroll(row);
                 Refresh();
+                FollowBandScroll();
             });
         builder.End();
 
@@ -265,8 +270,7 @@ internal sealed class StorageTerminalView : ITerminalView
             if (_suspended || controller == null || controller.Phase != TerminalDragPhase.Selected)
                 return Array.Empty<DisplayEntry>();
             var selected = new HashSet<string>(controller.SelectedIds, StringComparer.Ordinal);
-            return _screen.GetPage().Slots.Select(slot => slot.Group)
-                .Where(group => group != null && selected.Contains(group.Id)).Select(group => group!).ToArray();
+            return _screen.GetPage().Entries.Where(group => selected.Contains(group.Id)).ToArray();
         }
     }
 
@@ -390,8 +394,14 @@ internal sealed class StorageTerminalView : ITerminalView
                 var slotIndex = _grid.IndexAt(new Vector2(gesture.Position.X, gesture.Position.Y), EventCamera(), page.Slots.Count);
                 var region = DragRegionAt(gesture.Position, slotIndex, page);
                 var slotId = slotIndex >= 0 ? page.Slots[slotIndex].Group?.Id : null;
-                return controller.Press(gesture.Position, region, slotId, page, candidates, nativeThreshold,
+                var pressed = controller.Press(gesture.Position, region, slotId, page, candidates, nativeThreshold,
                     allPieces: gesture.Shift);
+                if (pressed && controller.Phase == TerminalDragPhase.Selecting)
+                {
+                    _bandOrigin = gesture.Position;
+                    _bandScroll = page.ScrollRow;
+                }
+                return pressed;
             case PointerGesturePhase.Press when gesture.Button == GestureButton.Secondary:
                 controller.Halve(gesture.Position);
                 return controller.OwnsGesture;
@@ -429,7 +439,7 @@ internal sealed class StorageTerminalView : ITerminalView
         var container = _container;
         var screenPoint = new Vector2(point.X, point.Y);
         var camera = EventCamera();
-        if (container == null || !RectTransformUtility.RectangleContainsScreenPoint(container, screenPoint, camera) ||
+        if (container == null || !IsBesideView(container, screenPoint, camera) ||
             !NativeWindowLayer.AllowsTerminalGesture(Window, screenPoint) ||
             IsControlArea(_searchInput?.transform as RectTransform, screenPoint, camera) ||
             IsControlArea(_scrollbar?.transform as RectTransform, screenPoint, camera))
@@ -441,6 +451,16 @@ internal sealed class StorageTerminalView : ITerminalView
         }
 
         return TerminalDragRegion.Content;
+    }
+
+    // The view is narrower than the window body, so a band may also start in the gaps beside it. The rows above and
+    // below hold the title and close button; the window border is excluded later as the window's move area.
+    private bool IsBesideView(RectTransform container, Vector2 point, Camera? camera)
+    {
+        if (!RectTransformUtility.RectangleContainsScreenPoint(Window.Rect, point, camera) ||
+            !RectTransformUtility.ScreenPointToLocalPointInRectangle(container, point, camera, out var local)) return false;
+        var rect = container.rect;
+        return local.y >= rect.yMin && local.y <= rect.yMax;
     }
 
     private static bool IsControlArea(RectTransform? rect, Vector2 point, Camera? camera) =>
@@ -501,8 +521,82 @@ internal sealed class StorageTerminalView : ITerminalView
 
     private void ShowSelectionBand(PointerRectangle? bounds)
     {
-        if (bounds.HasValue) _selectionBand?.Show(bounds.Value, EventCamera());
+        // After a scroll the fixed corner can lie beyond the window; the frame is drawn only within the window.
+        if (bounds.HasValue && TryClipToWindow(bounds.Value, out var shown)) _selectionBand?.Show(shown, EventCamera());
         else _selectionBand?.Hide();
+    }
+
+    private bool TryClipToWindow(PointerRectangle bounds, out PointerRectangle clipped)
+    {
+        var camera = EventCamera();
+        var (min, max) = ScreenCorners(Window.Rect, camera);
+        // Once the rows scrolled, the fixed corner stands for a row outside the view: the frame stops at the grid's
+        // top or bottom edge instead of running over the search box or the status line.
+        if (_dragController?.Phase == TerminalDragPhase.Selecting && _dropHighlight != null &&
+            CurrentDragPage().ScrollRow != _bandScroll)
+        {
+            var (gridMin, gridMax) = ScreenCorners(_dropHighlight.rectTransform, camera);
+            min.y = Mathf.Max(min.y, gridMin.y);
+            max.y = Mathf.Min(max.y, gridMax.y);
+        }
+        clipped = new PointerRectangle(Mathf.Max(bounds.MinX, min.x), Mathf.Max(bounds.MinY, min.y),
+            Mathf.Min(bounds.MaxX, max.x), Mathf.Min(bounds.MaxY, max.y));
+        return clipped.MinX <= clipped.MaxX && clipped.MinY <= clipped.MaxY;
+    }
+
+    private static (Vector2 Min, Vector2 Max) ScreenCorners(RectTransform rect, Camera? camera)
+    {
+        var corners = new Vector3[4];
+        rect.GetWorldCorners(corners);
+        return (RectTransformUtility.WorldToScreenPoint(camera, corners[0]),
+            RectTransformUtility.WorldToScreenPoint(camera, corners[2]));
+    }
+
+    /// <summary>
+    /// Keeps a band in progress on the rows it was pressed on after the view scrolled. Its candidates are the rows
+    /// between the press view and the current view, placed where they would be drawn, so rows that scrolled away stay
+    /// selected while rows beyond the current view are not selected before they are seen.
+    /// </summary>
+    private void FollowBandScroll()
+    {
+        var controller = _dragController;
+        if (controller?.Phase != TerminalDragPhase.Selecting) return;
+        var page = CurrentDragPage();
+        var camera = EventCamera();
+        var rows = _host.Rows;
+        var top = new PointerRectangle[Columns];
+        for (var column = 0; column < Columns; column++)
+        {
+            if (!_grid.TryGetScreenBounds(column, camera, out top[column]))
+            {
+                CancelDrag();
+                return;
+            }
+        }
+        if (rows < 2 || !_grid.TryGetScreenBounds(Columns, camera, out var second))
+        {
+            CancelDrag();
+            return;
+        }
+        var pitch = top[0].MaxY - second.MaxY;
+        var candidates = new List<DragSelectionCandidate<string>>();
+        var last = Math.Max(_bandScroll, page.ScrollRow) + rows - 1;
+        for (var row = Math.Min(_bandScroll, page.ScrollRow); row <= last; row++)
+        {
+            var shift = (row - page.ScrollRow) * pitch;
+            for (var column = 0; column < Columns; column++)
+            {
+                var index = row * Columns + column;
+                if (index >= page.Entries.Count) break;
+                var group = page.Entries[index];
+                if (group.Total <= 0) continue;
+                var cell = top[column];
+                candidates.Add(new DragSelectionCandidate<string>(group.Id,
+                    new PointerRectangle(cell.MinX, cell.MinY - shift, cell.MaxX, cell.MaxY - shift), index));
+            }
+        }
+        var origin = new PointerPoint(_bandOrigin.X, _bandOrigin.Y + (page.ScrollRow - _bandScroll) * pitch);
+        controller.ScrollSelection(origin, candidates);
     }
 
     private void ShowDragGhost(PointerPoint point, string? amount)
@@ -871,12 +965,12 @@ internal sealed class StorageTerminalView : ITerminalView
     }
 
     /// <summary>
-    /// Scrolls one page per wheel notch while the pointer is over the window. During a native drag the
-    /// wheel belongs to the game (rotation and drag amount), so it is left alone.
+    /// Scrolls one page per wheel notch while the pointer is over the window, also while a band is drawn. During a
+    /// native drag the wheel belongs to the game (rotation and drag amount), so it is left alone.
     /// </summary>
     private void ApplyWheel()
     {
-        if (_dropInput?.SuppressesViewInput == true) return;
+        if (_dropInput?.SuppressesViewInput == true && _dragController?.Phase != TerminalDragPhase.Selecting) return;
         var delta = Input.mouseScrollDelta.y;
         if (delta == 0f) return;
         if (TerminalTooltipPresenter.ConsumeScroll(Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt), delta, Time.frameCount)) return;

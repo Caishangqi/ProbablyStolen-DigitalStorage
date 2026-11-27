@@ -65,15 +65,21 @@ public sealed class TerminalDragPresentationTests
     }
 
     [Test]
-    public void HiddenPageAndPausedZeroPlaceholderCannotBeSelected()
+    public void FilteredOutGroupAndPausedZeroPlaceholderCannotBeSelected()
     {
         var flow = new Flow(columns: 1);
         var apple = new TerminalEntry(new ItemKey("apple"), 1, "Apple", "sprite");
         var banana = new TerminalEntry(new ItemKey("banana"), 1, "Banana", "sprite");
         flow.Load(apple, banana);
         var firstPage = flow.Page();
-        var hiddenId = flow.Menu.GetEntries()[1].Id;
-        Assert.That(flow.Menu.CreateDragBatch(firstPage, firstPage, new[] { hiddenId }, flow.Pipeline.Revision), Is.Null);
+        var offScreenId = flow.Menu.GetEntries()[1].Id;
+        Assert.That(firstPage.Slots.Select(slot => slot.Group?.Id), Does.Not.Contain(offScreenId));
+        Assert.That(flow.Menu.CreateDragBatch(firstPage, firstPage, new[] { offScreenId }, flow.Pipeline.Revision),
+            Is.Not.Null, "A group below the shown rows is still part of the filtered list.");
+        flow.Screen.SetSearchText("apple");
+        var filtered = flow.Page();
+        Assert.That(flow.Menu.CreateDragBatch(filtered, filtered, new[] { offScreenId }, flow.Pipeline.Revision), Is.Null);
+        flow.Screen.SetSearchText(string.Empty);
 
         flow.Menu.SetPaused(true);
         flow.Menu.BroadcastChanges(new TerminalInventorySnapshot(true, new[] { banana }));

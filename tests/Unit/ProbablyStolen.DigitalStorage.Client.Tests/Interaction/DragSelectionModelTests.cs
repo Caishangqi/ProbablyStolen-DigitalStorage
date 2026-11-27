@@ -28,6 +28,20 @@ public sealed class DragSelectionModelTests
     }
 
     [Test]
+    public void MoveOrigin_MeasuresTheRectangleFromTheMovedCornerOnlyWhileActive()
+    {
+        var model = new DragSelectionModel<string>();
+        Assert.That(model.MoveOrigin(new PointerPoint(0, 0)), Is.False);
+        model.Begin(new PointerPoint(35, 5), 2);
+        Assert.That(model.Update(new PointerPoint(25, 8), Candidates, 2), Is.EqualTo(new[] { "second", "edge" }));
+
+        Assert.That(model.MoveOrigin(new PointerPoint(5, 5)), Is.True);
+
+        Assert.That(model.Update(new PointerPoint(25, 8), Candidates, 2), Is.EqualTo(new[] { "first", "second" }));
+        Assert.That(model.MoveOrigin(new PointerPoint(float.NaN, 0)), Is.False);
+    }
+
+    [Test]
     public void Update_RejectsZeroAreaAndEdgeOnlySelections()
     {
         var model = new DragSelectionModel<string>();

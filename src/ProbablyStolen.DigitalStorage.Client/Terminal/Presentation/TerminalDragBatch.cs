@@ -33,18 +33,18 @@ public readonly struct TerminalDragStep
 /// <summary>An immutable, revision-bound batch of terminal drag extraction steps.</summary>
 public sealed class TerminalDragBatch
 {
-    internal TerminalDragBatch(long viewRevision, long presentationRevision, IReadOnlyList<string> selectedGroupIds,
+    internal TerminalDragBatch(long contentRevision, long presentationRevision, IReadOnlyList<string> selectedGroupIds,
         IReadOnlyList<TerminalDragStep> steps, long requestedPieces)
     {
-        ViewRevision = viewRevision;
+        ContentRevision = contentRevision;
         PresentationRevision = presentationRevision;
         SelectedGroupIds = new ReadOnlyCollection<string>(new List<string>(selectedGroupIds));
         Steps = new ReadOnlyCollection<TerminalDragStep>(new List<TerminalDragStep>(steps));
         RequestedPieces = requestedPieces;
     }
 
-    /// <summary>Gets the captured visible-page revision.</summary>
-    public long ViewRevision { get; }
+    /// <summary>Gets the captured filtered-order revision.</summary>
+    public long ContentRevision { get; }
     /// <summary>Gets the captured presentation-pipeline revision.</summary>
     public long PresentationRevision { get; }
     /// <summary>Gets selected group IDs in final-page slot order.</summary>

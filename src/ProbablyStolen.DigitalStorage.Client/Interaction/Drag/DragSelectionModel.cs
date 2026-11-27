@@ -11,7 +11,7 @@ public sealed class DragSelectionModel<TId>
     private static readonly IReadOnlyList<TId> Empty = Array.Empty<TId>();
     private readonly List<TId> _selected = new();
     private PointerPoint _origin;
-    private long _viewRevision;
+    private long _revision;
     private bool _active;
 
     /// <summary>Gets whether a rectangle gesture is active.</summary>
@@ -19,23 +19,37 @@ public sealed class DragSelectionModel<TId>
     /// <summary>Gets the current selection in reading order.</summary>
     public IReadOnlyList<TId> SelectedIds => new ReadOnlyCollection<TId>(_selected.ToArray());
 
-    /// <summary>Starts a selection gesture at a finite point and binds it to a view revision.</summary>
-    public bool Begin(PointerPoint origin, long viewRevision)
+    /// <summary>
+    /// Starts a selection gesture at a finite point and binds it to the revision of the candidates' layout; a candidate
+    /// list from another revision cancels the gesture.
+    /// </summary>
+    public bool Begin(PointerPoint origin, long revision)
     {
         Cancel();
         if (!origin.IsValid) return false;
         _origin = origin;
-        _viewRevision = viewRevision;
+        _revision = revision;
         _active = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Moves the fixed corner of an active rectangle, for example when the content under it scrolled. The next
+    /// <see cref="Update"/> measures from the new corner.
+    /// </summary>
+    public bool MoveOrigin(PointerPoint origin)
+    {
+        if (!_active || !origin.IsValid) return false;
+        _origin = origin;
         return true;
     }
 
     /// <summary>Updates the selection against the current candidate page.</summary>
     public IReadOnlyList<TId> Update(PointerPoint current, IReadOnlyList<DragSelectionCandidate<TId>> candidates,
-        long viewRevision)
+        long revision)
     {
         if (!_active) return Empty;
-        if (candidates == null || viewRevision != _viewRevision || !current.IsValid ||
+        if (candidates == null || revision != _revision || !current.IsValid ||
             !PointerRectangle.TryCreate(_origin, current, out var area))
         {
             Cancel();
@@ -66,9 +80,9 @@ public sealed class DragSelectionModel<TId>
     }
 
     /// <summary>Completes the gesture and keeps the valid selected IDs for a later drag.</summary>
-    public IReadOnlyList<TId> Complete(long viewRevision)
+    public IReadOnlyList<TId> Complete(long revision)
     {
-        if (!_active || viewRevision != _viewRevision)
+        if (!_active || revision != _revision)
         {
             Cancel();
             return Empty;
@@ -84,6 +98,6 @@ public sealed class DragSelectionModel<TId>
         _active = false;
         _selected.Clear();
         _origin = default;
-        _viewRevision = 0;
+        _revision = 0;
     }
 }

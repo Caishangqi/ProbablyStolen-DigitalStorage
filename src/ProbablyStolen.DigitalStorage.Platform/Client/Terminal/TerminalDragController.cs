@@ -36,6 +36,7 @@ internal sealed class TerminalDragController
     private IReadOnlyList<string> _selected = Array.Empty<string>();
     private PointerPoint _origin;
     private PointerPoint? _lastDragPoint;
+    private PointerPoint? _lastBandPoint;
     private string? _pressedId;
     private float _threshold;
     private double _wheelRemainder;
@@ -111,8 +112,9 @@ internal sealed class TerminalDragController
             _retainedSelection = false;
             _selected = Array.Empty<string>();
             _highlight(_selected);
-            if (!_selection.Begin(point, page.ViewRevision)) return false;
+            if (!_selection.Begin(point, page.ContentRevision)) return false;
             _pressedId = null;
+            _lastBandPoint = point;
             Phase = TerminalDragPhase.Selecting;
         }
         else return false;
@@ -133,8 +135,9 @@ internal sealed class TerminalDragController
         if (!point.IsValid || !IsCurrent(point)) { Cancel(); return; }
         if (Phase == TerminalDragPhase.Selecting)
         {
-            _selected = _selection.Update(point, _candidates, _source!.ViewRevision);
+            _selected = _selection.Update(point, _candidates, _source!.ContentRevision);
             if (!_selection.IsActive) { Cancel(); return; }
+            _lastBandPoint = point;
             _highlight(_selected);
             if (PointerRectangle.TryCreate(_origin, point, out var rectangle)) _band(rectangle);
             return;
@@ -189,6 +192,19 @@ internal sealed class TerminalDragController
         Move(point);
     }
 
+    /// <summary>
+    /// Follows a scroll during a band: the fixed corner moves with the content it was pressed on, and the candidates
+    /// cover every row the band has scrolled through, so rows that left the view stay selected.
+    /// </summary>
+    internal void ScrollSelection(PointerPoint origin, IReadOnlyList<DragSelectionCandidate<string>> candidates)
+    {
+        if (!_owned || Phase != TerminalDragPhase.Selecting || candidates == null) return;
+        if (!_selection.MoveOrigin(origin)) { Cancel(); return; }
+        _origin = origin;
+        _candidates = candidates.ToArray();
+        if (_lastBandPoint is { } point) Move(point);
+    }
+
     internal void Halve(PointerPoint point)
     {
         if (Phase != TerminalDragPhase.DraggingSingle) return;
@@ -210,7 +226,8 @@ internal sealed class TerminalDragController
         {
             Move(point);
             if (!_owned) return true;
-            _selected = _selection.Complete(_source!.ViewRevision);
+            _selected = _selection.Complete(_source!.ContentRevision);
+            _lastBandPoint = null;
             _owned = false;
             _band(null);
             _retainedSelection = _selected.Count > 0;
@@ -257,8 +274,7 @@ internal sealed class TerminalDragController
     internal void SynchronizePage()
     {
         if (_source == null) return;
-        if (!IsCurrent() || _selected.Any(id => !_currentPage().Slots.Any(slot =>
-                slot.Group?.Id == id && slot.Group.Total > 0)))
+        if (!IsCurrent() || !AreAllAvailable(_selected, _currentPage()))
         {
             Cancel();
             return;
@@ -291,6 +307,7 @@ internal sealed class TerminalDragController
         _amount.End();
         _wheelRemainder = 0;
         _lastDragPoint = null;
+        _lastBandPoint = null;
         _previewPage = null;
         _previewBatch = null;
         _previewAmount = null;
@@ -300,8 +317,20 @@ internal sealed class TerminalDragController
         _feedback(TerminalDragTargetState.None, null);
     }
 
+    // A kept selection can span every filtered group, so the check is one pass over the groups, not one per selection.
+    private static bool AreAllAvailable(IReadOnlyList<string> selected, StorageScreenPage page)
+    {
+        if (selected.Count == 0) return true;
+        var available = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in page.Entries)
+        {
+            if (group.Total > 0) available.Add(group.Id);
+        }
+        return selected.All(available.Contains);
+    }
+
     private bool Matches(StorageScreenPage page) => _source != null &&
-        _source.ViewRevision == page.ViewRevision && _source.PresentationRevision == page.PresentationRevision &&
+        _source.ContentRevision == page.ContentRevision && _source.PresentationRevision == page.PresentationRevision &&
         page.PresentationRevision == _presentationRevision();
 
     private bool IsCurrent() => _source != null && _session() && Matches(_currentPage());

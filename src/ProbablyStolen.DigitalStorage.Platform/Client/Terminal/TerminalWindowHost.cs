@@ -317,14 +317,6 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             local.y < rect.yMin + border.y || local.y > rect.yMax - border.w;
     }
 
-    internal bool IsContentArea(Vector2 point)
-    {
-        if (_window == null || IsWindowMoveArea(point)) return false;
-        var canvas = _window.root.GetComponentInParent<Canvas>();
-        var camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        return RectTransformUtility.RectangleContainsScreenPoint(_window.Rect, point, camera);
-    }
-
     private int CountRows()
     {
         var canvas = RenderHandler.current?.windowRoot?.rectTransform.GetComponentInParent<Canvas>();

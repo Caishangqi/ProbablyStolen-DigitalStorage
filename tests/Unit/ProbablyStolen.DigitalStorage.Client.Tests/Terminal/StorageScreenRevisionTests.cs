@@ -1,3 +1,4 @@
+using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -71,6 +72,31 @@ public sealed class StorageScreenRevisionTests
         Assert.That(after.ViewRevision, Is.EqualTo(before.ViewRevision));
         Assert.That(after.PresentationRevision, Is.EqualTo(12));
         Assert.That(screen.GetPage().PresentationRevision, Is.EqualTo(12));
+    }
+
+    [Test]
+    public void ScrollKeepsContentRevisionAndEntriesWhileSearchAndMappingAdvanceIt()
+    {
+        var screen = new StorageScreen(1, 1);
+        screen.SetEntriesInOrder(new[] { Entry("apple", 1, 1), Entry("pear", 1, 2), Entry("plum", 1, 3) });
+        var top = screen.GetPage();
+
+        screen.SetScroll(2);
+        var scrolled = screen.GetPage();
+
+        Assert.That(scrolled.ViewRevision, Is.GreaterThan(top.ViewRevision));
+        Assert.That(scrolled.ContentRevision, Is.EqualTo(top.ContentRevision));
+        Assert.That(scrolled.Entries.Select(group => group.Representative.Key.Identifier),
+            Is.EqualTo(new[] { "apple", "pear", "plum" }));
+        Assert.That(scrolled.Slots[0].Group, Is.SameAs(scrolled.Entries[2]));
+
+        screen.SetSearchText("ea");
+        var searched = screen.GetPage();
+        Assert.That(searched.ContentRevision, Is.GreaterThan(scrolled.ContentRevision));
+        Assert.That(searched.Entries.Select(group => group.Representative.Key.Identifier), Is.EqualTo(new[] { "pear" }));
+
+        screen.UpdateEntriesInOrder(new[] { Entry("pear", 1, 2), Entry("plum", 1, 3), Entry("prune", 1, 4) });
+        Assert.That(screen.GetPage().ContentRevision, Is.GreaterThan(searched.ContentRevision));
     }
 
     [Test]

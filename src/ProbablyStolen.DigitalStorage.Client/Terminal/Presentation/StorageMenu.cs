@@ -125,7 +125,9 @@ public sealed class StorageMenu
 
     /// <summary>
     /// Validates a captured page against the current final page and expands selected groups into ordered member steps.
-    /// A null result means the captured selection is stale, hidden, duplicated, or absent from the current repository.
+    /// Selected groups may lie outside the shown rows; the filtered order must be the one the selection was made on.
+    /// A null result means the captured selection is stale, filtered out, duplicated, or absent from the current
+    /// repository.
     /// </summary>
     /// <param name="shownPage">The page captured when the drag began.</param>
     /// <param name="currentPage">The latest page at release time.</param>
@@ -138,7 +140,7 @@ public sealed class StorageMenu
         if (shownPage == null) throw new ArgumentNullException(nameof(shownPage));
         if (currentPage == null) throw new ArgumentNullException(nameof(currentPage));
         if (selectedDisplayIds == null) throw new ArgumentNullException(nameof(selectedDisplayIds));
-        if (!_linkState.IsConnected || shownPage.ViewRevision != currentPage.ViewRevision ||
+        if (!_linkState.IsConnected || shownPage.ContentRevision != currentPage.ContentRevision ||
             shownPage.PresentationRevision != currentPage.PresentationRevision ||
             currentPage.PresentationRevision != currentPresentationRevision)
             return null;
@@ -148,15 +150,16 @@ public sealed class StorageMenu
             selected.Length != selected.Distinct(StringComparer.Ordinal).Count()) return null;
         if (requestedPieces.HasValue && (selected.Length != 1 || requestedPieces.Value <= 0)) return null;
 
-        if (!TryGetVisibleGroups(shownPage, out var shownGroups) ||
-            !TryGetVisibleGroups(currentPage, out var currentGroups)) return null;
+        if (!TryGetGroups(shownPage, out var shownGroups) ||
+            !TryGetGroups(currentPage, out var currentGroups)) return null;
         var shownById = shownGroups.ToDictionary(pair => pair.Id, StringComparer.Ordinal);
         var currentById = currentGroups.ToDictionary(pair => pair.Id, StringComparer.Ordinal);
         var repositoryById = GetEntries().Where(group => group != null)
             .GroupBy(group => group.Id, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
-        var orderedSelected = currentGroups.Where(group => selected.Contains(group.Id, StringComparer.Ordinal)).ToArray();
+        var selectedIds = new HashSet<string>(selected, StringComparer.Ordinal);
+        var orderedSelected = currentGroups.Where(group => selectedIds.Contains(group.Id)).ToArray();
         if (orderedSelected.Length != selected.Length) return null;
 
         var steps = new List<TerminalDragStep>();
@@ -182,7 +185,7 @@ public sealed class StorageMenu
 
         return steps.Count == 0
             ? null
-            : new TerminalDragBatch(currentPage.ViewRevision, currentPage.PresentationRevision,
+            : new TerminalDragBatch(currentPage.ContentRevision, currentPage.PresentationRevision,
                 orderedSelected.Select(group => group.Id).ToArray(), steps, totalRequested);
     }
 
@@ -248,20 +251,20 @@ public sealed class StorageMenu
     private static TerminalExtractionResult NoItems(long requested) =>
         TerminalExtractionResult.Create(TerminalExtractionStatus.NoItems, requested, 0, "terminal_storage_no_items");
 
-    private static bool TryGetVisibleGroups(StorageScreenPage page, out IReadOnlyList<DisplayEntry> groups)
+    private static bool TryGetGroups(StorageScreenPage page, out IReadOnlyList<DisplayEntry> groups)
     {
         var result = new List<DisplayEntry>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var slot in page.Slots)
+        foreach (var group in page.Entries)
         {
-            if (slot.Group == null || slot.Group.Total <= 0) continue;
-            if (!ids.Add(slot.Group.Id))
+            if (group == null || group.Total <= 0) continue;
+            if (!ids.Add(group.Id))
             {
                 groups = Array.Empty<DisplayEntry>();
                 return false;
             }
 
-            result.Add(slot.Group);
+            result.Add(group);
         }
 
         groups = result;

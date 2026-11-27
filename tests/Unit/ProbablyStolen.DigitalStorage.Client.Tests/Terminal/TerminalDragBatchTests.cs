@@ -111,6 +111,39 @@ public sealed class TerminalDragBatchTests
         Assert.That(batch!.RequestedPieces, Is.EqualTo(5));
     }
 
+    [Test]
+    public void CreateDragBatch_TakesSelectedGroupsOutsideTheShownRowsAfterAScroll()
+    {
+        var menu = MenuWith(("apple", "Apple", 1), ("bottle", "Bottle", 2), ("cherry", "Cherry", 3), ("date", "Date", 4));
+        menu.SetProjection(ByIdentifier);
+        menu.SetSort(TerminalSortOrder.Name, TerminalSortDirection.Ascending);
+        var screen = ScreenFor(menu);
+        var shown = screen.GetPage();
+        screen.SetScroll(1);
+        var current = screen.GetPage();
+
+        Assert.That(current.Slots.Select(slot => slot.Group?.Id), Does.Not.Contain("id:apple"));
+        var batch = menu.CreateDragBatch(shown, current, new[] { "id:date", "id:apple" }, current.PresentationRevision);
+
+        Assert.That(batch, Is.Not.Null);
+        Assert.That(batch!.SelectedGroupIds, Is.EqualTo(new[] { "id:apple", "id:date" }));
+        Assert.That(batch.RequestedPieces, Is.EqualTo(5));
+        Assert.That(batch.ContentRevision, Is.EqualTo(current.ContentRevision));
+    }
+
+    [Test]
+    public void CreateDragBatch_RejectsASelectionMadeBeforeTheFilterChanged()
+    {
+        var menu = MenuWith(("apple", "Apple", 1), ("bottle", "Bottle", 2), ("cherry", "Cherry", 3), ("date", "Date", 4));
+        menu.SetProjection(ByIdentifier);
+        var screen = ScreenFor(menu);
+        var shown = screen.GetPage();
+        screen.SetSearchText("e");
+        var current = screen.GetPage();
+
+        Assert.That(menu.CreateDragBatch(shown, current, new[] { "id:apple" }, current.PresentationRevision), Is.Null);
+    }
+
     private static StorageScreen ScreenFor(StorageMenu menu)
     {
         var screen = new StorageScreen(3, 1);

@@ -837,6 +837,73 @@ internal sealed class TerminalDragControllerTests
         controller.Move(Point(20, 20));
     }
 
+    [Test]
+    public void ScrolledBand_KeepsRowsThatLeftTheViewAndTheKeptSelectionDragsThemOut()
+    {
+        var fixture = CreateFixture();
+        var screen = new StorageScreen(columns: 1, rows: 1);
+        screen.SetEntriesInOrder(fixture.Menu.GetEntries());
+        var top = screen.GetPage(0);
+        TerminalDragBatch? batch = null;
+        var controller = CreateController(fixture, OpaqueTarget(),
+            (shown, current, selected, revision, requested) =>
+                batch = fixture.Menu.CreateDragBatch(shown, current, selected, revision, requested),
+            (_, _) => TerminalExtractionResult.Create(TerminalExtractionStatus.Success, batch!.RequestedPieces,
+                batch.RequestedPieces, "done"),
+            currentPage: () => screen.GetPage(0), presentationRevision: () => 0);
+        var fruitCell = new DragSelectionCandidate<string>("group-fruit", new PointerRectangle(0, 0, 10, 10), 0);
+
+        Assert.That(controller.Press(Point(-1, 11), TerminalDragRegion.Content, null, top, new[] { fruitCell }, 3), Is.True);
+        controller.Move(Point(11, 5));
+        Assert.That(controller.SelectedIds, Is.EqualTo(new[] { "group-fruit" }));
+
+        // One row down: the fruit row now sits one pitch (12) above the view, the stone row is shown.
+        screen.SetScroll(1);
+        controller.SynchronizePage();
+        controller.ScrollSelection(Point(-1, 23), new[]
+        {
+            new DragSelectionCandidate<string>("group-fruit", new PointerRectangle(0, 12, 10, 22), 0),
+            new DragSelectionCandidate<string>("group-stone", new PointerRectangle(0, 0, 10, 10), 1)
+        });
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Selecting));
+        Assert.That(controller.SelectedIds, Is.EqualTo(new[] { "group-fruit", "group-stone" }));
+        Assert.That(controller.Origin, Is.EqualTo(Point(-1, 23)));
+
+        Assert.That(controller.Release(Point(11, 5)), Is.True);
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Selected));
+        screen.SetScroll(0);
+        controller.SynchronizePage();
+        Assert.That(controller.SelectedIds, Is.EqualTo(new[] { "group-fruit", "group-stone" }),
+            "A kept selection survives a scroll.");
+
+        var shown = screen.GetPage(0);
+        Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", shown, new[] { fruitCell }, 3),
+            Is.True);
+        controller.Move(Point(20, 20));
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.DraggingSelection));
+        Assert.That(controller.Release(Point(20, 20)), Is.True);
+        Assert.That(batch, Is.Not.Null);
+        Assert.That(batch!.SelectedGroupIds, Is.EqualTo(new[] { "group-fruit", "group-stone" }),
+            "The stone group was off screen when the drag started.");
+    }
+
+    [Test]
+    public void ScrollSelection_OnlyFollowsABandInProgress()
+    {
+        var fixture = CreateFixture();
+        var controller = CreateController(fixture, OpaqueTarget(), (_, _, _, _, _) => null,
+            (_, _) => TerminalExtractionResult.Create(TerminalExtractionStatus.Success, 0, 0, "none"));
+
+        controller.ScrollSelection(Point(0, 0), fixture.Candidates);
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Idle));
+
+        Assert.That(controller.Press(Point(5, 5), TerminalDragRegion.Slot, "group-fruit", fixture.Page,
+            fixture.Candidates, 3), Is.True);
+        controller.ScrollSelection(Point(0, 40), fixture.Candidates);
+        Assert.That(controller.Phase, Is.EqualTo(TerminalDragPhase.Waiting));
+        Assert.That(controller.Origin, Is.EqualTo(Point(5, 5)));
+    }
+
     private static TerminalDragController CreateController(Fixture fixture, InventoryDropTarget target,
         Func<StorageScreenPage, StorageScreenPage, IEnumerable<string>, long, long?, TerminalDragBatch?> createBatch,
         Func<TerminalDragBatch, InventoryDropTarget, TerminalExtractionResult> extract,

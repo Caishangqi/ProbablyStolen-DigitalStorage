@@ -83,15 +83,18 @@ public static class TerminalQuantityFormatter
 public sealed class StorageScreenPage
 {
     internal StorageScreenPage(TerminalDisplayState state, string searchText, int scrollRow, int maxScroll,
-        long viewRevision, long presentationRevision, IReadOnlyList<TerminalSlotView> slots)
+        long viewRevision, long contentRevision, long presentationRevision, IReadOnlyList<TerminalSlotView> slots,
+        DisplayEntry[] entries)
     {
         State = state;
         SearchText = searchText;
         ScrollRow = scrollRow;
         MaxScroll = maxScroll;
         ViewRevision = viewRevision;
+        ContentRevision = contentRevision;
         PresentationRevision = presentationRevision;
         Slots = new ReadOnlyCollection<TerminalSlotView>(slots.ToArray());
+        Entries = Array.AsReadOnly(entries);
     }
 
     /// <summary>Gets the state represented by this view.</summary>
@@ -102,6 +105,14 @@ public sealed class StorageScreenPage
 
     /// <summary>Gets the revision of the visible group and slot mapping.</summary>
     public long ViewRevision { get; }
+
+    /// <summary>
+    /// Gets the revision of the filtered group order; scrolling keeps it, so a selection survives a scroll.
+    /// </summary>
+    public long ContentRevision { get; }
+
+    /// <summary>Gets every filtered group in display order; slot <c>i</c> shows entry <c>ScrollRow * columns + i</c>.</summary>
+    public IReadOnlyList<DisplayEntry> Entries { get; }
 
     /// <summary>Gets the revision supplied by the active presentation pipeline.</summary>
     public long PresentationRevision { get; }
@@ -139,6 +150,7 @@ public sealed class StorageScreen
     private string? _filterText;
     private long _filterConfigurationRevision = -1;
     private long _viewRevision;
+    private long _contentRevision;
     private long _presentationRevision;
     private StorageScreenPage? _page;
 
@@ -275,7 +287,7 @@ public sealed class StorageScreen
         var clamped = Math.Max(0, Math.Min(row, GetMaxScroll()));
         if (clamped == _scrollRow) return;
         _scrollRow = clamped;
-        BumpViewRevision();
+        BumpViewRevision(contentChanged: false);
     }
 
     /// <summary>Moves the first visible row by a clamped number of rows.</summary>
@@ -307,7 +319,7 @@ public sealed class StorageScreen
             ? TerminalDisplayState.Empty
             : _baseState;
         return _page = new StorageScreenPage(state, _searchText, _scrollRow, maxScroll,
-            _viewRevision, _presentationRevision, slots);
+            _viewRevision, _contentRevision, _presentationRevision, slots, filtered);
     }
 
     /// <summary>Gets the page after recording the current presentation pipeline revision.</summary>
@@ -348,9 +360,10 @@ public sealed class StorageScreen
         else _page = null;
     }
 
-    private void BumpViewRevision()
+    private void BumpViewRevision(bool contentChanged = true)
     {
         _viewRevision = checked(_viewRevision + 1);
+        if (contentChanged) _contentRevision = checked(_contentRevision + 1);
         _page = null;
     }
 
