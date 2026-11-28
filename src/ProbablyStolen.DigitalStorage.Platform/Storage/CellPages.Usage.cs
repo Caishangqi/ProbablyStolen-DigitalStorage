@@ -19,6 +19,10 @@ internal static partial class CellPages
         }
 
         page.onSlotAddItemEndFunc += (_, _, _) => NotifyRootChange();
-        page.onSlotRemoveItemEndFunc += (_, _, _) => NotifyRootChange();
+        page.onSlotRemoveItemEndFunc += (item, _, _) =>
+        {
+            StoredRootKeys.Forget(item);
+            NotifyRootChange();
+        };
     }
 }

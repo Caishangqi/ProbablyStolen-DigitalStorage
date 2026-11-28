@@ -23,7 +23,7 @@ internal sealed partial class BasicCellHandler
     /// unavailable; it is never treated as empty.
     /// </summary>
     internal static BasicCellInventory? GetCellInventory(GameItem cell, CellDiagnostics diagnostics,
-        Action? storedIdentityChanged = null, TransferOperation? operation = null, bool useCachedContents = true)
+        Action? storedIdentityChanged = null, TransferOperation? operation = null)
     {
         if (!IsCell(cell) || SaveManager.IsDecoding || CellPages.Tabs(cell) == null) return null;
         var health = CellHealth.Get(cell);
@@ -34,7 +34,7 @@ internal sealed partial class BasicCellHandler
                 ? CellWriteState.ExtractOnly : CellWriteState.Writable;
             if (!CellPages.IsComplete(cell))
                 throw new InvalidOperationException("The pages do not match the layout.");
-            var view = useCachedContents ? CellPages.ReadCached(cell, state) : CellPages.Read(cell, StorageService.Identify, state);
+            var view = CellPages.ReadCached(cell, state);
             diagnostics.Once(cell, LogVerbosity.Verbose, "cell_mounted", "Cell mounted.", () =>
                 CellLogFields.For(cell, LogField.Of("types", view.TypeCount), LogField.Of("area", view.Usage.AreaUnits)));
             return new BasicCellInventory(view,

@@ -322,7 +322,7 @@ public sealed class PlatformComposition : IDisposable
             _ioPortFrames = IoPortFrameDriver.Create(_ioPortCoordinator.OnFrame,
                 error => _log.Error($"Digital Storage: IO Port frame step failed ({error.GetType().Name})."));
             _storedRootChecks = new StoredRootChecks<GameItem, GameItem>(
-                check => ModHelper.RunOnMainThread(_modId, check), StoredItemChanges.StillMatches, CellInventoryCache.Forget,
+                check => ModHelper.RunOnMainThread(_modId, check), StoredItemChanges.StillMatches, CellInventoryCache.ForgetWithRoots,
                 () => _events.Post(new NetworkChanged(NetworkChangeReason.StoredItemChanged)));
             StoredItemChanges.Activate(new StoredItemChanges(StoredItemChanges.Locate, () => SaveManager.IsDecoding,
                 _storedRootChecks));
@@ -407,6 +407,7 @@ public sealed class PlatformComposition : IDisposable
         _storedRootChecks = null;
         _contentApi.Dispose();
         VolatileFeatureRules.Reset();
+        StoredRootKeys.Clear();
         _vendors.Dispose();
         _network.Dispose();
         _networkSprites.Dispose();

@@ -206,13 +206,14 @@ internal static partial class CellPages
 
     /// <summary>
     /// Like <see cref="Read"/>, but reuses the contents kept from the last read or operation while the pages still hold
-    /// exactly the same roots; only the cell's settings are read again. See <see cref="CellInventoryCache"/>.
+    /// exactly the same roots; only the cell's settings are read again. See <see cref="CellInventoryCache"/>. When the
+    /// pages must be read again, roots whose type is still kept are not read (<see cref="StoredRootKeys"/>).
     /// </summary>
     /// <exception cref="InvalidOperationException">As for <see cref="Read"/>, when the pages must be read again.</exception>
     internal static CellView ReadCached(GameItem cell, CellWriteState writeState)
     {
         if (CellInventoryCache.TryGet(cell, out var pages, out var usage)) return ViewOf(cell, pages, usage, writeState);
-        var view = Read(cell, StorageService.Identify, writeState);
+        var view = Read(cell, StoredRootKeys.Identify, writeState);
         CellInventoryCache.Remember(cell, view);
         return view;
     }

@@ -53,12 +53,26 @@ internal static class CellInventoryCache
         if (changed) Bump(cell);
     }
 
-    /// <summary>Drops a cell's kept contents; the next read reads every root again.</summary>
+    /// <summary>
+    /// Drops a cell's kept contents; the next read reads every root again, except roots whose type is still kept
+    /// (<see cref="StoredRootKeys"/>).
+    /// </summary>
     internal static void Forget(GameItem cell)
     {
         Entries.Remove(cell);
         Stamps.Invalidate(cell);
         Bump(cell);
+    }
+
+    /// <summary>
+    /// Drops a cell's kept contents and the kept type of every root on it (<see cref="StoredRootKeys"/>). For a cell
+    /// with a root whose live type no longer matches its record: that root changed unnoticed, so no type kept for the
+    /// cell can be trusted.
+    /// </summary>
+    internal static void ForgetWithRoots(GameItem cell)
+    {
+        StoredRootKeys.ForgetCell(cell);
+        Forget(cell);
     }
 
     private static readonly ConditionalWeakTable<GameItem, Counter> Versions = new();

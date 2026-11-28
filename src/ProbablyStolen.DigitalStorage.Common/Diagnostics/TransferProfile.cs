@@ -6,6 +6,7 @@ namespace ProbablyStolen.DigitalStorage.Common.Diagnostics;
 internal enum TransferPart
 {
     Identify,
+    IdentifyKept,
     PlacementCheck,
     NativeMove,
     LayoutRead,

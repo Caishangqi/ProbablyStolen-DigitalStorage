@@ -84,6 +84,7 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoredItemPresence.cs" Link="Storage\StoredItemPresence.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoredItemChanges.cs" Link="Storage\StoredItemChanges.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoredRootChecks.cs" Link="Storage\StoredRootChecks.cs" />
+    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StoredRootKeys.cs" Link="Storage\StoredRootKeys.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Identity\VolatileFeatureRules.cs" Link="Identity\VolatileFeatureRules.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\NativeContent\ContentSnapshots.cs" Link="NativeNetwork\ContentSnapshots.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\PageSetSwap.cs" Link="Storage\PageSetSwap.cs" />

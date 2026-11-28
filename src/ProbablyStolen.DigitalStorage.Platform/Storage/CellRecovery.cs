@@ -145,7 +145,7 @@ internal sealed class CellRecovery
         if (plan.Moves.Count == 0)
         {
             if (protectedPages.Count > 0) MarkDegraded(cell, protectedPages, "reason=identity_unreadable");
-            else CellInventoryCache.Forget(cell);
+            else CellInventoryCache.ForgetWithRoots(cell);
             return true;
         }
 
@@ -202,7 +202,7 @@ internal sealed class CellRecovery
             if (protectedPages.Count > 0)
                 MarkDegraded(cell, protectedPages, "reason=identity_unreadable");
             else
-                CellInventoryCache.Forget(cell);
+                CellInventoryCache.ForgetWithRoots(cell);
             _diagnostics.Write(LogVerbosity.Info, "cell_recovery_applied", "Restored strip roots were relocated.",
                 () => CellLogFields.For(cell, LogField.Of("moves", applied.Count)));
             return true;
@@ -393,7 +393,7 @@ internal sealed class CellRecovery
         var pageList = pages.Distinct().OrderBy(page => page).ToArray();
         if (CellHealth.Get(cell).Status == CellHealthStatus.Available)
             CellHealth.Set(cell, new CellHealthState(CellHealthStatus.Protected));
-        CellInventoryCache.Forget(cell);
+        CellInventoryCache.ForgetWithRoots(cell);
         _diagnostics.Write(LogVerbosity.Warning, "cell_recovery_degraded", "Protected pages prevent insertion and compaction.",
             () => CellLogFields.For(cell, LogField.Of("protected_pages", pageList.Length), LogField.Of("reason", reason)));
     }

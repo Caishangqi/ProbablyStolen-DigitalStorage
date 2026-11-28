@@ -94,10 +94,17 @@ internal sealed class CellRootPort : ICellPagesPort
                 return TransferStep.Unowned;
 
             // Native detach and attach callbacks can change a root's features without changing its slot or units.
-            if (_storedIdentityChanged != null && !root.Key.Equals(_identify(item)))
+            if (_storedIdentityChanged != null)
             {
-                CellInventoryCache.Forget(_cell);
-                _storedIdentityChanged();
+                if (root.Key.Equals(_identify(item)))
+                {
+                    StoredRootKeys.Remember(item, root.Key);
+                }
+                else
+                {
+                    CellInventoryCache.Forget(_cell);
+                    _storedIdentityChanged();
+                }
             }
             return TransferStep.Moved;
         }
@@ -205,7 +212,7 @@ internal sealed class CellRootSource : INativeRootSource, IRootLookup
         var nativeId = item.identifier;
         var reason = StoredRootIdentityMismatch.Classify(root.Key, actual, nativeId, failure != NativeItemIdentityFailure.None);
         if (reason == null) return item;
-        CellInventoryCache.Forget(_cell);
+        CellInventoryCache.ForgetWithRoots(_cell);
         var slot = _view == null ? -1 : StripLayout.SlotIndexAt(_view.Pages[root.Page].Geometry, root.X, root.Y);
         throw new StoredRootIdentityMismatch(reason, root.Key.Identifier, nativeId, _cell.uniqueId, root.Page, slot);
     }

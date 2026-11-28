@@ -81,6 +81,7 @@ public sealed class StoredItemChanges
             return;
         }
 
+        StoredRootKeys.Forget(located.Root);
         active._checks.Mark(located.Cell, located.Root);
     }
 
@@ -184,7 +185,9 @@ public sealed class StoredItemChanges
                 _owner._restoring = false;
             }
 
-            if ((Unrestorable || !restored) && _active == _owner) _owner._checks.Mark(_cell!, Root);
+            if (!Unrestorable && restored) return;
+            StoredRootKeys.Forget(Root);
+            if (_active == _owner) _owner._checks.Mark(_cell!, Root);
         }
 
         private sealed class Nothing : IDisposable

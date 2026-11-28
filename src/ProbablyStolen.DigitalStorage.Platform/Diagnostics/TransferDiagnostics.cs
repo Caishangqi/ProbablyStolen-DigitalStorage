@@ -50,7 +50,7 @@ internal sealed class TransferDiagnostics
         // source_extract holds the whole move from a cell, network_insert and cell_insert the store into the target.
         _log.Write(_category, LogVerbosity.Info, "io_port_batch_parts", "IO Port batch parts.", () => new[]
         {
-            Calls("identifies", TransferPart.Identify), Part("placement_check", TransferPart.PlacementCheck),
+            Calls("identifies", TransferPart.Identify), Calls("identifies_kept", TransferPart.IdentifyKept), Part("placement_check", TransferPart.PlacementCheck),
             Part("layout_read", TransferPart.LayoutRead), Part("source_peek", TransferPart.SourcePeek),
             Calls("source_peeks", TransferPart.SourcePeek), Part("store_plan", TransferPart.StorePlan),
             Calls("store_plans", TransferPart.StorePlan), Part("partition_check", TransferPart.PartitionCheck),

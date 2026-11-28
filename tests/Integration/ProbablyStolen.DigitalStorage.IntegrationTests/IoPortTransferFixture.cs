@@ -171,8 +171,8 @@ internal sealed class IoPortTransferFixture : IDisposable
     internal GameGridInventory[] Pages(GameItem cell) => CellInventoryFixture.Tabs(cell).Inventories.ToArray();
     internal GameItem[] Roots(GameItem cell) => Pages(cell).SelectMany(page => page.childItems).ToArray();
 
-    internal CellView ReadCell(GameItem cell) => BasicCellHandler.GetCellInventory(cell, _cellDiagnostics,
-        useCachedContents: false)?.View ?? throw new InvalidOperationException("Expected an assembled and readable fixture cell.");
+    // Reads every root live, so assertions never see kept contents or kept root types.
+    internal CellView ReadCell(GameItem cell) => CellPages.Read(cell, StorageService.Identify, CellWriteState.Writable);
 
     internal GameItem AddCellToSlot(GameSlotInventory slot, int id)
     {
