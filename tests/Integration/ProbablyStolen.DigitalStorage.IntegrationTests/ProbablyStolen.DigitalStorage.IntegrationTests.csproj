@@ -73,7 +73,6 @@
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\StorageService.cs" Link="Storage\StorageService.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Content\IoPortNativeState.cs" Link="Content\IoPortNativeState.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellInventoryCache.cs" Link="Storage\CellInventoryCache.cs" />
-    <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\CellContentStamps.cs" Link="Storage\CellContentStamps.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeGridSnapshot.cs" Link="NativeNetwork\NativeGridSnapshot.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Network\NativeCellResolver.cs" Link="NativeNetwork\NativeCellResolver.cs" />
     <Compile Include="..\..\..\src\ProbablyStolen.DigitalStorage.Platform\Storage\BasicCellHandler.cs" Link="Storage\BasicCellHandler.cs" />

@@ -22,10 +22,6 @@ namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 internal static class CellInventoryCache
 {
     private static readonly ConditionalWeakTable<GameItem, Entry> Entries = new();
-    private static readonly CellContentStamps<GameItem> Stamps = new();
-
-    internal static object ContentStamp(GameItem cell) => Stamps.Read(cell);
-
     /// <summary>Gets the kept contents of a cell when its pages have not changed since they were kept.</summary>
     internal static bool TryGet(GameItem cell, out IReadOnlyList<PageView> pages, out CellUsage usage)
     {
@@ -60,7 +56,6 @@ internal static class CellInventoryCache
     internal static void Forget(GameItem cell)
     {
         Entries.Remove(cell);
-        Stamps.Invalidate(cell);
         Bump(cell);
     }
 

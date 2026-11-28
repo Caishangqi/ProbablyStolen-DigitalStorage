@@ -762,7 +762,6 @@ internal sealed class IoPortCoordinator : IDisposable
         internal long MoveTicks { get; set; }
         internal long KeepTicks { get; set; }
         internal bool Interrupted { get; private set; }
-        internal bool HasTouched => _touched.Count > 0;
         internal IoPortTransferCursor?[] Cursors { get; } = new IoPortTransferCursor?[SlotCount];
 
         internal bool WasTouched(GameItem cell) => _everTouched.Contains(cell);

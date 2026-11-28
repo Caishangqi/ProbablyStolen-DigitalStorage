@@ -120,9 +120,6 @@ public sealed class PlatformComposition : IDisposable
     /// <summary>Gets the public API entry; valid until the composition is disposed.</summary>
     public IDigitalStorageRuntime Runtime => _runtime;
 
-    /// <summary>Gets the content.v1 registration and read-only API for this lifecycle.</summary>
-    public IDigitalStorageContentBootstrap ContentBootstrap => _contentApi;
-
     /// <summary>
     /// Discovers the integration plugins among <paramref name="pluginTypes"/> and keeps those whose mod is enabled.
     /// Call once from the mod's Init, before <see cref="Enable"/>, passing <c>typeof(T).Assembly.GetTypes()</c> of the

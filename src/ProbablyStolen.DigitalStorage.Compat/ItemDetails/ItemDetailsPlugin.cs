@@ -42,7 +42,6 @@ internal static class ItemDetailsTargets
     internal const string ModId = "item_details";
     internal const string BadgeSlot = "item_details.tooltip_badge.v1";
     internal const string ContentsPanelName = "ItemDetailsContentsGrid";
-    internal const string TypeBadgeName = "ItemDetailsTypeBadge";
     internal static IReadOnlyCollection<string> VerifiedVersions { get; } = Array.Empty<string>();
     private static IDisposable? _registration;
     private static ITooltipService? _service;
