@@ -222,7 +222,7 @@ internal sealed class IoPortCoordinator : IDisposable
             if (!TryGetMachine(machine, out var banks) || !IoPortNativeState.TryRead(machine, out var state) ||
                 !state.Settings.SameAs(session.Settings) || session.Interrupted)
             {
-                Drop(runtime, session, retrySeconds: 0);
+                Drop(machine, null, runtime, session, retrySeconds: 0, "settings_changed");
                 return;
             }
             if (session.Mounted == null)
@@ -232,14 +232,14 @@ internal sealed class IoPortCoordinator : IDisposable
             else if (!session.ViewsAreCurrent())
             {
                 // Another operation changed a cell this session holds; its views are stale. Start over next second.
-                Drop(runtime, session, retrySeconds: 0);
+                Drop(machine, banks, runtime, session, retrySeconds: 0, "views_stale");
                 return;
             }
 
             var deadline = slice is { } length ? Stopwatch.GetTimestamp() + length : long.MaxValue;
             Move(machine, banks, session, ref state, deadline);
             if (session.IsFinished(banks)) Close(machine, banks, runtime, session, state);
-            else Keep(banks, runtime, session, state);
+            else Keep(machine, banks, runtime, session, state);
         }
         catch (Exception)
         {
@@ -248,6 +248,7 @@ internal sealed class IoPortCoordinator : IDisposable
             _storage.Checkpoint(Array.Empty<(GameItem, BasicCellInventory)>());
             foreach (var cell in session.Cells.Keys) CellInventoryCache.Forget(cell);
             runtime.Session = null;
+            ReportEnd(machine, null, session, "failed", IoPortRuntimeStatus.Faulted);
             runtime.Retry(new IoPortDisplaySnapshot(IoPortRuntimeStatus.Faulted, session.Settings, IoPortProgress.Unknown), RetrySeconds);
         }
         finally
@@ -265,12 +266,14 @@ internal sealed class IoPortCoordinator : IDisposable
         var grid = snapshot.FindGrid(machine);
         if (_transfer.GetControllerBlock(grid) is { } offline)
         {
+            ReportEnd(machine, banks, session, "controller", offline);
             End(runtime, new IoPortDisplaySnapshot(offline, session.Settings, runtime.Progress), RetrySeconds);
             return false;
         }
         var energy = new NativeTransferEnergyPort(snapshot.FindController(grid), grid.TotalPowerUsage, _store!, _station!);
         if (energy.GetFeeSourceBlock(0) is { } unpowered)
         {
+            ReportEnd(machine, banks, session, "fee_source", unpowered);
             End(runtime, new IoPortDisplaySnapshot(unpowered, session.Settings, runtime.Progress), RetrySeconds);
             return false;
         }
@@ -279,6 +282,7 @@ internal sealed class IoPortCoordinator : IDisposable
         var mounted = _storage.MountCaptured(snapshot, grid, cells, out var local);
         if (!mounted.Network.Online)
         {
+            ReportEnd(machine, banks, session, "network_offline", IoPortRuntimeStatus.Unpowered);
             End(runtime, new IoPortDisplaySnapshot(IoPortRuntimeStatus.Unpowered, session.Settings, runtime.Progress), RetrySeconds);
             return false;
         }
@@ -317,8 +321,10 @@ internal sealed class IoPortCoordinator : IDisposable
                 session.Credits -= batch.MovedRoots;
                 session.Moved += batch.MovedRoots;
                 session.Last[slot] = batch;
+                session.Batches[slot]++;
+                if (IsTimeHalt(batch)) session.TimeHalts[slot]++;
                 next = next.WithJob(slot, cellId, job.CommittedRootCount);
-                session.Status = Prefer(session.Status, batch.Status);
+                session.Status = MergeStatus(session.Status, batch);
                 if (batch.Fault is { } fault)
                 {
                     _diagnostics.IoPortFault(slot, fault);
@@ -338,24 +344,27 @@ internal sealed class IoPortCoordinator : IDisposable
     }
 
     // Keeps what this step changed, so the views stay the cells' contents into the next frame.
-    private void Keep(IoPortBanks banks, Runtime runtime, Session session, IoPortNativeState state)
+    private void Keep(GameItem machine, IoPortBanks banks, Runtime runtime, Session session, IoPortNativeState state)
     {
         var started = Stopwatch.GetTimestamp();
         if (!_storage.Checkpoint(session.TakeTouched()))
         {
-            Drop(runtime, session, retrySeconds: RetrySeconds);
+            Drop(machine, banks, runtime, session, retrySeconds: RetrySeconds, "checkpoint_failed");
             return;
         }
         session.RecordVersions();
         session.KeepTicks += Stopwatch.GetTimestamp() - started;
-        runtime.Display = new IoPortDisplaySnapshot(session.Moved > 0 ? IoPortRuntimeStatus.Working : session.Status,
+        // The session still has work, so it is working unless something more serious than waiting stopped a slot.
+        runtime.Display = new IoPortDisplaySnapshot(session.Moved > 0 ? IoPortRuntimeStatus.Working
+                : Prefer(session.Status, IoPortRuntimeStatus.Working),
             session.Settings, session.Settings.Direction == IoPortDirection.Forward
                 ? Tally(banks, session, state).Progress : runtime.Progress);
     }
 
     // Ends a session without using its views again. Cells it changed were kept or dropped at its last checkpoint.
-    private void Drop(Runtime runtime, Session session, int retrySeconds)
+    private void Drop(GameItem machine, IoPortBanks? banks, Runtime runtime, Session session, int retrySeconds, string ending)
     {
+        ReportEnd(machine, banks, session, ending, session.Moved > 0 ? IoPortRuntimeStatus.Working : session.Status);
         End(runtime, new IoPortDisplaySnapshot(session.Moved > 0 ? IoPortRuntimeStatus.Working : session.Status,
             session.Settings, runtime.Progress), retrySeconds);
         if (session.Moved > 0) _events.Post(NetworkChangeReason.ContentsChanged);
@@ -384,6 +393,7 @@ internal sealed class IoPortCoordinator : IDisposable
             session.KeepTicks + (compacted - settled), closed - compacted);
 
         var status = session.Credits <= 0 ? IoPortRuntimeStatus.Working : session.Status;
+        var slots = session.Moved == 0 ? DescribeSlots(banks, session) : null;
         var ejected = 0;
         foreach (var slot in done)
         {
@@ -402,6 +412,7 @@ internal sealed class IoPortCoordinator : IDisposable
             }
         }
 
+        ReportEnd(machine, banks, session, "closed", status, slots, ejected);
         runtime.Session = null;
         if (session.Moved > 0) _events.Post(NetworkChangeReason.ContentsChanged);
         // Finished: every input cell has gone to the output bank. The machine pauses until the player starts it again.
@@ -425,6 +436,69 @@ internal sealed class IoPortCoordinator : IDisposable
         }
         foreach (var cell in runtime.PendingCompaction.ToArray()) _storage.Compact(cell);
         runtime.PendingCompaction.Clear();
+    }
+
+    // Logs why a session ended having moved nothing, with what each input slot held and how its last batch stopped.
+    private void ReportEnd(GameItem machine, IoPortBanks? banks, Session session, string ending, IoPortRuntimeStatus status,
+        string? slots = null, int ejected = 0)
+    {
+        if (session.Moved > 0)
+        {
+            _diagnostics.IoPortMoved(machine.uniqueId);
+            return;
+        }
+        _diagnostics.IoPortStalled(machine.uniqueId, ending, session.Settings.Direction.ToString(), status.ToString(),
+            () => slots ?? DescribeSlots(banks, session), () => DescribeNetwork(session), ejected, session.Steps,
+            session.MoveTicks, _frameBudgetTicks);
+    }
+
+    // One entry per occupied input slot, "slot:types/write_state/last_status[/fault][/settled]/batches=B/time_halts=H/
+    // keys=K[/refused]", or why its cell was not read. Counts and enum names only, never item data.
+    private static string DescribeSlots(IoPortBanks? banks, Session session)
+    {
+        if (banks == null) return "unknown";
+        var slots = new List<string>();
+        for (var slot = 0; slot < SlotCount; slot++)
+        {
+            if (banks.Left[slot].childItem is not { } cell) continue;
+            string text;
+            if (TryFindLocal(session.Local, cell, out var inventory))
+            {
+                var cursor = session.Cursors[slot];
+                text = $"{slot}:{inventory.View.TypeCount}/{inventory.View.WriteState}/" + (session.Last[slot] is { } last
+                    ? last.Status + (last.Fault is { } fault ? "/" + fault : "") + (last.Settled ? "/settled" : "")
+                    : "not_run") + $"/batches={session.Batches[slot]}/time_halts={session.TimeHalts[slot]}" +
+                    $"/keys={cursor?.Keys?.Count ?? -1}" + (cursor?.Refused == true ? "/refused" : "") +
+                    (cursor is { Refusals.Count: > 0 }
+                        ? "=" + string.Join("+", cursor.Refusals.Select(pair => pair.Key + ":" + pair.Value))
+                        : "");
+            }
+            else
+            {
+                var health = CellHealth.Get(cell);
+                text = session.Mounted == null ? $"{slot}:not_read" : $"{slot}:unreadable/{health.Status}/{health.Reason}";
+            }
+            slots.Add(text);
+        }
+        return slots.Count == 0 ? "none" : string.Join(",", slots);
+    }
+
+    // The mounted network cells, "mounted/known" then up to eight
+    // "types/type_limit t used/total b write_state[/partition=mode:rules]" entries. Counts and enum names only.
+    private static string DescribeNetwork(Session session)
+    {
+        if (session.Mounted is not { } mounted) return "not_mounted";
+        var cells = mounted.Inventories.Take(8).Select(pair =>
+        {
+            var cell = pair.Inventory;
+            var partition = cell.View.Partition;
+            return $"{cell.GetStoredItemTypes()}/{cell.GetTotalItemTypes()}t {cell.GetUsedBytes()}/{cell.GetTotalBytes()}b " +
+                cell.View.WriteState + (partition.RuleCount > 0 || !partition.IsValid
+                    ? $"/partition={partition.Mode}:{partition.RuleCount}" + (partition.IsValid ? "" : ":" + partition.Failure)
+                    : "");
+        });
+        return $"{mounted.Inventories.Count}/{mounted.Network.Cells.Count}" +
+            (mounted.Network.StorageUnavailable ? " unavailable" : "") + "; " + string.Join("; ", cells);
     }
 
     private static void End(Runtime runtime, IoPortDisplaySnapshot display, int retrySeconds)
@@ -592,6 +666,17 @@ internal sealed class IoPortCoordinator : IDisposable
             .Any(root => root != null && (ReferenceEquals(grid, root) || GraphUtils.FindParentEquals(grid, root)));
     }
 
+    /// <summary>
+    /// Adds a batch's status to the session's. A batch the time slice ended before it moved anything says nothing about
+    /// the cell and continues next frame, so it leaves the status alone; otherwise a cell whose every type the network
+    /// refused would end showing "working".
+    /// </summary>
+    internal static IoPortRuntimeStatus MergeStatus(IoPortRuntimeStatus current, IoPortBatchResult batch) =>
+        IsTimeHalt(batch) ? current : Prefer(current, batch.Status);
+
+    private static bool IsTimeHalt(IoPortBatchResult batch) =>
+        batch is { MovedRoots: 0, Status: IoPortRuntimeStatus.Working, Settled: false };
+
     private static IoPortRuntimeStatus Prefer(IoPortRuntimeStatus current, IoPortRuntimeStatus next) =>
         Priority(next) > Priority(current) ? next : current;
 
@@ -667,6 +752,9 @@ internal sealed class IoPortCoordinator : IDisposable
         internal Dictionary<GameItem, BasicCellInventory> Cells { get; } = new();
         internal bool[] Finished { get; } = new bool[SlotCount];
         internal IoPortBatchResult?[] Last { get; } = new IoPortBatchResult?[SlotCount];
+        internal int[] Batches { get; } = new int[SlotCount];
+        // Batches the time slice ended before their first root moved.
+        internal int[] TimeHalts { get; } = new int[SlotCount];
         internal IoPortRuntimeStatus Status { get; set; } = IoPortRuntimeStatus.NoEligibleContent;
         internal int Moved { get; set; }
         internal int Steps { get; set; }

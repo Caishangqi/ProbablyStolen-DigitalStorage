@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -17,6 +18,7 @@ internal sealed class TransferDiagnostics
     private readonly LogCategory _category;
     private readonly Dictionary<(string Reason, string Expected, string Actual), int> _mismatches = new();
     private readonly Dictionary<(int Slot, IoPortTransferFault Fault), int> _ioPortFaults = new();
+    private readonly Dictionary<int, string> _ioPortStalls = new();
     private int _pairs;
     private const int IoPortBatchLogSeconds = 5;
     private long _lastIoPortBatch = long.MinValue / 2;
@@ -66,6 +68,33 @@ internal sealed class TransferDiagnostics
 
     private static string Milliseconds(long ticks) =>
         (ticks * 1000d / Stopwatch.Frequency).ToString("0.###", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Logs why an IO Port session ended having moved nothing. A machine that keeps stopping for the same reason is
+    /// logged once, until the reason changes or one of its sessions moves something (<see cref="IoPortMoved"/>).
+    /// </summary>
+    internal void IoPortStalled(int machine, string ending, string direction, string status, Func<string> slots,
+        Func<string> network, int ejected, int steps, long moveTicks, long sliceTicks)
+    {
+        if (!_log.IsEnabled(_category, LogVerbosity.Info)) return;
+        var described = slots();
+        var signature = ending + "|" + direction + "|" + status + "|" + described;
+        if (_ioPortStalls.TryGetValue(machine, out var last) && last == signature) return;
+        _ioPortStalls[machine] = signature;
+        _log.Write(_category, LogVerbosity.Info, "io_port_stalled", "IO Port session moved nothing.", () => new[]
+        {
+            LogField.Of("machine", machine), LogField.Of("ending", ending), LogField.Of("direction", direction),
+            LogField.Of("status", status), LogField.Of("slots", described), LogField.Of("network", network()),
+            LogField.Of("ejected", ejected),
+            LogField.Of("steps", steps), LogField.Of("move_ms", Milliseconds(moveTicks)),
+            LogField.Of("slice_ms", Milliseconds(sliceTicks)), Part("source_peek", TransferPart.SourcePeek),
+            Calls("source_peeks", TransferPart.SourcePeek), Calls("identifies", TransferPart.Identify),
+            Part("identify", TransferPart.Identify)
+        });
+    }
+
+    /// <summary>Forgets a machine's last stall reason after one of its sessions moved something.</summary>
+    internal void IoPortMoved(int machine) => _ioPortStalls.Remove(machine);
 
     internal void IoPortFault(int slot, IoPortTransferFault fault)
     {

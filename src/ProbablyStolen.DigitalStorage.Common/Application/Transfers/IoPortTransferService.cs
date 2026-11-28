@@ -83,6 +83,7 @@ public sealed class IoPortTransferService
                         continue;
                     case TransferOutcome.Rejected:
                         cursor.Refused = true;
+                        cursor.CountRefusal(step.Rejection);
                         continue;
                     case TransferOutcome.Returned:
                         return Fault(sink, IoPortTransferFault.RootReturned);
@@ -210,6 +211,18 @@ public sealed class IoPortTransferCursor
     internal IReadOnlyList<ItemKey>? Keys { get; set; }
     internal int Index { get; set; }
     internal bool Refused { get; set; }
+
+    // How many types the target refused, by reason; kept for diagnostics only.
+    internal IReadOnlyDictionary<StoreRejection, int> Refusals => _refusals;
+
+    private readonly Dictionary<StoreRejection, int> _refusals = new();
+
+    internal void CountRefusal(StoreRejection? reason)
+    {
+        if (reason is not { } known) return;
+        _refusals.TryGetValue(known, out var count);
+        _refusals[known] = count + 1;
+    }
 }
 
 /// <summary>The fee counter of one input cell's job.</summary>

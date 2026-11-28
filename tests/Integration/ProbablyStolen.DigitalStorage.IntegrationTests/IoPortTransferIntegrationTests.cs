@@ -2,7 +2,10 @@ using System;
 using System.Linq;
 using NUnit.Framework;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Common.Domain.Machines;
+using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -168,6 +171,45 @@ public sealed class IoPortTransferIntegrationTests
         fixture.Callback();
 
         Assert.That(fixture.Roots(fixture.DriveCell!), Is.EqualTo(new[] { root }));
+    }
+
+    [Test]
+    public void NothingToMove_LogsWhyOnceUntilSomethingMoves()
+    {
+        using var fixture = new IoPortTransferFixture(IoPortDirection.Forward, completion: IoPortCompletionMode.Full,
+            logLevel: LogVerbosity.Info);
+        var source = fixture.Left[0].childItem!;
+        string[] Stalls() => fixture.Logs.Where(line => line.Contains("io_port_stalled")).ToArray();
+
+        fixture.Callback();
+        fixture.Coordinator.Wake(fixture.Machine);
+        fixture.Callback();
+
+        Assert.That(Stalls(), Has.Length.EqualTo(1), "The same reason is logged once.");
+        Assert.That(Stalls()[0], Does.Contain("ending=\"closed\"").And.Contain("direction=\"Forward\"")
+            .And.Contain("status=\"NoEligibleContent\"").And.Contain("slots=\"0:0/Writable/NoEligibleContent/settled/batches=1/time_halts=0/keys=0\""));
+
+        fixture.AddRoot(source, 96);
+        fixture.Coordinator.Wake(fixture.Machine);
+        fixture.Callback();
+        fixture.Coordinator.Wake(fixture.Machine);
+        fixture.Callback();
+
+        Assert.That(Stalls(), Has.Length.EqualTo(2), "A session that moved something resets the reason.");
+    }
+
+    [Test]
+    public void SessionStatus_IgnoresBatchesTheTimeSliceEndedBeforeAnyRootMoved()
+    {
+        var timeHalt = new IoPortBatchResult(0, IoPortRuntimeStatus.Working);
+        var refused = new IoPortBatchResult(0, IoPortRuntimeStatus.WaitingForCapacity, settled: true);
+        var moved = new IoPortBatchResult(1, IoPortRuntimeStatus.Working);
+
+        var status = new[] { timeHalt, timeHalt, refused }
+            .Aggregate(IoPortRuntimeStatus.NoEligibleContent, IoPortCoordinator.MergeStatus);
+
+        Assert.That(status, Is.EqualTo(IoPortRuntimeStatus.WaitingForCapacity));
+        Assert.That(IoPortCoordinator.MergeStatus(status, moved), Is.EqualTo(IoPortRuntimeStatus.Working));
     }
 
     [Test]

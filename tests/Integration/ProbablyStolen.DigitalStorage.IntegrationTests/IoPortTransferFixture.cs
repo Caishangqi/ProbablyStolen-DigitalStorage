@@ -30,14 +30,15 @@ internal sealed class IoPortTransferFixture : IDisposable
     private int _frame;
 
     internal IoPortTransferFixture(IoPortDirection direction = IoPortDirection.Forward, bool includeDrive = true,
-        IoPortCompletionMode completion = IoPortCompletionMode.WorkComplete, TimeSpan? frameBudget = null)
+        IoPortCompletionMode completion = IoPortCompletionMode.WorkComplete, TimeSpan? frameBudget = null,
+        LogVerbosity logLevel = LogVerbosity.Warning)
     {
         var categories = new LogCategories();
         var transferCategory = categories.Register("log_transfer", null, "transfer", LogVerbosity.Warning, true);
         var cellCategory = categories.Register("log_cell", null, "cell", LogVerbosity.Warning, true);
         categories.Freeze();
         var logger = new DiagnosticLogger(categories,
-            _ => new LogCategorySettings(true, LogVerbosity.Warning), (_, line) => Logs.Add(line));
+            _ => new LogCategorySettings(true, logLevel), (_, line) => Logs.Add(line));
         var transferDiagnostics = new TransferDiagnostics(logger, transferCategory);
         _cellDiagnostics = new CellDiagnostics(logger, cellCategory);
         _events = new StorageEventBus(error => Assert.Fail(error));
