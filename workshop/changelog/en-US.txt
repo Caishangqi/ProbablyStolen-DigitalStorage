@@ -1,7 +1,8 @@
-0.7.6
+0.7.7
 
-You can now scroll the terminal while box-selecting. Items stay selected when they scroll out of view. Also support open_beta 1.0.0.16.
+Storage and transfer logs now offer clearer controls and more useful diagnostics.
 
-- The selection stays in place when you scroll after releasing the mouse. Drag from any visible selected slot to take out the whole selection, including items offscreen.
-- Builds and patch binding checks passed against Steam's public branch (0.46D) and open_beta (1.0.0.16). If an optional patch can't bind, only the affected feature is disabled. If a patch needed to protect save data can't bind, the mod won't start.
-- Developer tools can snapshot game assemblies and check patch bindings on both branches. ZIP filenames now include the build branch and build ID. The IO Port integration test was also updated.
+- Choose a log level for each category in mod settings. Terminal traces use the interface log, while item identity details use the storage log and its identity setting.
+- When an IO Port session ends without moving anything, its log explains why, lists the last refusal for each input slot, and shows the connected storage cells. The same reason is logged once until an item moves.
+- When a cell is reread, unchanged items keep their known types. New or changed items are identified again.
+- Item identity now ignores volatile features and retains foreign item values. Fallback handling also reports why it was used.
