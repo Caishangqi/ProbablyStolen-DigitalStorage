@@ -36,22 +36,33 @@ internal enum NativeItemIdentityFailure
 internal sealed class NativeItemIdentityReadResult
 {
     private NativeItemIdentityReadResult(NativeItemIdentityReadStatus status, NativeItemIdentityFailure failure,
-        ItemKey? identity)
+        ItemKey? identity, string? rule = null, string? at = null)
     {
         Status = status;
         Failure = failure;
         Identity = identity;
+        Rule = rule;
+        At = at;
     }
 
     internal NativeItemIdentityReadStatus Status { get; }
     internal NativeItemIdentityFailure Failure { get; }
     internal ItemKey? Identity { get; }
 
+    /// <summary>For a refused encoding, the rule that refused it; otherwise null.</summary>
+    internal string? Rule { get; }
+
+    /// <summary>For a refused encoding, the item and the tag or feature where the rule was met; otherwise null.</summary>
+    internal string? At { get; }
+
     internal static NativeItemIdentityReadResult Success(ItemKey identity) =>
         new(NativeItemIdentityReadStatus.Success, NativeItemIdentityFailure.None, identity);
 
     internal static NativeItemIdentityReadResult Unsupported(NativeItemIdentityFailure failure) =>
         new(NativeItemIdentityReadStatus.Unsupported, failure, null);
+
+    internal static NativeItemIdentityReadResult Rejected(string rule, string at) =>
+        new(NativeItemIdentityReadStatus.Unsupported, NativeItemIdentityFailure.EncodingRejected, null, rule, at);
 
     internal static NativeItemIdentityReadResult Stale(NativeItemIdentityFailure failure) =>
         new(NativeItemIdentityReadStatus.Stale, failure, null);
@@ -135,6 +146,10 @@ internal sealed class NativeItemIdentityReader
         {
             return NativeItemIdentityReadResult.Stale(exception.Failure);
         }
+        catch (CanonicalIdentityRejectedException exception)
+        {
+            return NativeItemIdentityReadResult.Rejected(exception.Rule, exception.At);
+        }
         catch (ArgumentException)
         {
             return NativeItemIdentityReadResult.Unsupported(NativeItemIdentityFailure.EncodingRejected);
@@ -143,6 +158,20 @@ internal sealed class NativeItemIdentityReader
         {
             return NativeItemIdentityReadResult.Stale(NativeItemIdentityFailure.ReadException);
         }
+    }
+
+    /// <summary>
+    /// Lists values a type holds as they are although the game would not write them, such as NaN or a lone surrogate.
+    /// They follow from the canonical bytes alone, so the stored type is encoded again instead of keeping a list per key.
+    /// </summary>
+    internal static IReadOnlyList<(string Rule, string At)> FindAnomalies(ItemKey key)
+    {
+        if (key == null || !key.IsCanonical) return Array.Empty<(string, string)>();
+        var input = CanonicalIdentityValidator.Decode(key.CopyCanonicalState(), key.Identifier);
+        if (input == null) return Array.Empty<(string, string)>();
+        var anomalies = new List<(string Rule, string At)>();
+        CanonicalIdentityEncoder.Encode(input, anomalies);
+        return anomalies;
     }
 
     internal static void ValidateNativeString(string? value) =>
@@ -180,7 +209,7 @@ internal sealed class NativeItemIdentityReader
             throw new StaleIdentityException(NativeItemIdentityFailure.ReadException);
         }
 
-        featuresSource = WithoutVolatile(featuresSource);
+        featuresSource = WithoutTransient(featuresSource);
 
         _budget.RequireStringCount(itemTypesSource.Count);
         RequireCount(tagsSource.Count, MaxRecords);
@@ -198,15 +227,18 @@ internal sealed class NativeItemIdentityReader
             item.LateUnitValue, item.BackupUnitValue, item.SpriteAtlasPath, item.SpritePath, content, examine);
     }
 
-    // A null entry stays, so the read still reports the list as stale.
-    private IReadOnlyList<INativeIdentityFeatureSource> WithoutVolatile(IReadOnlyList<INativeIdentityFeatureSource> features)
+    // Leaves out registered volatile features and the game's own deal features. GameItem's slot callback adds the
+    // client's ClientTemporary buying features and the contrabandMarkUp feature while an item sits in the back inventory
+    // during a client visit or in a container placed for selling, and removes both once it leaves; they price the deal,
+    // not the item. A left-out feature is not checked for ownership or a unique identifier. A null entry stays, so the
+    // read still reports the list as stale.
+    private IReadOnlyList<INativeIdentityFeatureSource> WithoutTransient(IReadOnlyList<INativeIdentityFeatureSource> features)
     {
-        if (_rules.Prefixes.Count == 0) return features;
         List<INativeIdentityFeatureSource>? kept = null;
         for (var index = 0; index < features.Count; index++)
         {
             var feature = features[index];
-            if (feature != null && _rules.IsVolatile(feature.Identifier))
+            if (feature != null && (_rules.IsVolatile(feature.Identifier) || IsGameTemporary(feature)))
             {
                 kept ??= features.Take(index).ToList();
                 continue;
@@ -217,6 +249,13 @@ internal sealed class NativeItemIdentityReader
 
         return kept ?? features;
     }
+
+    private const int ClientTemporaryFeatureType = 6;
+    private const string ContrabandMarkUpCategory = "contrabandMarkUp";
+
+    private static bool IsGameTemporary(INativeIdentityFeatureSource feature) =>
+        feature.FeatureType == ClientTemporaryFeatureType ||
+        string.Equals(feature.Category, ContrabandMarkUpCategory, StringComparison.Ordinal);
 
     private IReadOnlyList<CanonicalIdentityTag> ReadTags(IReadOnlyList<INativeIdentityTagSource> source)
     {
@@ -779,7 +818,6 @@ internal sealed class NativeItemIdentityReader
     {
         private const int MaxBytes = 1048576;
         private const int MaxStringBytes = 65536;
-        private static readonly UTF8Encoding Utf8 = new(false, true);
         private int _bytes = 8;
 
         internal void ReserveItem(INativeIdentityItemSource item)
@@ -887,20 +925,13 @@ internal sealed class NativeItemIdentityReader
 
         private static int GetStringByteCount(string value)
         {
-            try
-            {
-                var length = Utf8.GetByteCount(value);
-                if (length > MaxStringBytes)
-                {
-                    throw new UnsupportedIdentityException(NativeItemIdentityFailure.InvalidNativeState);
-                }
-
-                return length;
-            }
-            catch (EncoderFallbackException)
+            var length = Wtf8.GetByteCount(value, out _);
+            if (length > MaxStringBytes)
             {
                 throw new UnsupportedIdentityException(NativeItemIdentityFailure.InvalidNativeState);
             }
+
+            return length;
         }
     }
 

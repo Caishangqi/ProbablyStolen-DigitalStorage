@@ -56,14 +56,88 @@ public sealed class CanonicalIdentityEncoderTests
     [Test]
     public void Encode_RejectsUnsupportedFeatureConditionAndBadValues()
     {
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", null!) }))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", "contrabandMarkUp") }))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", null!) }))));
         Assert.That(CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", "", fakeCondition: new CanonicalIdentityCondition(onActivateActionId: "counterfeitInjector")) })).IsCanonical, Is.True);
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", "", featureType: 6) }))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[] { new CanonicalIdentityTag("t", valueDoubleBits: 0x7ff0000000000000) }))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", name: "\ud800"))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", name: new string('x', 65537)))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", content: CanonicalIdentityNode.Grid(new CanonicalIdentityShape(0, 0, 1, 1, false, 0, 2, new byte[] { 0 }), Array.Empty<CanonicalIdentityChild>())))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", name: new string('x', 65537)))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", content: CanonicalIdentityNode.Grid(new CanonicalIdentityShape(0, 0, 1, 1, false, 0, 2, new byte[] { 0 }), Array.Empty<CanonicalIdentityChild>())))));
+    }
+
+    [TestCase(0x7f800000U, 0UL)]
+    [TestCase(0x7fc00001U, 0UL)]
+    [TestCase(0U, 0xfff0000000000000UL)]
+    [TestCase(0U, 0x7ff8000000000001UL)]
+    public void Encode_NonfiniteTagValues_EncodeAndDecodeBitForBit(uint floatBits, ulong doubleBits)
+    {
+        var input = Input("a", tags: new[] { new CanonicalIdentityTag("t", valueFloatBits: floatBits, valueDoubleBits: doubleBits) });
+        var key = CanonicalIdentityEncoder.Encode(input);
+        var tag = CanonicalIdentityValidator.Decode(key.CopyCanonicalState(), "a")!.Tags.Single();
+        Assert.That(tag.ValueFloatBits, Is.EqualTo(floatBits));
+        Assert.That(tag.ValueDoubleBits, Is.EqualTo(doubleBits));
+        Assert.That(CanonicalIdentityEncoder.Encode(input), Is.EqualTo(key));
+    }
+
+    [Test]
+    public void Encode_Refusal_NamesRuleAndPlace()
+    {
+        var text = Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(
+            Input("a", tags: new[] { new CanonicalIdentityTag("k", enabled: true, valueString: new string('x', 65537)) }))))!;
+        Assert.That((text.Rule, text.At), Is.EqualTo(("text_too_long", "a/tag:k")));
+
+        var format = Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(
+            Input("a", features: new[] { new CanonicalIdentityFeature("f", null!) }))))!;
+        Assert.That((format.Rule, format.At), Is.EqualTo(("format_rule", "a/feature:f")));
+    }
+
+    [Test]
+    public void Encode_Places_CutLongNames()
+    {
+        var key = new string('k', 70000);
+        var error = Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(
+            Input("a", tags: new[] { new CanonicalIdentityTag(key, enabled: true) }))))!;
+        Assert.That(error.Rule, Is.EqualTo("text_too_long"));
+        Assert.That(error.At, Is.EqualTo("a/tag:" + new string('k', 64) + "...(len=70000)"));
+    }
+
+    [Test]
+    public void Encode_Anomalies_AreCappedAndOmittedTagsNotNoted()
+    {
+        var notes = new List<(string Rule, string At)>();
+        var tags = Enumerable.Range(0, 20).Select(i => new CanonicalIdentityTag("t" + i, valueFloatBits: 0x7fc00000U))
+            .Append(new CanonicalIdentityTag("omitted", identifierName: "\ud800")).ToArray();
+
+        CanonicalIdentityEncoder.Encode(Input("a", tags: tags), notes);
+
+        Assert.That(notes.Count, Is.EqualTo(CanonicalIdentityEncoder.MaxAnomalies + 1));
+        Assert.That(notes.Last(), Is.EqualTo(("anomaly_overflow", "a/tag:t16")));
+        Assert.That(notes.Any(note => note.At.EndsWith("omitted", StringComparison.Ordinal)), Is.False);
+    }
+
+    [Test]
+    public void Encode_ValuesTheGameWouldNotWrite_AreKeptAndNoted()
+    {
+        var notes = new List<(string Rule, string At)>();
+        var child = Child(Input("c", name: "\ud800"));
+        var input = Input("r",
+            tags: new[] { new CanonicalIdentityTag("k", valueString: "\udc00x"), new CanonicalIdentityTag("n", valueDoubleBits: 0x7ff8000000000000UL) },
+            features: new[]
+            {
+                new CanonicalIdentityFeature("odd", "", featureType: 9, valueStage: 5),
+                new CanonicalIdentityFeature("markup", "contrabandMarkUp", featureType: 6)
+            },
+            content: CanonicalIdentityNode.Grid(Shape(), new[] { child }));
+
+        var key = CanonicalIdentityEncoder.Encode(input, notes);
+
+        Assert.That(notes, Is.EquivalentTo(new[]
+        {
+            ("invalid_text", "r/tag:k"), ("nonfinite_value", "r/tag:n"), ("feature_type", "r/feature:odd"),
+            ("value_stage", "r/feature:odd"), ("invalid_text", "c")
+        }));
+        var decoded = CanonicalIdentityValidator.Decode(key.CopyCanonicalState(), "r")!;
+        Assert.That(decoded.Tags.Single(tag => tag.Key == "k").ValueString, Is.EqualTo("\udc00x"));
+        Assert.That(CanonicalIdentityEncoder.Encode(decoded), Is.EqualTo(key));
+        Assert.That(CanonicalIdentityEncoder.Encode(Input("a", name: "\ud800")),
+            Is.Not.EqualTo(CanonicalIdentityEncoder.Encode(Input("a", name: "\udc00"))), "Lone surrogates stay distinct.");
     }
 
     [Test]
@@ -89,7 +163,7 @@ public sealed class CanonicalIdentityEncoderTests
         for (var i = 1; i < 16; i++) node = CanonicalIdentityNode.Window(new[] { node });
         Assert.That(CanonicalIdentityEncoder.Encode(Input("a", content: node)).IsCanonical, Is.True);
         var tooDeep = CanonicalIdentityNode.Window(new[] { node });
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", content: tooDeep))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", content: tooDeep))));
     }
 
     [Test]
@@ -103,7 +177,7 @@ public sealed class CanonicalIdentityEncoderTests
         var exact = new CanonicalIdentityInput("a", types, emptyTags, emptyFeatures, name: new string('x', nameLength));
         var overflow = new CanonicalIdentityInput("a", types, emptyTags, emptyFeatures, name: new string('x', nameLength + 1));
         Assert.That(CanonicalIdentityEncoder.Encode(exact).CopyCanonicalState().Length, Is.EqualTo(1048576));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(overflow)));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(overflow)));
     }
 
     [Test]
@@ -136,14 +210,12 @@ public sealed class CanonicalIdentityEncoderTests
     [Test]
     public void Encode_OmittedTagText_UsesStrictLengthAndAggregateInputBounds()
     {
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[]
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[]
         {
             new CanonicalIdentityTag(new string('x', 65537))
         }))));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[]
-        {
-            new CanonicalIdentityTag("key", identifierName: "\ud800")
-        }))));
+        Assert.That(CanonicalIdentityEncoder.Encode(Input("a", tags: new[] { new CanonicalIdentityTag("key", identifierName: "\ud800") })),
+            Is.EqualTo(CanonicalIdentityEncoder.Encode(Input("a"))), "Text of an omitted tag is counted, not refused.");
         var longMetadata = new string('x', 65536);
         var omitted = Enumerable.Range(0, 17).Select(i => new CanonicalIdentityTag(i.ToString(), identifier: longMetadata)).ToArray();
         Assert.That(CanonicalIdentityEncoder.Encode(Input("a", tags: omitted)), Is.EqualTo(CanonicalIdentityEncoder.Encode(Input("a"))));
@@ -155,7 +227,7 @@ public sealed class CanonicalIdentityEncoderTests
         var longMetadata = new string('x', 65536);
         var tags = Enumerable.Range(0, 17).Select(i => new CanonicalIdentityTag(i.ToString(),
             identifier: longMetadata, enabled: true)).ToArray();
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: tags))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: tags))));
     }
 
     [Test]
@@ -165,22 +237,22 @@ public sealed class CanonicalIdentityEncoderTests
         Assert.That(CanonicalIdentityEncoder.Encode(Input("a", tags: tags)).IsCanonical, Is.True);
         var nested = Child(Input("child", tags: new[] { new CanonicalIdentityTag("extra") }));
         var root = Input("a", tags: tags, content: CanonicalIdentityNode.Grid(Shape(), new[] { nested }));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(root)));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(root)));
     }
 
     [Test]
     public void Encode_SharedObjectsAndDuplicateFeatures_Rejects()
     {
         var tag = new CanonicalIdentityTag("a");
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[] { tag, tag }))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", tags: new[] { tag, tag }))));
         var shared = Input("child");
         var node = CanonicalIdentityNode.Grid(Shape(), new[] { Child(shared), Child(shared) });
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("root", content: node))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("root", content: node))));
         var condition = new CanonicalIdentityCondition();
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", "", fakeCondition: condition, realCondition: condition) }))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("a", features: new[] { new CanonicalIdentityFeature("f", "", fakeCondition: condition, realCondition: condition) }))));
         var parentFeature = new CanonicalIdentityFeature("f", "");
         var child = Child(Input("child", features: new[] { new CanonicalIdentityFeature("f", "") }));
-        Assert.Throws<ArgumentException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("root", features: new[] { parentFeature }, content: CanonicalIdentityNode.Grid(Shape(), new[] { child })))));
+        Assert.Throws<CanonicalIdentityRejectedException>((Action)(() => CanonicalIdentityEncoder.Encode(Input("root", features: new[] { parentFeature }, content: CanonicalIdentityNode.Grid(Shape(), new[] { child })))));
     }
 
     private sealed class ChangingCountList<T> : IReadOnlyList<T>

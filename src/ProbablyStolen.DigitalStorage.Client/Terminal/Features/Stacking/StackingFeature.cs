@@ -51,11 +51,13 @@ public static class StackingFeature
     /// <param name="platform">Creates pages and reads values in the platform window.</param>
     /// <param name="diagnostic">Receives grouping diagnostics.</param>
     /// <param name="diagnosticsEnabled">Whether to explain why entries of one item stay apart.</param>
+    /// <param name="identities">Tells why an entry's identity could not be read, for the selection tooltip.</param>
     public static void Register(TerminalRegistry registry, IStackingPlatform platform, Action<string> diagnostic,
-        Func<bool> diagnosticsEnabled)
+        Func<bool> diagnosticsEnabled, IItemIdentityDiagnostics identities)
     {
         if (registry == null) throw new ArgumentNullException(nameof(registry));
         if (platform == null) throw new ArgumentNullException(nameof(platform));
+        if (identities == null) throw new ArgumentNullException(nameof(identities));
         var storage = ActionScope.View(TerminalRegistry.StorageTerminalName);
         var rules = new ButtonAppearance("button_stack", "terminal_button_stacking_tip");
         // After the sort order (0) and sort direction (10) buttons of the storage view.
@@ -95,7 +97,7 @@ public static class StackingFeature
         registry.AddStorageProjector(new StackingProjector(diagnostic, diagnosticsEnabled));
         registry.AddSlotDecorator(new MixedGroupDecorator());
         registry.AddTooltipPanel(StackingInfoTooltip.Panel);
-        registry.AddTooltipContributor(new StackingInfoTooltip());
+        registry.AddTooltipContributor(new StackingInfoTooltip(identities));
     }
 
     /// <summary>The icon of the global add button.</summary>

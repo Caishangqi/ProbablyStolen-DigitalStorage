@@ -126,8 +126,11 @@ namespace ProbablyStolen.DigitalStorage.Platform.Identity
 
     internal static class NativeItemIdentityReader
     {
-        internal static (NativeItemIdentityReadStatus Status, NativeItemIdentityFailure Failure, ItemKey? Identity) Read(GameItem item) =>
-            (NativeItemIdentityReadStatus.Success, NativeItemIdentityFailure.None, new ItemKey(item.identifier));
+        internal static (NativeItemIdentityReadStatus Status, NativeItemIdentityFailure Failure, ItemKey? Identity,
+            string? Rule, string? At) Read(GameItem item) =>
+            (NativeItemIdentityReadStatus.Success, NativeItemIdentityFailure.None, new ItemKey(item.identifier), null, null);
+
+        internal static (string Rule, string At)[] FindAnomalies(ItemKey key) => Array.Empty<(string, string)>();
     }
 }
 

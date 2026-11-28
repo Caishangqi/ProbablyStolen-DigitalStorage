@@ -55,6 +55,12 @@ public static class StackingFieldCatalog
     /// <summary>The items inside a container's content window.</summary>
     public const string ContainerContent = "container_content";
 
+    /// <summary>
+    /// The difference in a part no rule can ignore, or between identities that cannot be compared;
+    /// <see cref="StackingProjection.IdentityParts"/> names the parts.
+    /// </summary>
+    public const string ItemIdentity = "item_identity";
+
     // Features ItemFeatureList creates only to change prices; gameplay states such as counterfeit or second hand stay.
     private static readonly string[] EconomicFeatures =
     {

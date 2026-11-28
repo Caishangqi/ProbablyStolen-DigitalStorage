@@ -14,6 +14,7 @@ using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Diagnostic
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.DisplaySettings;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Modules;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Stacking;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 
@@ -41,7 +42,8 @@ internal static class TerminalFeatures
         DisplaySettingsFeature.Register(registry, 12, window => new DisplaySettingsScreen((TerminalWindowHost)window));
         KeepOpenFeature.Register(registry, keepOpen, setKeepOpen);
         ExtractDestinationFeature.Register(registry, extraction, setExtraction);
-        StackingFeature.Register(registry, new StackingPlatform(), log, identityLogEnabled);
+        StackingFeature.Register(registry, new StackingPlatform(), log, identityLogEnabled,
+            StorageIdentityDiagnostics.Instance);
         DiagnosticsFeature.Register(registry, window => new DiagnosticTerminalView((TerminalWindowHost)window),
             window => new DiagnosticScreen((TerminalWindowHost)window), log);
         registry.Freeze();

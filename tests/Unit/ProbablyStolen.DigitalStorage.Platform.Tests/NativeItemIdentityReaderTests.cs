@@ -58,6 +58,95 @@ public sealed class NativeItemIdentityReaderTests
     }
 
     [Test]
+    public void Read_NonfiniteTagValues_ProduceAStableIdentity()
+    {
+        var first = CreateItem("coffee_bean", 1);
+        first.Tags.Add(new Tag("ratio", enabled: true) { ValueFloatBits = 0x7fc00000U, ValueDoubleBits = 0x7ff0000000000000UL });
+        var second = CreateItem("coffee_bean", 2);
+        second.Tags.Add(new Tag("ratio", enabled: true) { ValueFloatBits = 0x7fc00000U, ValueDoubleBits = 0x7ff0000000000000UL });
+
+        var a = NativeItemIdentityReader.Read(first);
+        var b = NativeItemIdentityReader.Read(second);
+
+        Assert.That(a.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+        Assert.That(a.Identity, Is.EqualTo(b.Identity));
+    }
+
+    [Test]
+    public void FindAnomalies_ListsNonfiniteValuesOfAStoredType()
+    {
+        var root = CreateItem("coffee_bean", 1);
+        root.Tags.Add(new Tag("ratio", enabled: true) { ValueFloatBits = 0x7fc00000U });
+        var clean = CreateItem("coffee_bean", 2);
+
+        Assert.That(NativeItemIdentityReader.FindAnomalies(NativeItemIdentityReader.Read(root).Identity!),
+            Is.EqualTo(new[] { ("nonfinite_value", "coffee_bean/tag:ratio") }));
+        Assert.That(NativeItemIdentityReader.FindAnomalies(NativeItemIdentityReader.Read(clean).Identity!), Is.Empty);
+        Assert.That(NativeItemIdentityReader.FindAnomalies(new ItemKey("coffee_bean")), Is.Empty);
+    }
+
+    [Test]
+    public void Read_LoneSurrogateText_ProducesAnIdentity()
+    {
+        var first = CreateItem("note", 1);
+        first.Tags.Add(new Tag("label", enabled: true) { ValueString = "\ud800" });
+        var second = CreateItem("note", 2);
+        second.Tags.Add(new Tag("label", enabled: true) { ValueString = "\udc00" });
+
+        var a = NativeItemIdentityReader.Read(first);
+        var b = NativeItemIdentityReader.Read(second);
+
+        Assert.That(a.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+        Assert.That(b.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+        Assert.That(a.Identity, Is.Not.EqualTo(b.Identity));
+    }
+
+    [Test]
+    public void Read_GameTemporaryFeaturesOnAChild_AreLeftOutOfTheType()
+    {
+        Assert.That(ReadBox(withTemporary: true).Identity, Is.EqualTo(ReadBox(withTemporary: false).Identity));
+
+        static NativeItemIdentityReadResult ReadBox(bool withTemporary)
+        {
+            var root = CreateItem("box", 1);
+            var child = CreateItem("bottle", 2);
+            if (withTemporary)
+            {
+                // The owner does not match: a left-out feature is not checked for ownership.
+                child.Features.Add(new Feature("markup", "contrabandMarkUp") { OwnerUniqueId = 99, PrivateFields = PrivateFields("m") });
+                child.Features.Add(new Feature("client_bonus", "", 6) { OwnerUniqueId = 2, PrivateFields = PrivateFields("b") });
+            }
+
+            var grid = new DoubleInventory(NativeIdentityInventoryKind.Grid) { Shape = CreateShape(1, 1, new byte[] { 0 }) };
+            var window = new DoubleWindow(root);
+            grid.ParentWindow = window;
+            grid.Items.Add(child);
+            child.ParentInventory = grid;
+            grid.Children.Add(new DoubleItemGraph(child));
+            window.Children.Add(new DoubleGraph(grid));
+            root.ContentWindow = window;
+            var result = NativeItemIdentityReader.Read(root);
+            Assert.That(result.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+            return result;
+        }
+    }
+
+    [Test]
+    public void Read_GameTemporaryFeatures_AreLeftOutOfTheType()
+    {
+        var clean = CreateItem("bottle", 1);
+        var marked = CreateItem("bottle", 2);
+        marked.Features.Add(new Feature("client_bonus", "", 6) { OwnerUniqueId = 2, PrivateFields = PrivateFields("bonus") });
+        marked.Features.Add(new Feature("markup", "contrabandMarkUp") { OwnerUniqueId = 2, PrivateFields = PrivateFields("markup") });
+
+        var a = NativeItemIdentityReader.Read(clean);
+        var b = NativeItemIdentityReader.Read(marked);
+
+        Assert.That(b.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+        Assert.That(b.Identity, Is.EqualTo(a.Identity));
+    }
+
+    [Test]
     public void Read_UnknownItemKind_RejectsWithoutEmittingAnIdentity()
     {
         var root = CreateItem("root", 1);
@@ -653,11 +742,11 @@ public sealed class NativeItemIdentityReaderTests
         public string? Identifier => Key;
         public string? IdentifierName => Key;
         public bool Enabled { get; }
-        public string? ValueString => null;
+        public string? ValueString { get; init; }
         public int ValueInt { get; }
-        public uint ValueFloatBits => 0;
+        public uint ValueFloatBits { get; init; }
         public long ValueLong => 0;
-        public ulong ValueDoubleBits => 0;
+        public ulong ValueDoubleBits { get; init; }
         public bool ValueBool => false;
     }
 

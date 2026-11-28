@@ -438,6 +438,16 @@ stacking_info_selection_unavailable,Cannot read the stack settings, so the remai
 stacking_info_selection_unknown,Some differences could not be safely matched to a configurable attribute.
 stacking_info_difference,"    {0}"
 stacking_info_tag_unavailable,Tag {0} cannot be added as a rule.
+stacking_info_selection_unknown_parts,Some differences could not be safely matched to a configurable attribute:
+stacking_info_identity_unreadable,Item state could not be read
+stacking_info_identity_unreadable_reason,Item state could not be read: {0}
+stacking_info_identity_item_types,Item types
+stacking_info_identity_name,Name
+stacking_info_identity_short_description,Short description
+stacking_info_identity_flavor_text,Flavor text
+stacking_info_identity_sprite,Appearance
+stacking_info_identity_examine_window,Examine window contents
+stacking_info_identity_more,"    and {0} more"
 stacking_conditions,Rules
 stacking_rule_count,{0} rules
 stacking_config_unreadable,Cannot read the stack settings. Settings are kept unchanged and items are shown separately.

@@ -173,7 +173,7 @@ public sealed class StackingFeatureTests
         var data = new MemoryData();
         Save(data, Ignore(StackingFieldCatalog.ContainerContent, "tag:INGOT_PURITY_TAG", StackingFieldCatalog.AppraisedValue));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var mixed = new DisplayEntry("g", new[] { Bottle(1, 1), Bottle(2, 1), Bottle(3, 1) });
 
         var panel = pipeline.Tooltip(mixed, Context(data, Installed)).Single();
@@ -202,7 +202,7 @@ public sealed class StackingFeatureTests
             new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Ignore) })
         }, globals: new[] { new StackingGlobalRule("tag:OTHER", StackingMode.Ignore, true) }));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var first = Tagged("fruit", Tag("A"), new CanonicalIdentityTag("OTHER", enabled: true, valueInt: 1));
         var second = Tagged("fruit", Tag("B"), new CanonicalIdentityTag("OTHER", enabled: true, valueInt: 2));
         var mixed = new DisplayEntry("g", new[] { first, second });
@@ -256,7 +256,7 @@ public sealed class StackingFeatureTests
             new StackingItemRule("fruit", true, new[] { new StackingRule("tag:VARIANT", StackingMode.Match) })
         }, globals: new[] { new StackingGlobalRule("tag:VARIANT", StackingMode.Ignore, true) }));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var a = Group("a", Tagged("fruit", Tag("A")));
         var b = Group("b", Tagged("fruit", Tag("B")));
         var values = Values((a.Representative, 20), (b.Representative, 20));
@@ -271,7 +271,7 @@ public sealed class StackingFeatureTests
         var data = new MemoryData();
         Save(data, Ignore("tag:VARIETY", "tag:CHEMISTRY", "tag:METALS", StackingFieldCatalog.AppraisedValue));
         var pipeline = new StoragePresentationPipeline(new[] { new StackingProjector(_ => { }, () => false) },
-            Array.Empty<ISlotDecorator>(), new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            Array.Empty<ISlotDecorator>(), new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var context = Context(data, Installed);
         var chemistry = new CanonicalIdentityTag("CHEMISTRY", enabled: true, valueString: "same");
         var first = Tagged("fruit", chemistry, new CanonicalIdentityTag("VARIETY", enabled: true, valueInt: 1));
@@ -310,7 +310,7 @@ public sealed class StackingFeatureTests
         var other = Tagged("other_item", new CanonicalIdentityTag("OTHER_ID_TAG", enabled: true, valueInt: 9));
         var groups = new[] { first, second, third, other }.Select(DisplayEntry.Single).ToArray();
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
 
         var panel = pipeline.TooltipForSelection(groups[0], Context(data, Installed), groups, EntryAttributes.Empty).Single();
         var differences = panel.Lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
@@ -336,7 +336,7 @@ public sealed class StackingFeatureTests
             [third.Representative.Key] = new Dictionary<string, long> { [StackingFieldCatalog.AppraisedValue] = 20 }
         });
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var forward = new[] { first, second, third };
         var reverse = new[] { third, second, first };
 
@@ -365,7 +365,7 @@ public sealed class StackingFeatureTests
         var visibleHigh = DisplayEntry.Single(Featured("scrap_metal",
             new CanonicalIdentityFeature("glow", "", valueModifier: 9, publicDisplay: "Glow", isFeatureExposed: true, isFeatureDiscovered: true)));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
         var forward = new[] { hidden, visibleLow, visibleHigh };
         var reverse = new[] { visibleHigh, visibleLow, hidden };
 
@@ -382,6 +382,81 @@ public sealed class StackingFeatureTests
     }
 
     [Test]
+    public void SelectionInfoTooltip_ListsUnreadableReasonsAndUnconfigurableParts()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition));
+        var first = DisplayEntry.Single(Fallback("coffee_bean", "1"));
+        var second = DisplayEntry.Single(Fallback("coffee_bean", "2"));
+        var named = DisplayEntry.Single(Named("coffee_bean", "Roasted"));
+        var fallbacks = new Fallbacks
+        {
+            [first.Representative.Key] = new ItemIdentityFallback("EncodingRejected", "record_limit", "coffee_bean"),
+            [second.Representative.Key] = new ItemIdentityFallback("EncodingRejected", "record_limit", "coffee_bean")
+        };
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip(fallbacks) }, new[] { StackingInfoTooltip.Panel }, _ => { });
+        var selection = new[] { first, second, named };
+
+        var lines = pipeline.TooltipForSelection(first, Context(data, Installed), selection, EntryAttributes.Empty)
+            .Single().Lines;
+
+        var caption = lines.ToList().FindIndex(line => line.TextKey == StackingInfoTooltip.SelectionUnknownPartsKey);
+        Assert.That(caption, Is.GreaterThanOrEqualTo(0));
+        var parts = lines.Skip(caption + 1).Select(line => (LocalizedText)line.Args.Single()).ToArray();
+        Assert.That(parts.Select(part => part.TextKey), Is.EqualTo(new[] { StackingInfoTooltip.UnreadableReasonKey }),
+            "Equal reasons show once; a readable key alone has no part to compare with.");
+        Assert.That(parts[0].Args.Single(), Is.EqualTo("EncodingRejected: record_limit @ coffee_bean"));
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_UnreadableLines_FallBackAndCapAtFive()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition));
+        var entries = Enumerable.Range(1, 8).Select(i => DisplayEntry.Single(Fallback("coffee_bean", i.ToString()))).ToArray();
+        var fallbacks = new Fallbacks();
+        for (var i = 0; i < 6; i++)
+            fallbacks[entries[i].Representative.Key] = new ItemIdentityFallback("Failure" + i);
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip(fallbacks) }, new[] { StackingInfoTooltip.Panel }, _ => { });
+
+        var lines = pipeline.TooltipForSelection(entries[0], Context(data, Installed), entries, EntryAttributes.Empty)
+            .Single().Lines;
+        var reasons = lines.Where(line => line.TextKey == StackingInfoTooltip.SelectionDifferenceKey)
+            .Select(line => (LocalizedText)line.Args.Single()).ToArray();
+
+        Assert.That(reasons.Select(reason => reason.Args.Single()), Is.EqualTo(new[] { "Failure0", "Failure1", "Failure2", "Failure3", "Failure4" }),
+            "A reason without a rule shows the failure alone; five lines are listed.");
+        Assert.That(lines.Last().TextKey, Is.EqualTo(StackingInfoTooltip.IdentityMoreKey));
+        Assert.That(lines.Last().Args.Single(), Is.EqualTo(1));
+
+        var unknown = pipeline.TooltipForSelection(entries[6], Context(data, Installed), new[] { entries[6], entries[7] },
+            EntryAttributes.Empty).Single().Lines;
+        Assert.That(unknown.SelectMany(line => line.Args).OfType<LocalizedText>().Select(text => text.TextKey),
+            Does.Contain(StackingInfoTooltip.IdentityPartKeyPrefix + ItemIdentityPart.Unreadable), "Without a recorded reason.");
+    }
+
+    [Test]
+    public void SelectionInfoTooltip_NamesIdentityPartsNoRuleCanIgnore()
+    {
+        var data = new MemoryData();
+        Save(data, Ignore(StackingFieldCatalog.PriceComposition));
+        var first = DisplayEntry.Single(Named("coffee_bean", "Roasted"));
+        var second = DisplayEntry.Single(Named("coffee_bean", "Green"));
+        var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
+
+        var lines = pipeline.TooltipForSelection(first, Context(data, Installed), new[] { first, second }, EntryAttributes.Empty)
+            .Single().Lines;
+
+        Assert.That(lines.Select(line => line.TextKey), Does.Contain(StackingInfoTooltip.SelectionUnknownPartsKey));
+        Assert.That(lines.SelectMany(line => line.Args).OfType<LocalizedText>().Select(text => text.TextKey),
+            Does.Contain(StackingInfoTooltip.IdentityPartKeyPrefix + ItemIdentityPart.Name));
+        Assert.That(lines.SelectMany(line => line.Args), Does.Not.Contain("Roasted").And.Not.Contain("Green"));
+    }
+
+    [Test]
     public void SelectionInfoTooltip_ReportsUnreadableSettingsWithoutIdentityDetails()
     {
         var data = new MemoryData();
@@ -389,7 +464,7 @@ public sealed class StackingFeatureTests
         var first = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("TAG_A", enabled: true, valueString: "private")));
         var second = DisplayEntry.Single(Tagged("scrap_metal", new CanonicalIdentityTag("TAG_B", enabled: true, valueString: "secret")));
         var pipeline = new StoragePresentationPipeline(Array.Empty<IStorageEntryProjector>(), Array.Empty<ISlotDecorator>(),
-            new[] { new StackingInfoTooltip() }, new[] { StackingInfoTooltip.Panel }, _ => { });
+            new[] { new StackingInfoTooltip(Fallbacks.None) }, new[] { StackingInfoTooltip.Panel }, _ => { });
 
         var panel = pipeline.TooltipForSelection(first, Context(data, Installed), new[] { first, second }, EntryAttributes.Empty).Single();
 
@@ -437,7 +512,7 @@ public sealed class StackingFeatureTests
     public void Feature_RegistersTheRulesButtonLeftAndQuickActionsRight()
     {
         var registry = new TerminalRegistry(new MemoryConfig(), _ => { });
-        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false);
+        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false, Fallbacks.None);
         var button = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.ActionId);
         Assert.That(button.Order, Is.EqualTo(20));
         Assert.That(button.Side, Is.EqualTo(DockSide.Left));
@@ -460,7 +535,7 @@ public sealed class StackingFeatureTests
         registry.AddDock(DockSide.Left, StorageTerminalFeature.LeftDockTitleKey);
         registry.AddDock(DockSide.Right, StorageTerminalFeature.RightDockTitleKey);
         registry.AddTerminal(new TerminalDefinition(TerminalRegistry.StorageTerminalName, 0, "storage", _ => true, _ => new object()));
-        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false);
+        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false, Fallbacks.None);
         registry.Freeze();
         var left = new TerminalDocks(registry, new UniversalTerminalHandler(registry, new MemoryStore(), _ => { }), _ => { })
             .Find(DockSide.Left)!;
@@ -961,7 +1036,7 @@ public sealed class StackingFeatureTests
     public void QuickGlobalButtons_ShowForAddableDifferencesAndSwitchedOnIgnoreRows()
     {
         var registry = new TerminalRegistry(new MemoryConfig(), _ => { });
-        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false);
+        StackingFeature.Register(registry, new FakePlatform(), _ => { }, () => false, Fallbacks.None);
         var add = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.GlobalAddActionId);
         var delete = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.GlobalDeleteActionId);
         var itemDelete = registry.Buttons.Single(entry => entry.Button.Id == StackingFeature.DeleteActionId);
@@ -1008,7 +1083,7 @@ public sealed class StackingFeatureTests
     {
         var registry = new TerminalRegistry(new MemoryConfig(), _ => { });
         var platform = new FakePlatform();
-        StackingFeature.Register(registry, platform, _ => { }, () => false);
+        StackingFeature.Register(registry, platform, _ => { }, () => false, Fallbacks.None);
         var data = new MemoryData();
         var commands = new RecordingCommands();
         var left = Tagged("fruit", Tag("A"));
@@ -1104,6 +1179,23 @@ public sealed class StackingFeatureTests
         var key = CanonicalIdentityEncoder.Encode(new CanonicalIdentityInput(identifier, Array.Empty<string>(), tags,
             Array.Empty<CanonicalIdentityFeature>(), unitValue: 10));
         return new TerminalEntry(key, 1, identifier, "sprite");
+    }
+
+    private static TerminalEntry Named(string identifier, string name)
+    {
+        var key = CanonicalIdentityEncoder.Encode(new CanonicalIdentityInput(identifier, Array.Empty<string>(),
+            Array.Empty<CanonicalIdentityTag>(), Array.Empty<CanonicalIdentityFeature>(), name: name, unitValue: 10));
+        return new TerminalEntry(key, 1, identifier, "sprite");
+    }
+
+    private static TerminalEntry Fallback(string identifier, string serial) =>
+        new(ItemKey.Of(identifier, "digital_storage.unique", serial), 1, identifier, "sprite");
+
+    private sealed class Fallbacks : Dictionary<ItemKey, ItemIdentityFallback>, IItemIdentityDiagnostics
+    {
+        internal static readonly Fallbacks None = new();
+
+        public ItemIdentityFallback? FallbackOf(ItemKey key) => TryGetValue(key, out var reason) ? reason : null;
     }
 
     private static TerminalEntry Featured(string identifier, CanonicalIdentityFeature feature)

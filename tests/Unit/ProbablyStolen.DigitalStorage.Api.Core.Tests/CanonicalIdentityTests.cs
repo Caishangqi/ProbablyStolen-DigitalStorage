@@ -85,19 +85,11 @@ public sealed class CanonicalIdentityTests
     [TestCase(0, 0, "", "", false)]
     [TestCase(0, 0, "", "genuineInjector", false)]
     [TestCase(0, 0, "", null, true)]
-    public void FromCanonical_FeatureAndConditionPolicy_IsEnforced(
+    public void FromCanonical_FeatureValuesAndActions_AreAccepted(
         int type, int stage, string category, string? action, bool hasCondition)
     {
         var input = Envelope(Feature(type, stage, category, action, hasCondition || action != null));
-        // Activation action IDs (for example "genuineInjector") are part of the identity and are accepted.
-        if (type == 0 && stage == 0 && category == "")
-        {
-            Assert.That(ItemKey.FromCanonical("a", input).IsCanonical, Is.True);
-        }
-        else
-        {
-            Assert.Throws<ArgumentException>((Action)(() => ItemKey.FromCanonical("a", input)));
-        }
+        Assert.That(ItemKey.FromCanonical("a", input).IsCanonical, Is.True);
     }
 
     [Test]
@@ -121,12 +113,12 @@ public sealed class CanonicalIdentityTests
     }
 
     [Test]
-    public void FromCanonical_SignedZeroAndNonfinite_AreValidated()
+    public void FromCanonical_SignedZeroKeptAndNonfiniteAccepted()
     {
         var plus = Envelope(tags: new[] { Tag("a", true, 0, 0x00000000) });
         var minus = Envelope(tags: new[] { Tag("a", true, 0, 0x80000000) });
         Assert.That(ItemKey.FromCanonical("a", plus), Is.Not.EqualTo(ItemKey.FromCanonical("a", minus)));
-        Assert.Throws<ArgumentException>((Action)(() => ItemKey.FromCanonical("a", Envelope(tags: new[] { Tag("a", true, 0, 0x7f800000) }))));
+        Assert.That(ItemKey.FromCanonical("a", Envelope(tags: new[] { Tag("a", true, 0, 0x7f800000) })).IsCanonical, Is.True);
         Assert.Throws<ArgumentException>((Action)(() => ItemKey.FromCanonical("a", Envelope(tags: new[] { Tag("a", false, 0, 0x80000000) }))));
     }
 

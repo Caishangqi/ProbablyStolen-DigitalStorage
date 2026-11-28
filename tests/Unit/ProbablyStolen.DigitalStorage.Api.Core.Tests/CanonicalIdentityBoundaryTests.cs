@@ -108,25 +108,25 @@ public sealed class CanonicalIdentityBoundaryTests
     }
 
     [Test]
-    public void DoubleBits_NonfiniteRejectedAndSignedZeroPreserved()
+    public void DoubleBits_NonfiniteAcceptedAndSignedZeroPreserved()
     {
         var plus = Root(tags: new[] { Tag("a", true, 0) });
         var minus = Root(tags: new[] { Tag("a", true, 0x8000000000000000UL) });
         Assert.That(ItemKey.FromCanonical("a", plus), Is.Not.EqualTo(ItemKey.FromCanonical("a", minus)));
-        AssertInvalid(Root(tags: new[] { Tag("a", true, 0x7ff0000000000000UL) }));
-        AssertInvalid(Root(tags: new[] { Tag("a", true, 0x7ff8000000000001UL) }));
+        AssertValid(Root(tags: new[] { Tag("a", true, 0x7ff0000000000000UL) }));
+        AssertValid(Root(tags: new[] { Tag("a", false, 0x7ff8000000000001UL) }));
         AssertInvalid(Root(tags: new[] { Tag("a", false, 0x8000000000000000UL) }));
     }
 
     [Test]
-    public void DescendantFeatures_RejectDuplicateIdsAndForbiddenCategory_AcceptAction()
+    public void DescendantFeatures_RejectDuplicateIds_AcceptAnyCategoryAndAction()
     {
         var rootFeature = Feature("same", "", Array.Empty<byte>());
         var childPath = new byte[] { 1, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0 };
         var duplicate = Feature("same", "", childPath);
         AssertValid(Root(features: new[] { rootFeature }, content: Window(Grid(Child(features: new[] { Feature("other", "", childPath) })))));
         AssertInvalid(Root(features: new[] { rootFeature }, content: Window(Grid(Child(features: new[] { duplicate })))));
-        AssertInvalid(Root(content: Window(Grid(Child(features: new[] { Feature("x", "contrabandMarkUp", childPath) })))));
+        AssertValid(Root(content: Window(Grid(Child(features: new[] { Feature("x", "contrabandMarkUp", childPath) })))));
         AssertValid(Root(content: Window(Grid(Child(features: new[] { Feature("x", "", childPath, action: "genuineInjector") })))));
     }
 

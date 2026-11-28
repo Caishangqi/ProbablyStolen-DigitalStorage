@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace ProbablyStolen.DigitalStorage.Api.Stacks;
 
@@ -15,7 +14,6 @@ internal sealed class CanonicalIdentityValidator
     private const int MaxRecords = 65536;
     private const int MaxNodeDepth = 16;
     private const int MaxItemDepth = 8;
-    private static readonly UTF8Encoding Utf8 = new(false, true);
     private readonly byte[] _data;
     private readonly List<PathStep> _path = new();
     private readonly HashSet<string> _featureIds = new(StringComparer.Ordinal);
@@ -26,6 +24,10 @@ internal sealed class CanonicalIdentityValidator
     private int _records;
     private CanonicalItemSummary.Builder? _summary;
     private bool _decode;
+    private string _item = "";
+    private string? _partPrefix;
+    private string? _partName;
+    private int _partIndex;
 
     private CanonicalIdentityValidator(byte[] data) => _data = data;
 
@@ -39,10 +41,6 @@ internal sealed class CanonicalIdentityValidator
             return reader.ReadEnvelope(expectedIdentifier) != null ? reader._summary.Build() : null;
         }
         catch (InvalidIdentityException)
-        {
-            return null;
-        }
-        catch (DecoderFallbackException)
         {
             return null;
         }
@@ -64,10 +62,6 @@ internal sealed class CanonicalIdentityValidator
         {
             return null;
         }
-        catch (DecoderFallbackException)
-        {
-            return null;
-        }
     }
 
     internal static bool IsValid(byte[] data, string expectedIdentifier)
@@ -81,10 +75,28 @@ internal sealed class CanonicalIdentityValidator
         {
             return false;
         }
-        catch (DecoderFallbackException)
+    }
+
+    /// <summary>
+    /// Names the item and, when known, the tag or feature where validation stops, or returns null when the envelope
+    /// is valid. A child item that fails before its identifier is read is named by its parent.
+    /// </summary>
+    internal static string? FailurePoint(byte[] data, string expectedIdentifier)
+    {
+        if (!Acceptable(data, expectedIdentifier)) return IdentityPlace.Format(expectedIdentifier ?? "", null, null);
+        var reader = new CanonicalIdentityValidator(data);
+        try
         {
-            return false;
+            if (reader.ReadEnvelope(expectedIdentifier) != null) return null;
         }
+        catch (InvalidIdentityException)
+        {
+        }
+
+        var name = reader._partPrefix == FeatureIndexPrefix
+            ? reader._partIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : reader._partName;
+        return IdentityPlace.Format(reader._item.Length == 0 ? expectedIdentifier : reader._item, reader._partPrefix, name);
     }
 
     private static bool Acceptable(byte[] data, string expectedIdentifier) =>
@@ -101,6 +113,11 @@ internal sealed class CanonicalIdentityValidator
 
     private DecodedItem ReadItem(bool child, int itemDepth, int nodeDepth, string? expectedIdentifier = null)
     {
+        var outerItem = _item;
+        var outerPrefix = _partPrefix;
+        var outerName = _partName;
+        var outerIndex = _partIndex;
+        Part(null, null);
         Require(itemDepth <= MaxItemDepth && ++_items <= MaxItems);
         Require(ReadByte() == (child ? 11 : 10));
         var unitCount = 0;
@@ -118,6 +135,7 @@ internal sealed class CanonicalIdentityValidator
         // Only the root item describes the identity; children belong to its content window.
         var capture = !child && itemDepth == 0 ? _summary : null;
         var identifier = ReadString();
+        _item = identifier ?? "";
         Require(!string.IsNullOrWhiteSpace(identifier));
         if (expectedIdentifier != null)
         {
@@ -158,6 +176,7 @@ internal sealed class CanonicalIdentityValidator
         {
             AddRecord();
             var key = ReadString();
+            Part("tag:", key);
             Require(key != null && (previous == null || StringComparer.Ordinal.Compare(previous, key) < 0));
             previous = key;
             var tagIdentifier = ReadString();
@@ -166,10 +185,8 @@ internal sealed class CanonicalIdentityValidator
             var valueString = ReadString();
             var intValue = ReadInt32();
             var floatBits = ReadUInt32();
-            Require((floatBits & 0x7f800000U) != 0x7f800000U);
             var longValue = ReadInt64Bits();
             var doubleBits = ReadInt64Bits();
-            Require((doubleBits & 0x7ff0000000000000UL) != 0x7ff0000000000000UL);
             var boolValue = ReadBool();
             Require(enabled || !string.IsNullOrEmpty(valueString) || intValue != 0 ||
                 (floatBits & 0x7fffffffU) != 0 || longValue != 0 ||
@@ -179,16 +196,20 @@ internal sealed class CanonicalIdentityValidator
                 floatBits, unchecked((long)longValue), doubleBits, boolValue));
         }
 
+        Part(null, null);
         var featureCount = ReadCount();
         var features = _decode ? new List<CanonicalIdentityFeature>(featureCount) : null;
         for (var i = 0; i < featureCount; i++)
         {
-            var feature = ReadFeature(capture);
+            var feature = ReadFeature(capture, i);
             if (feature != null) features!.Add(feature);
         }
 
+        Part(null, null);
         var content = ReadItemWindow(1, itemDepth, nodeDepth);
         var examine = ReadItemWindow(2, itemDepth, nodeDepth);
+        _item = outerItem;
+        Part(outerPrefix, outerName, outerIndex);
         if (!_decode) return default;
         var item = new CanonicalIdentityInput(identifier!, itemTypes!, tags!, features!, name, shortDescription,
             flavorText, unitBaseValue, unitValue, lateUnitValue, backupUnitValue, atlas, sprite, content, examine);
@@ -196,13 +217,13 @@ internal sealed class CanonicalIdentityValidator
             child ? new CanonicalIdentityChild(item, unitCount, originalShape!, modifiedShape!) : null);
     }
 
-    private CanonicalIdentityFeature? ReadFeature(CanonicalItemSummary.Builder? capture)
+    private CanonicalIdentityFeature? ReadFeature(CanonicalItemSummary.Builder? capture, int index)
     {
+        // The feature's ID is written last, so rules met before it name the feature by its position.
+        Part(FeatureIndexPrefix, null, index);
         AddRecord();
         var featureType = ReadInt32();
-        Require(featureType >= 0 && featureType <= 5);
         var stage = ReadInt32();
-        Require(stage >= 0 && stage <= 2);
         var count = ReadCount();
         Require(count == _path.Count);
         for (var i = 0; i < count; i++)
@@ -233,10 +254,11 @@ internal sealed class CanonicalIdentityValidator
         var customIntValue1 = ReadInt32();
         var disabled = ReadBool();
         var id = ReadString();
+        Part("feature:", id);
         Require(!string.IsNullOrWhiteSpace(id));
         Require(_featureIds.Add(id!));
         var category = ReadString();
-        Require(category != null && !string.Equals(category, "contrabandMarkUp", StringComparison.Ordinal));
+        Require(category != null);
         var featureMatch = ReadBool();
         capture?.Features.Add(new CanonicalItemSummary.Feature(id!, exposed, disabled));
         return _decode
@@ -388,6 +410,16 @@ internal sealed class CanonicalIdentityValidator
         return mask == null ? null : new CanonicalIdentityShape(x, y, width, height, flipped, orientation, outside, mask);
     }
 
+    private const string FeatureIndexPrefix = "feature#";
+
+    // Places are kept as parts and formatted only by FailurePoint, so validating a valid identity allocates no text.
+    private void Part(string? prefix, string? name, int index = 0)
+    {
+        _partPrefix = prefix;
+        _partName = name;
+        _partIndex = index;
+    }
+
     private static void RequireDimension(int value) => Require(value >= 1 && value <= 4096);
     private void AddEdge() => Require(++_edges <= MaxEdges);
     private void AddRecord() => Require(++_records <= MaxRecords);
@@ -414,7 +446,8 @@ internal sealed class CanonicalIdentityValidator
         if (present == 0) return null;
         var length = ReadUInt32();
         Require(length <= MaxStringBytes && length <= _data.Length - _offset);
-        var result = Utf8.GetString(_data, _offset, (int)length);
+        var result = Wtf8.GetString(_data, _offset, (int)length);
+        Require(result != null);
         _offset += (int)length;
         return result;
     }

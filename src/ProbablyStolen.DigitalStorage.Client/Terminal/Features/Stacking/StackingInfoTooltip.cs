@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Extensions;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Host;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
@@ -59,6 +60,26 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
 
     /// <summary>The key of a raw tag that cannot be added as a rule.</summary>
     public const string SelectionTagUnavailableKey = "stacking_info_tag_unavailable";
+
+    /// <summary>The caption above the identity parts that no rule can ignore.</summary>
+    public const string SelectionUnknownPartsKey = "stacking_info_selection_unknown_parts";
+
+    /// <summary>The prefix of one identity part's name; an <see cref="ItemIdentityPart"/> code follows it.</summary>
+    public const string IdentityPartKeyPrefix = "stacking_info_identity_";
+
+    /// <summary>The key of an unreadable item state with its reason; formatted with the reason codes.</summary>
+    public const string UnreadableReasonKey = "stacking_info_identity_unreadable_reason";
+
+    /// <summary>The key of the count of identity lines left out.</summary>
+    public const string IdentityMoreKey = "stacking_info_identity_more";
+
+    private const int MaxIdentityLines = 5;
+    private readonly IItemIdentityDiagnostics _identities;
+
+    /// <summary>Creates the contributor.</summary>
+    /// <param name="identities">Tells why an entry's identity could not be read.</param>
+    public StackingInfoTooltip(IItemIdentityDiagnostics identities) =>
+        _identities = identities ?? throw new ArgumentNullException(nameof(identities));
 
     /// <summary>
     /// Gets the panel after the storage view's hint panel: the game's tooltip text colors, set apart by a purple
@@ -132,6 +153,7 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
 
         foreach (var fieldId in differences)
         {
+            if (fieldId == StackingFieldCatalog.ItemIdentity) continue;
             var field = StackingFieldCatalog.Find(fieldId);
             var name = field == null
                 ? UnknownField(fieldId)
@@ -141,7 +163,42 @@ public sealed class StackingInfoTooltip : IEntryTooltipContributor, ISelectionTo
                 config.FindGlobal(fieldId) is { Enabled: true, Mode: StackingMode.Ignore };
             sink.Body(PanelId, overridden ? SelectionOverriddenKey : SelectionDifferenceKey, name);
         }
+
+        if (differences.Contains(StackingFieldCatalog.ItemIdentity))
+            IdentityLines(sink, members.Select(member => member.key).ToArray());
     }
+
+    private void IdentityLines(EntryTooltipSink sink, IReadOnlyList<ItemKey> keys)
+    {
+        var lines = new List<object>();
+        foreach (var part in StackingProjection.IdentityParts(keys))
+        {
+            if (part != ItemIdentityPart.Unreadable)
+            {
+                lines.Add(new LocalizedText(IdentityPartKeyPrefix + part));
+                continue;
+            }
+
+            var reasons = keys.Select(key => _identities.FallbackOf(key)).Where(reason => reason != null)
+                .Select(reason => Describe(reason!)).Distinct(StringComparer.Ordinal).ToArray();
+            if (reasons.Length == 0) lines.Add(new LocalizedText(IdentityPartKeyPrefix + part));
+            foreach (var reason in reasons)
+                lines.Add(new LocalizedText(UnreadableReasonKey, TooltipLiteralText.ForRichText(reason)));
+        }
+
+        if (lines.Count == 0)
+        {
+            sink.Body(PanelId, SelectionDifferenceKey, new LocalizedText(SelectionUnknownKey));
+            return;
+        }
+
+        sink.Body(PanelId, SelectionUnknownPartsKey);
+        foreach (var line in lines.Take(MaxIdentityLines)) sink.Body(PanelId, SelectionDifferenceKey, line);
+        if (lines.Count > MaxIdentityLines) sink.Body(PanelId, IdentityMoreKey, lines.Count - MaxIdentityLines);
+    }
+
+    private static string Describe(ItemIdentityFallback reason) =>
+        reason.Rule == null ? reason.Failure : reason.Failure + ": " + reason.Rule + " @ " + reason.At;
 
     private static object FieldName(StackingField field)
     {

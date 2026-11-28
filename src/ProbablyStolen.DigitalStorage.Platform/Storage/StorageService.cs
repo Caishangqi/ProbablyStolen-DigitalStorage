@@ -62,8 +62,10 @@ internal sealed class StorageService
 
     private const string UniqueComponent = "digital_storage.unique";
     private static readonly ConditionalWeakTable<GameItem, ItemKey> FallbackKeys = new();
-    private static readonly Dictionary<ItemKey, NativeItemIdentityFailure> FallbackReasons = new();
-    private readonly HashSet<(string, NativeItemIdentityFailure)> _reportedFallbacks = new();
+    private static readonly Dictionary<ItemKey, FallbackReason> FallbackReasons = new();
+    private readonly HashSet<(string, FallbackReason)> _reportedFallbacks = new();
+    private readonly HashSet<ItemKey> _anomalyChecked = new();
+    private readonly HashSet<(string, string, string)> _reportedAnomalies = new();
     private static long _nextFallback;
 
     /// <summary>
@@ -91,7 +93,7 @@ internal sealed class StorageService
         }
 
         failure = result.Failure;
-        var reason = failure;
+        var reason = new FallbackReason(result.Failure, result.Rule, result.At);
         return FallbackKeys.GetValue(item, unread =>
         {
             var key = new ItemKey(string.IsNullOrWhiteSpace(unread.identifier) ? "unknown" : unread.identifier,
@@ -101,6 +103,10 @@ internal sealed class StorageService
             return key;
         });
     }
+
+    /// <summary>Gets why a fallback key's item could not be read, or false for a key that was read normally.</summary>
+    internal static bool TryGetFallbackReason(ItemKey key, out FallbackReason reason) =>
+        FallbackReasons.TryGetValue(key, out reason);
 
     /// <summary>
     /// Reads the aggregated contents of every available cell on the terminal's network: amounts from each cell's
@@ -147,16 +153,38 @@ internal sealed class StorageService
             // A fallback key is unique to its item, so such items never share an entry; the reason is logged once.
             if (_diagnostics.IsEnabled(LogVerbosity.Info) && FallbackReasons.TryGetValue(pair.Key, out var reason) && _reportedFallbacks.Add((sample.identifier, reason)))
                 _diagnostics.Write(LogVerbosity.Info, "identity_fallback", "Stored item identity uses a fallback.",
-                    () => new[] { LogField.Of("item_id", sample.identifier), LogField.Of("reason", reason.ToString()) });
+                    () => reason.Rule == null
+                        ? new[] { LogField.Of("item_id", sample.identifier), LogField.Of("reason", reason.Failure.ToString()) }
+                        : new[]
+                        {
+                            LogField.Of("item_id", sample.identifier), LogField.Of("reason", reason.Failure.ToString()),
+                            LogField.Of("rule", reason.Rule), LogField.Of("at", reason.At ?? "")
+                        });
+            ReportAnomalies(pair.Key, sample.identifier);
             if (!_entryTexts.TryGetValue(pair.Key, out var text)) text = Entry(pair.Key, 0, 0, sample);
             texts[pair.Key] = text;
             entries.Add(new TerminalEntry(pair.Key, pair.Value.Pieces, text.DisplayName, text.SpriteKey, text.SpriteWidth,
                 text.SpriteHeight, document: text.Document, totalUnits: pair.Value.Units));
         }
 
-        // Only types still stored keep their texts.
+        // Only types still stored keep their texts and stay marked as checked for anomalies.
         _entryTexts = texts;
+        _anomalyChecked.IntersectWith(totals.Keys);
         return new TerminalInventorySnapshot(true, entries, unavailable);
+    }
+
+    // Values other mods wrote that the game would not, such as NaN or a lone surrogate, are kept in the type as they
+    // are; each is reported once per item and place. A stored type is checked once while it stays stored.
+    private void ReportAnomalies(ItemKey key, string itemId)
+    {
+        if (!key.IsCanonical || !_diagnostics.IsEnabled(LogVerbosity.Warning) || !_anomalyChecked.Add(key)) return;
+        foreach (var (rule, at) in NativeItemIdentityReader.FindAnomalies(key))
+        {
+            if (!_reportedAnomalies.Add((itemId, rule, at))) continue;
+            _diagnostics.Write(LogVerbosity.Warning, "identity_anomaly",
+                "Stored item holds a value the game would not write; it is kept as it is.",
+                () => new[] { LogField.Of("item_id", itemId), LogField.Of("rule", rule), LogField.Of("at", at) });
+        }
     }
 
     /// <summary>Drops the kept entry texts, so the next read builds them again in the current language.</summary>
@@ -752,4 +780,27 @@ internal sealed class MountedNetwork
 
     /// <summary>Gets the mounted cells.</summary>
     internal IReadOnlyList<GameItem> Cells { get; }
+}
+
+/// <summary>Why one item got a fallback key: the reading failure and, for a refused encoding, its rule and place.</summary>
+internal readonly struct FallbackReason : IEquatable<FallbackReason>
+{
+    internal FallbackReason(NativeItemIdentityFailure failure, string? rule, string? at)
+    {
+        Failure = failure;
+        Rule = rule;
+        At = at;
+    }
+
+    internal NativeItemIdentityFailure Failure { get; }
+    internal string? Rule { get; }
+    internal string? At { get; }
+
+    public bool Equals(FallbackReason other) => Failure == other.Failure &&
+        string.Equals(Rule, other.Rule, StringComparison.Ordinal) && string.Equals(At, other.At, StringComparison.Ordinal);
+
+    public override bool Equals(object? obj) => obj is FallbackReason other && Equals(other);
+
+    public override int GetHashCode() => ((int)Failure * 397) ^ StringComparer.Ordinal.GetHashCode(Rule ?? "") ^
+        (StringComparer.Ordinal.GetHashCode(At ?? "") * 31);
 }

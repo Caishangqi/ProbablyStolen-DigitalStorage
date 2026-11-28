@@ -167,7 +167,7 @@ public static class StackingProjection
         var b = MaskForComparison(right, rightAttributes, config.EffectiveRule(right.Identifier), config.Advanced);
         if (a.Input == null || b.Input == null)
         {
-            result = left.Equals(right) ? Array.Empty<string>() : new[] { "item_identity" };
+            result = left.Equals(right) ? Array.Empty<string>() : new[] { StackingFieldCatalog.ItemIdentity };
             return false;
         }
 
@@ -179,14 +179,14 @@ public static class StackingProjection
             if (leftIndex < 0 || rightIndex < 0 || a.Derived[leftIndex] != b.Derived[rightIndex]) differences.Add(fieldId);
         }
 
-        if (a.Input.Identifier != b.Input.Identifier) differences.Add("item_identity");
+        if (a.Input.Identifier != b.Input.Identifier) differences.Add(StackingFieldCatalog.ItemIdentity);
         if (a.Input.UnitBaseValue != b.Input.UnitBaseValue || a.Input.UnitValue != b.Input.UnitValue ||
             a.Input.LateUnitValue != b.Input.LateUnitValue || a.Input.BackupUnitValue != b.Input.BackupUnitValue)
             differences.Add(StackingFieldCatalog.PriceComposition);
         if (!a.Input.ItemTypes.SequenceEqual(b.Input.ItemTypes) || a.Input.Name != b.Input.Name ||
             a.Input.ShortDescription != b.Input.ShortDescription || a.Input.FlavorText != b.Input.FlavorText ||
             a.Input.SpriteAtlasPath != b.Input.SpriteAtlasPath || a.Input.SpritePath != b.Input.SpritePath)
-            differences.Add("item_identity");
+            differences.Add(StackingFieldCatalog.ItemIdentity);
 
         foreach (var tagKey in DifferentNames(a.Input.Tags, b.Input.Tags, tag => tag.Key, Encoded))
             differences.Add(StackingFieldCatalog.TagFieldId(tagKey));
@@ -197,7 +197,7 @@ public static class StackingProjection
             var present = leftFeature ?? rightFeature;
             if (present == null)
             {
-                differences.Add("item_identity");
+                differences.Add(StackingFieldCatalog.ItemIdentity);
                 continue;
             }
 
@@ -216,7 +216,7 @@ public static class StackingProjection
         if (!SameNode(a.Input.ContentWindow, b.Input.ContentWindow, a.Input, b.Input, true))
             differences.Add(StackingFieldCatalog.ContainerContent);
         if (!SameNode(a.Input.ExamineWindow, b.Input.ExamineWindow, a.Input, b.Input, false))
-            differences.Add("item_identity");
+            differences.Add(StackingFieldCatalog.ItemIdentity);
         result = differences.ToArray();
         return true;
     }
@@ -232,7 +232,7 @@ public static class StackingProjection
             if (TryGetDifferences(item.Key, item.Attributes, item.Key, item.Attributes, config, out _))
                 comparable.Add(item);
             else
-                differences.Add("item_identity");
+                differences.Add(StackingFieldCatalog.ItemIdentity);
         }
 
         var compareRemaining = false;
@@ -256,14 +256,48 @@ public static class StackingProjection
         {
             if (!TryGetDifferences(left.Key, left.Attributes, right.Key, right.Attributes, config, out var fields))
             {
-                differences.Add("item_identity");
+                differences.Add(StackingFieldCatalog.ItemIdentity);
                 return true;
             }
 
             differences.UnionWith(fields);
-            return fields.Contains("item_identity", StringComparer.Ordinal) ||
+            return fields.Contains(StackingFieldCatalog.ItemIdentity, StringComparer.Ordinal) ||
                 fields.Contains(StackingFieldCatalog.HiddenFeature, StringComparer.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// Names the parts behind an <c>item_identity</c> difference among the selected keys of one item, in
+    /// <see cref="ItemIdentityPart"/> terms. A key without a readable identity adds
+    /// <see cref="ItemIdentityPart.Unreadable"/>; readable keys are compared pairwise.
+    /// </summary>
+    public static IReadOnlyCollection<string> IdentityParts(IReadOnlyList<ItemKey> keys)
+    {
+        if (keys == null) throw new ArgumentNullException(nameof(keys));
+        var parts = new SortedSet<string>(StringComparer.Ordinal);
+        var inputs = new List<CanonicalIdentityInput>(keys.Count);
+        foreach (var key in keys)
+        {
+            if (CanonicalMask.Decode(key) is { } input) inputs.Add(input);
+            else parts.Add(ItemIdentityPart.Unreadable);
+        }
+
+        for (var left = 0; left < inputs.Count; left++)
+        {
+            for (var right = left + 1; right < inputs.Count; right++)
+            {
+                var a = inputs[left];
+                var b = inputs[right];
+                if (!a.ItemTypes.SequenceEqual(b.ItemTypes)) parts.Add(ItemIdentityPart.ItemTypes);
+                if (a.Name != b.Name) parts.Add(ItemIdentityPart.Name);
+                if (a.ShortDescription != b.ShortDescription) parts.Add(ItemIdentityPart.ShortDescription);
+                if (a.FlavorText != b.FlavorText) parts.Add(ItemIdentityPart.FlavorText);
+                if (a.SpriteAtlasPath != b.SpriteAtlasPath || a.SpritePath != b.SpritePath) parts.Add(ItemIdentityPart.Sprite);
+                if (!SameNode(a.ExamineWindow, b.ExamineWindow, a, b, false)) parts.Add(ItemIdentityPart.ExamineWindow);
+            }
+        }
+
+        return parts;
     }
 
     /// <summary>
