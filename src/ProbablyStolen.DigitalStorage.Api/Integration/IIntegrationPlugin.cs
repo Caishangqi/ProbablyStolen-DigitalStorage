@@ -47,6 +47,15 @@ public interface IIntegrationPlugin
     /// </summary>
     void RegisterSettings(IIntegrationConfig config);
 
+    /// <summary>
+    /// Contributes content that describes the other mod's items, such as
+    /// <c>DigitalStorageRegistries.VolatileItemFeature</c> entries. Called once, before the registries
+    /// freeze and before <see cref="Register"/>, when the other mod is installed, running and of a supported version,
+    /// whether or not the switch is on: content stays the same for the whole session. The batch is owned by
+    /// <see cref="RequiredModId"/>, so entries that must be in their owner's namespace use that id.
+    /// </summary>
+    void RegisterContent(IContentRegistrationBatch batch);
+
     /// <summary>Requests patches; the host applies them only if all targets resolve.</summary>
     void Register(IIntegrationRegistration registration);
 
@@ -87,6 +96,11 @@ public abstract class IntegrationPlugin : IIntegrationPlugin
 
     /// <inheritdoc />
     public virtual void RegisterSettings(IIntegrationConfig config)
+    {
+    }
+
+    /// <inheritdoc />
+    public virtual void RegisterContent(IContentRegistrationBatch batch)
     {
     }
 

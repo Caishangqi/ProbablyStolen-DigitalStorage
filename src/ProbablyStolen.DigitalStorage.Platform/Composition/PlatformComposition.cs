@@ -19,6 +19,7 @@ using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Energy;
 using ProbablyStolen.DigitalStorage.Platform.Events;
+using ProbablyStolen.DigitalStorage.Platform.Identity;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Network;
@@ -45,6 +46,7 @@ public sealed class PlatformComposition : IDisposable
     private readonly CellRecovery _recovery;
     private readonly LegacyMigration _migration;
     private readonly StorageEventBus _events;
+    private StoredRootChecks<GameItem, GameItem>? _storedRootChecks;
     private readonly DigitalStorageSettings _settings;
     private readonly StorageVendors _vendors;
     private readonly DigitalStorageNetwork _network;
@@ -130,7 +132,7 @@ public sealed class PlatformComposition : IDisposable
         var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _compatibility.Report);
         _integrations = new IntegrationHost(plugins, new NativeIntegrationEnvironment(),
             new HarmonyIntegrationPatcher(_modId), _settings, _runtime, _compatibility.Report, _decorations,
-            _buttonIcons.HasOverlay);
+            _buttonIcons.HasOverlay, _contentApi.RegisterBatch);
         _integrations.Initialize();
     }
 
@@ -291,6 +293,8 @@ public sealed class PlatformComposition : IDisposable
             _vendors.RegisterCustomers(batch.Registries);
         });
         _contentApi.AddBakeCallback(DigitalStorageRegistries.Customer, _customers.Bind);
+        _contentApi.AddBakeCallback(DigitalStorageRegistries.VolatileItemFeature, registry =>
+            VolatileFeatureRules.Publish(new VolatileFeatureRules(registry.Entries.Select(entry => entry.Value.IdentifierPrefix))));
         _isEnabled = true;
         try
         {
@@ -317,6 +321,11 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += StartIoPortRun;
             _ioPortFrames = IoPortFrameDriver.Create(_ioPortCoordinator.OnFrame,
                 error => _log.Error($"Digital Storage: IO Port frame step failed ({error.GetType().Name})."));
+            _storedRootChecks = new StoredRootChecks<GameItem, GameItem>(
+                check => ModHelper.RunOnMainThread(_modId, check), StoredItemChanges.StillMatches, CellInventoryCache.Forget,
+                () => _events.Post(new NetworkChanged(NetworkChangeReason.StoredItemChanged)));
+            StoredItemChanges.Activate(new StoredItemChanges(StoredItemChanges.Locate, () => SaveManager.IsDecoding,
+                _storedRootChecks));
             ExposeRuntime(_runtime);
             ExposeTooltipService(_tooltip.Service);
             ExposeContent(_contentApi);
@@ -393,7 +402,11 @@ public sealed class PlatformComposition : IDisposable
         ExposeContent(null);
         _moduleBayHooks?.Dispose();
         _moduleBayHooks = null;
+        StoredItemChanges.Activate(null);
+        _storedRootChecks?.Close();
+        _storedRootChecks = null;
         _contentApi.Dispose();
+        VolatileFeatureRules.Reset();
         _vendors.Dispose();
         _network.Dispose();
         _networkSprites.Dispose();

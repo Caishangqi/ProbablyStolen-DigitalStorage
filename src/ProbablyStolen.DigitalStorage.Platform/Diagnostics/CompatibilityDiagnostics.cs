@@ -7,7 +7,6 @@ internal sealed class CompatibilityDiagnostics
 {
     private readonly DiagnosticLogger _log;
     private readonly LogCategory _category;
-    private bool _loreFailureReported;
 
     internal CompatibilityDiagnostics(DiagnosticLogger log, LogCategory category) => (_log, _category) = (log, category);
 
@@ -27,11 +26,4 @@ internal sealed class CompatibilityDiagnostics
     internal void ReportDecorationNotificationFailure(string exceptionType) =>
         _log.Write(_category, LogVerbosity.Error, "decoration_notification_failed",
             "Could not queue a terminal decoration refresh.", exceptionType: exceptionType);
-
-    internal void ReportLoreFailure(string exceptionType)
-    {
-        if (_loreFailureReported) return;
-        _loreFailureReported = _log.Write(_category, LogVerbosity.Error, "stored_lore_refresh_failed",
-            "Could not refresh storage after a tooltip changed the item lore.", exceptionType: exceptionType);
-    }
 }

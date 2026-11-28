@@ -107,6 +107,7 @@ public class GameItem
     internal string identifier;
     public string shortDescription { get; set; } = string.Empty;
     public string flavorText { get; set; } = string.Empty;
+    public List<ItemFeature> itemFeatures = new();
     internal TagSystem state;
     internal TagSystem modifiedState = new();
     // The game assembly does not annotate these reference types.
@@ -169,6 +170,14 @@ public class GameItem
     internal List<T> FindAdjacentType<T>() => parentInventory is GameGridInventory grid
         ? grid.Neighbors(this).OfType<T>().ToList()
         : new List<T>();
+}
+
+public class ItemFeature
+{
+    internal ItemFeature(string id) => identifier = id;
+
+    public string identifier;
+    public int parentItemUniqueId;
 }
 
 /// <summary>Stands in for the native graph node base type.</summary>

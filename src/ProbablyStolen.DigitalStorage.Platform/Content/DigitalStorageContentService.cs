@@ -15,6 +15,7 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     internal const string BindingRegistryId = "digital_storage:module_bay_binding";
     internal const string ProviderRegistryId = "digital_storage:module_bay_provider";
     internal const string CustomerRegistryId = CustomerIdentity.RegistryId;
+    internal const string VolatileFeatureRegistryId = "digital_storage:volatile_item_feature";
     private readonly RegistryManager _manager = new();
     private readonly List<Batch> _batches = new();
     private readonly List<Action> _bakeCallbacks = new();
@@ -126,7 +127,7 @@ internal sealed partial class DigitalStorageContentService : IDigitalStorageCont
     private void Notify(GameItem item, ModuleBayState state) { foreach (var listener in _listeners.ToArray()) try { listener(item, state); } catch { } }
     private static bool IsBuiltinRegistry(Identifier id) => id == Identifier.Parse(DefinitionRegistryId)
         || id == Identifier.Parse(BindingRegistryId) || id == Identifier.Parse(ProviderRegistryId)
-        || id == Identifier.Parse(CustomerRegistryId);
+        || id == Identifier.Parse(CustomerRegistryId) || id == Identifier.Parse(VolatileFeatureRegistryId);
     private void InvalidateOwner(string owner)
     {
         if (owner == "digital_storage")

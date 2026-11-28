@@ -27,7 +27,10 @@ public enum NetworkChangeReason
     /// <summary>
     /// Stored items moved through the public API (another mod or an integration plugin), outside any terminal.
     /// </summary>
-    ContentsChanged
+    ContentsChanged,
+
+    /// <summary>Game code or another mod changed a stored item so that its type no longer matches its slot.</summary>
+    StoredItemChanged
 }
 
 /// <summary>

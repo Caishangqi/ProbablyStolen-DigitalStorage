@@ -174,6 +174,35 @@ public sealed class NativeItemIdentityReaderTests
         Assert.That(sharedResult.Identity, Is.EqualTo(copiedResult.Identity));
     }
 
+    [Test]
+    public void Read_FeatureMatchingVolatilePrefix_IsLeftOutOfType()
+    {
+        var plain = CreateItem("bread", 1);
+        var priced = CreateItem("bread", 1);
+        priced.Features.Add(new Feature("prof.sell.0", "") { OwnerUniqueId = 1, PrivateFields = PrivateFields("+10%") });
+        var rules = new VolatileFeatureRules(new[] { "prof.sell." });
+
+        var plainResult = NativeItemIdentityReader.Read(plain, rules);
+        var pricedResult = NativeItemIdentityReader.Read(priced, rules);
+        var strictResult = NativeItemIdentityReader.Read(priced, VolatileFeatureRules.None);
+
+        Assert.That(pricedResult.Status, Is.EqualTo(NativeItemIdentityReadStatus.Success));
+        Assert.That(pricedResult.Identity, Is.EqualTo(plainResult.Identity));
+        Assert.That(strictResult.Identity, Is.Not.EqualTo(plainResult.Identity));
+    }
+
+    [Test]
+    public void Read_FeatureNotMatchingVolatilePrefix_StaysInType()
+    {
+        var plain = CreateItem("bread", 1);
+        var flavored = CreateItem("bread", 1);
+        flavored.Features.Add(new Feature("prof.selling", "") { OwnerUniqueId = 1, PrivateFields = PrivateFields("x") });
+        var rules = new VolatileFeatureRules(new[] { "prof.sell." });
+
+        Assert.That(NativeItemIdentityReader.Read(flavored, rules).Identity,
+            Is.Not.EqualTo(NativeItemIdentityReader.Read(plain, rules).Identity));
+    }
+
     private static DoubleItem ItemWithConditions(Condition fake, Condition real)
     {
         var root = CreateItem("ingot", 1);

@@ -368,6 +368,7 @@ internal sealed class InventoryRootSink : IRootSink
         try
         {
             if (requested <= 0) return TransferStep.Rejected(StoreRejection.PhysicalLimit);
+            using var quiet = StoredItemChanges.Silence();
             if (!page.Expel(item))
             {
                 _pointPlacement?.RecordPlacement("source_expel_rejected", original, requestedUnits: requested);

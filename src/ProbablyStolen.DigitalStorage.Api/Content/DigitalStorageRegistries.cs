@@ -24,4 +24,10 @@ public static class DigitalStorageRegistries
     /// <summary>Gets the module bay provider registry; an entry id must equal its provider id.</summary>
     public static readonly ResourceKey<Registry<IModuleBayProvider>> ModuleBayProvider =
         ResourceKey.CreateRegistryKey<IModuleBayProvider>(Identifier.Parse("digital_storage:module_bay_provider"));
+
+    /// <summary>
+    /// Gets the registry of item features left out of stored item types; an entry's namespace must be its owner's id.
+    /// </summary>
+    public static readonly ResourceKey<Registry<VolatileItemFeature>> VolatileItemFeature =
+        ResourceKey.CreateRegistryKey<VolatileItemFeature>(Identifier.Parse("digital_storage:volatile_item_feature"));
 }

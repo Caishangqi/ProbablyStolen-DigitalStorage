@@ -32,6 +32,7 @@ internal sealed class IntegrationHost : IDisposable
     private readonly Action<IntegrationNotice> _log;
     private readonly IntegrationDecorationCatalog? _decorations;
     private readonly Func<string, bool>? _overlayAvailable;
+    private readonly Action<string, Action<IContentRegistrationBatch>>? _registerContent;
     private bool _initialized;
     private bool _enabled;
     private bool _registered;
@@ -41,7 +42,8 @@ internal sealed class IntegrationHost : IDisposable
     internal IntegrationHost(IEnumerable<IIntegrationPlugin> plugins, IIntegrationEnvironment environment,
         IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime,
         Action<IntegrationNotice> log, IntegrationDecorationCatalog? decorations = null,
-        Func<string, bool>? overlayAvailable = null)
+        Func<string, bool>? overlayAvailable = null,
+        Action<string, Action<IContentRegistrationBatch>>? registerContent = null)
     {
         _entries = (plugins ?? throw new ArgumentNullException(nameof(plugins))).Select(plugin => new Entry(plugin)).ToList();
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -51,6 +53,7 @@ internal sealed class IntegrationHost : IDisposable
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _decorations = decorations;
         _overlayAvailable = overlayAvailable;
+        _registerContent = registerContent;
     }
 
     /// <summary>
@@ -249,6 +252,7 @@ internal sealed class IntegrationHost : IDisposable
             }
 
             if (entry.HasVersionPolicy && !CheckRunning(entry)) continue;
+            if (!RegisterContent(entry)) continue;
             if (!ReadSwitch(entry))
             {
                 Report(entry, entry.HasVersionPolicy || entry.DefaultEnabled ? "disabled_in_settings" : "unverified_version");
@@ -257,6 +261,14 @@ internal sealed class IntegrationHost : IDisposable
 
             TryRegister(entry);
         }
+    }
+
+    // Content describes the other mod's items, so it follows that mod rather than the switch, and is registered once
+    // because the registries freeze right after this phase.
+    private bool RegisterContent(Entry entry)
+    {
+        if (_registerContent == null || !_environment.IsModRunning(entry.ModId)) return true;
+        return Call(entry, "content", () => _registerContent(entry.ModId, entry.Plugin.RegisterContent));
     }
 
     private bool CheckRunning(Entry entry)

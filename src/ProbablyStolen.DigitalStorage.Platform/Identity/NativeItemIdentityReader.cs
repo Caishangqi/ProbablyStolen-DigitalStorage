@@ -78,9 +78,11 @@ internal sealed class NativeItemIdentityReader
     private int _items;
     private int _edges;
     private int _records;
+    private readonly VolatileFeatureRules _rules;
 
-    private NativeItemIdentityReader()
+    private NativeItemIdentityReader(VolatileFeatureRules rules)
     {
+        _rules = rules;
     }
 
     /// <summary>
@@ -110,7 +112,9 @@ internal sealed class NativeItemIdentityReader
     }
 
     /// <summary>Captures a source double without loading or executing target game code.</summary>
-    internal static NativeItemIdentityReadResult Read(INativeIdentityItemSource root)
+    /// <param name="root">The root item source.</param>
+    /// <param name="rules">Features left out of the type; the session's rules when null.</param>
+    internal static NativeItemIdentityReadResult Read(INativeIdentityItemSource root, VolatileFeatureRules? rules = null)
     {
         if (root == null)
         {
@@ -119,7 +123,7 @@ internal sealed class NativeItemIdentityReader
 
         try
         {
-            var reader = new NativeItemIdentityReader();
+            var reader = new NativeItemIdentityReader(rules ?? VolatileFeatureRules.Current);
             var input = reader.ReadItem(root, null, 0, 0);
             return NativeItemIdentityReadResult.Success(CanonicalIdentityEncoder.Encode(input));
         }
@@ -176,6 +180,8 @@ internal sealed class NativeItemIdentityReader
             throw new StaleIdentityException(NativeItemIdentityFailure.ReadException);
         }
 
+        featuresSource = WithoutVolatile(featuresSource);
+
         _budget.RequireStringCount(itemTypesSource.Count);
         RequireCount(tagsSource.Count, MaxRecords);
         RequireCount(featuresSource.Count, MaxRecords);
@@ -190,6 +196,26 @@ internal sealed class NativeItemIdentityReader
         return new CanonicalIdentityInput(item.Identifier, itemTypes, tags, features,
             item.Name, item.ShortDescription, item.FlavorText, item.UnitBaseValue, item.UnitValue,
             item.LateUnitValue, item.BackupUnitValue, item.SpriteAtlasPath, item.SpritePath, content, examine);
+    }
+
+    // A null entry stays, so the read still reports the list as stale.
+    private IReadOnlyList<INativeIdentityFeatureSource> WithoutVolatile(IReadOnlyList<INativeIdentityFeatureSource> features)
+    {
+        if (_rules.Prefixes.Count == 0) return features;
+        List<INativeIdentityFeatureSource>? kept = null;
+        for (var index = 0; index < features.Count; index++)
+        {
+            var feature = features[index];
+            if (feature != null && _rules.IsVolatile(feature.Identifier))
+            {
+                kept ??= features.Take(index).ToList();
+                continue;
+            }
+
+            kept?.Add(feature!);
+        }
+
+        return kept ?? features;
     }
 
     private IReadOnlyList<CanonicalIdentityTag> ReadTags(IReadOnlyList<INativeIdentityTagSource> source)

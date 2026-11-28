@@ -532,7 +532,7 @@ def check_content(project: Path, output: Path) -> None:
         "integration_state_failed", "integration_state_failed_label", "integration_state_not_running_label",
         "integration_itemdetails_section", "integration_itemdetails_label", "integration_itemdetails_tooltip", "tooltip_scroll_hint",
         "integration_state_unverified", "integration_state_active", "integration_state_active_unverified", "integration_state_disabled",
-        "integration_brewing_section", "integration_brewing_label", "integration_brewing_tooltip",
+        "integration_proficiency_section", "integration_proficiency_label", "integration_proficiency_tooltip",
         "integration_client_demand_section", "integration_client_demand_label", "integration_client_demand_tooltip",
         "integration_client_demand_normal", "integration_client_demand_normal_desc",
         "integration_client_demand_stolen", "integration_client_demand_stolen_desc",

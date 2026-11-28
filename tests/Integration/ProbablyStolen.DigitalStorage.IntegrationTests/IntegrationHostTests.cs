@@ -9,7 +9,6 @@ using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Stacks;
 using ProbablyStolen.DigitalStorage.Api.Storage;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Presentation;
-using ProbablyStolen.DigitalStorage.Compat.BrewingExpansion;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 
 namespace ProbablyStolen.DigitalStorage.IntegrationTests;
@@ -48,6 +47,79 @@ public sealed class IntegrationHostTests
         host.Enable();
         host.OnModsLoaded();
         return host;
+    }
+
+    private IntegrationHost HostWithContent(List<string> owners, params IIntegrationPlugin[] plugins) =>
+        new(plugins, _environment, _patcher, _settings, new FakeRuntime(), _log.Add,
+            registerContent: (owner, register) =>
+            {
+                owners.Add(owner);
+                register(null!);
+            });
+
+    [Test]
+    public void Content_IsRegisteredForTheRequiredModBeforeRegisterEvenWhenSwitchedOff()
+    {
+        var owners = new List<string>();
+        var plugin = new FakePlugin();
+        _settings.Values[Uid] = false;
+        using var host = HostWithContent(owners, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+
+        Assert.That(owners, Is.EqualTo(new[] { "other_mod" }));
+        Assert.That(plugin.Calls, Is.EqualTo(new[] { "settings", "content" }));
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Disabled));
+    }
+
+    [Test]
+    public void Content_IsRegisteredOnceAndBeforeRegister()
+    {
+        var owners = new List<string>();
+        var plugin = new FakePlugin();
+        using var host = HostWithContent(owners, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+        _settings.Values[Uid] = false;
+        host.OnSettingsApplied();
+        _settings.Values[Uid] = true;
+        host.OnSettingsApplied();
+
+        Assert.That(owners, Has.Count.EqualTo(1));
+        Assert.That(plugin.Calls.Take(3), Is.EqualTo(new[] { "settings", "content", "register" }));
+        Assert.That(plugin.Calls.Count(call => call == "content"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Content_IsSkippedWhenTheRequiredModIsNotRunning()
+    {
+        var owners = new List<string>();
+        var plugin = new FakePlugin();
+        _environment.Running.Clear();
+        using var host = HostWithContent(owners, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+
+        Assert.That(owners, Is.Empty);
+        Assert.That(plugin.Calls, Does.Not.Contain("content"));
+    }
+
+    [Test]
+    public void Content_FailureFaultsOnlyThatPluginBeforeRegister()
+    {
+        var owners = new List<string>();
+        var plugin = new FakePlugin { Content = () => throw new InvalidOperationException("bad rule") };
+        using var host = HostWithContent(owners, plugin);
+        host.Initialize();
+        host.Enable();
+        host.OnModsLoaded();
+
+        Assert.That(host.StateOf(Uid), Is.EqualTo(IntegrationState.Faulted));
+        Assert.That(plugin.Calls, Does.Not.Contain("register"));
+        Assert.That(_patcher.Applied, Is.Empty);
     }
 
     [Test]
@@ -506,23 +578,6 @@ public sealed class IntegrationHostTests
         Assert.That(plugin.Calls.Contains("available"), Is.EqualTo(expectActive));
     }
 
-    [Test]
-    public void BrewingExpansion_DefaultsOnButHonorsSavedOff()
-    {
-        var plugin = new BrewingExpansionPlugin();
-        _environment.Enabled.Add(plugin.RequiredModId);
-        _environment.Running.Add(plugin.RequiredModId);
-        _environment.Installed.Add(plugin.RequiredModId);
-        _environment.Versions[plugin.RequiredModId] = "3.6.8.6";
-        _settings.Values[plugin.PluginUid] = false;
-
-        using var host = Started(plugin);
-
-        Assert.That(_settings.Defaults[plugin.PluginUid], Is.True);
-        Assert.That(host.StateOf(plugin.PluginUid), Is.EqualTo(IntegrationState.Disabled));
-        Assert.That(_patcher.Applied, Is.Empty);
-    }
-
     [TestCase("3.6.8.6", null, true)]
     [TestCase("3.6.9.0", null, true)]
     [TestCase("3.6.9.0", false, false)]
@@ -849,6 +904,8 @@ public sealed class IntegrationHostTests
 
         internal Action? RuntimeAttach { get; set; }
 
+        internal Action? Content { get; set; }
+
         internal List<string> Calls { get; } = new();
 
         public override string PluginUid => Uid;
@@ -871,6 +928,12 @@ public sealed class IntegrationHostTests
             Settings?.Invoke(config);
         }
 
+        public override void RegisterContent(IContentRegistrationBatch batch)
+        {
+            Calls.Add("content");
+            Content?.Invoke();
+        }
+
         public override void Register(IIntegrationRegistration registration)
         {
             Calls.Add("register");
@@ -890,7 +953,12 @@ public sealed class IntegrationHostTests
     {
         public override IReadOnlyCollection<string> VerifiedVersions => Array.Empty<string>();
 
-        public bool SupportsVersion(string version) => BrewingExpansionVersions.Supports(version);
+        public bool SupportsVersion(string version)
+        {
+            if (!Version.TryParse(version, out var parsed) || parsed.Build < 0) return false;
+            var normalized = new Version(parsed.Major, parsed.Minor, parsed.Build, Math.Max(0, parsed.Revision));
+            return normalized >= new Version(3, 6, 8, 6) && normalized < new Version(3, 7, 0, 0);
+        }
     }
 
     private sealed class FakeEnvironment : IIntegrationEnvironment

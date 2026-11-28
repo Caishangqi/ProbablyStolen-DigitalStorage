@@ -77,6 +77,7 @@ internal sealed partial class DigitalStorageContentService
         yield return Declaration(DigitalStorageRegistries.ModuleBayBinding);
         yield return Declaration(DigitalStorageRegistries.ModuleBayProvider);
         yield return Declaration(DigitalStorageRegistries.Customer);
+        yield return Declaration(DigitalStorageRegistries.VolatileItemFeature);
     }
 
     private Dictionary<Identifier, Type> RegistryTypes(IEnumerable<Batch> batches) => BuiltinDeclarations()
@@ -143,5 +144,6 @@ internal sealed partial class DigitalStorageContentService
         entry.RegistryId == Identifier.Parse(DefinitionRegistryId) ? entry.Value is ModuleBayDefinition definition && entry.EntryId == definition.Id
         : entry.RegistryId == Identifier.Parse(ProviderRegistryId) ? entry.Value is IModuleBayProvider provider && entry.EntryId == provider.Id
         : entry.RegistryId == Identifier.Parse(CustomerRegistryId) ? entry.Value is CustomerDefinition && entry.EntryId.Namespace == owner
+        : entry.RegistryId == Identifier.Parse(VolatileFeatureRegistryId) ? entry.Value is VolatileItemFeature && entry.EntryId.Namespace == owner
         : entry.RegistryId != Identifier.Parse(BindingRegistryId) || entry.Value is ModuleBayBinding;
 }

@@ -43,13 +43,19 @@ internal sealed class NativeItemMove : IItemMovePort
     internal static NativeItemMove ReturnTo(GameItem item, GameInventory? source, GridShape originalShape) =>
         new(item, source, originalShape, null, null);
 
-    public bool Detach() => _source == null || _source.Expel(_item);
+    // Callbacks of this mod's own moves can change the moved item; the move confirms that root itself.
+    public bool Detach()
+    {
+        using var quiet = StoredItemChanges.Silence();
+        return _source == null || _source.Expel(_item);
+    }
 
     public bool CanAttach() => _checkedPlacement == null || (_checkedShape = _checkedPlacement()) != null;
 
     public void Attach()
     {
         if (_target == null || (_checkedShape ?? _targetShape) is not { } shape) return;
+        using var quiet = StoredItemChanges.Silence();
         _item.modifiedShape = shape;
         _target.UncheckedAccept(_item);
     }
@@ -84,6 +90,7 @@ internal sealed class NativeItemMove : IItemMovePort
             if (slot.childItem != null) return;
         }
         else return;
+        using var quiet = StoredItemChanges.Silence();
         _item.modifiedShape = shape;
         _source.UncheckedAccept(_item);
     }

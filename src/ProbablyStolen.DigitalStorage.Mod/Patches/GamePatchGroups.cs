@@ -10,6 +10,7 @@ internal static class GamePatchGroups
         CellPageRestorePatch.Group(),
         StoredItemPresencePatch.Group(),
         StoredLiquidUpdatePatches.Group(),
+        StoredItemChangePatches.Group(),
         ModuleBayExpansionPatches.Group(),
         TerminalOpenPatch.Group(),
         TerminalSingleDropPatches.Group(),

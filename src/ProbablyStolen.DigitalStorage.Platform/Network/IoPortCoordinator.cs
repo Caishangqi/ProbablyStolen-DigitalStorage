@@ -544,7 +544,8 @@ internal sealed class IoPortCoordinator : IDisposable
     private void OnNetworkChanged(NetworkChanged change)
     {
         // A contents change is caught by the cell versions; the network's shape or power changing is not.
-        var reshaped = change.Reason is not (NetworkChangeReason.ContentsChanged or NetworkChangeReason.PowerCycle);
+        var reshaped = change.Reason is not (NetworkChangeReason.ContentsChanged or NetworkChangeReason.StoredItemChanged
+            or NetworkChangeReason.PowerCycle);
         foreach (var runtime in _runtime.Values)
         {
             if (reshaped) runtime.Wake();

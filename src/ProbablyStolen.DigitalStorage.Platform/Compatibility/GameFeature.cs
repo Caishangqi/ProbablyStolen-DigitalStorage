@@ -12,6 +12,9 @@ public enum GameFeature
     /// <summary>Keeps liquids in storage from cooling and reacting.</summary>
     StoredLiquid,
 
+    /// <summary>Notices changes other code makes to stored items and undoes those made while this mod reads them.</summary>
+    StoredItemChanges,
+
     /// <summary>Module bay expansion stages on storage machines.</summary>
     ModuleBayExpansion,
 

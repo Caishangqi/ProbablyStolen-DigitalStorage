@@ -24,7 +24,7 @@ internal sealed class StorageTerminalServices
         Func<IReadOnlyList<GameItem>, TransferOperation, TerminalInsertionResult> storeSelection,
         Func<GameItem, int, TransferOperation, TerminalInsertionResult> storeSingle,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
-        Func<ItemKey, GameItem?> findPreviewSample, Func<GameItemElement, ItemKey, RichText> renderStoredTooltip,
+        Func<ItemKey, GameItem?> findPreviewSample, Func<GameItemElement, RichText> renderStoredTooltip,
         Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
         Action<string> writeDiagnostic,
         Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers,
@@ -72,7 +72,7 @@ internal sealed class StorageTerminalServices
     internal Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> StoreRefusals { get; }
     internal Func<ItemKey, GameItem?> FindSample { get; }
     internal Func<ItemKey, GameItem?> FindPreviewSample { get; }
-    internal Func<GameItemElement, ItemKey, RichText> RenderStoredTooltip { get; }
+    internal Func<GameItemElement, RichText> RenderStoredTooltip { get; }
     internal Func<bool> DiagnosticsEnabled { get; }
 
     /// <summary>Gets whether clicked slots write their full item identity to the log.</summary>

@@ -1,4 +1,5 @@
 using ProbablyStolen.DigitalStorage.Common.Domain.Terminal.Stacking;
+using ProbablyStolen.DigitalStorage.Platform.Storage;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Stacking;
 
@@ -18,6 +19,8 @@ internal sealed class StackingAttributeCapture : IEntryAttributeCapture
         value = 0;
         // Store stations are created with the store scene; early in a load the event list is not there yet.
         if (sample == null || StoreStation.Instance?.storeEventManager == null) return false;
+        // Other mods may rewrite the item while its value is read; the stored root stays as stored.
+        using var read = StoredItemChanges.Read(sample);
         value = sample.GetCurrentValue(useRetailMarkup: false, withChild: true, includeEvents: true, forceMarkup: false, 0L);
         return true;
     }

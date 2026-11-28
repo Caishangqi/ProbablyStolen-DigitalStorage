@@ -146,6 +146,32 @@ public sealed class ModuleBayContentBootstrapTests
         Assert.That(service.ModuleBays.Entries.Select(entry => entry.Key.ToString()), Is.EqualTo(new[] { "good_mod:bay" }));
     }
 
+    [Test]
+    public void Bootstrap_PublishesVolatileFeaturesOnlyInTheirOwnersNamespace()
+    {
+        using var service = new DigitalStorageContentService();
+        service.RegisterBatch("prof.system", batch => DeferredRegister<VolatileItemFeature>
+            .Create(batch.Registries, DigitalStorageRegistries.VolatileItemFeature, "prof.system")
+            .Register("sell_price_line", () => new VolatileItemFeature("prof.sell.")));
+        service.RegisterBatch("other_mod", batch => DeferredRegister<VolatileItemFeature>
+            .Create(batch.Registries, DigitalStorageRegistries.VolatileItemFeature, "prof.system")
+            .Register("buy_price_line", () => new VolatileItemFeature("prof.buy.")));
+        IReadOnlyList<string>? baked = null;
+        service.AddBakeCallback(DigitalStorageRegistries.VolatileItemFeature,
+            registry => baked = registry.Entries.Select(entry => entry.Value.IdentifierPrefix).ToArray());
+
+        service.Bootstrap(false);
+
+        Assert.That(service.GetRegistry<VolatileItemFeature>(DigitalStorageRegistries.VolatileItemFeature.EntryId).Entries
+            .Select(entry => entry.Key.ToString()), Is.EqualTo(new[] { "prof.system:sell_price_line" }));
+        Assert.That(baked, Is.EqualTo(new[] { "prof.sell." }));
+    }
+
+    [TestCase("")]
+    [TestCase("prof sell")]
+    public void VolatileItemFeature_RejectsEmptyOrSpacedPrefixes(string prefix) =>
+        Assert.Throws<ArgumentException>((Action)(() => _ = new VolatileItemFeature(prefix)));
+
     private static readonly (string Item, string Definition, string Provider, int Maximum)[] BuiltinBindings =
     {
         ("digital_storage.storage_terminal", "terminal", "native_standard", 10),

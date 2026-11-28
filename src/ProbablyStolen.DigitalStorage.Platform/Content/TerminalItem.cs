@@ -76,20 +76,11 @@ internal sealed class TerminalItem
         _log = log;
     }
 
-    private RichText RenderStoredTooltip(GameItemElement root, ItemKey key)
+    // Tooltip code of the game and other mods may rewrite the item it describes; the stored root stays as stored.
+    private static RichText RenderStoredTooltip(GameItemElement root)
     {
-        if (root.parentInventory is not GameGridInventory { overrideLockInsert: true }) return root.GetTooltip();
-        return TerminalTooltipScope.Render(root, root.GetTooltip, () =>
-        {
-            try
-            {
-                if (_networkPower.Storage.ForgetStoredLore(root, key)) _events.Post(NetworkChangeReason.ContentsChanged);
-            }
-            catch (Exception error)
-            {
-                _compatibility.ReportLoreFailure(error.GetType().Name);
-            }
-        });
+        using var read = StoredItemChanges.Read(root);
+        return root.GetTooltip();
     }
 
     internal GameItem Create()
