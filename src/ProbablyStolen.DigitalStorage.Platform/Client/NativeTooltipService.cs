@@ -8,6 +8,7 @@ using UnityEngine.Localization.Settings;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using ClientLayout = ProbablyStolen.DigitalStorage.Client.Tooltips;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -919,7 +920,7 @@ internal sealed class NativeTooltipService : ITooltipService, IDisposable
         }
 
         private void LogContentError(Exception error) =>
-            Debug.LogWarning($"Digital Storage: tooltip panel {_id} failed ({error.GetType().Name}).");
+            PlatformLogs.Current?.Ui.Warning("tooltip_panel_failed", $"tooltip panel {_id} failed ({error.GetType().Name}).");
 
         private void RestoreNativeStyle()
         {

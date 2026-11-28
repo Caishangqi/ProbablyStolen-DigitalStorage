@@ -28,6 +28,9 @@ public sealed class ItemDetailsPlugin : IntegrationPlugin
     public override bool CanEnableByDefault() => true;
 
     /// <inheritdoc />
+    public override void Register(IIntegrationRegistration registration) => ItemDetailsTargets.Log = registration.Log;
+
+    /// <inheritdoc />
     public override void OnRuntimeAvailable(IDigitalStorageRuntime runtime) => ItemDetailsTargets.Attach();
     /// <inheritdoc />
     public override void OnRuntimeUnavailable() => ItemDetailsTargets.Detach();
@@ -118,10 +121,13 @@ internal static class ItemDetailsTargets
         return result;
     }
 
+    /// <summary>Gets or sets the compatibility log, set when the plugin registers.</summary>
+    internal static IIntegrationLog? Log { get; set; }
+
     private static void WarnOnce(Exception error)
     {
         if (_warned) return;
         _warned = true;
-        UnityEngine.Debug.LogWarning($"Digital Storage: Item Details tooltip obstacle disabled ({error.GetType().Name}).");
+        Log?.Warning("item_details_obstacle_disabled", $"Item Details tooltip obstacle disabled ({error.GetType().Name}).");
     }
 }

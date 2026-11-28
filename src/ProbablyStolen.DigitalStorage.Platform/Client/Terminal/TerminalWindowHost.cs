@@ -14,6 +14,8 @@ using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Widgets;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using UnityEngine;
 using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
 
@@ -28,8 +30,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     private readonly ITerminalViewSettings _settings;
     private readonly Func<bool> _testViewEnabled;
     private readonly Action<GameItem, GameInventory, SlotMarker> _modulesChanged;
-    private readonly Func<bool> _diagnosticsEnabled;
-    private readonly Action<string> _writeDiagnostic;
+    private readonly CategoryLog _log;
     private readonly Func<IReadOnlyCollection<string>>? _moduleIdentifiers;
     private readonly Func<Action<NetworkChanged>, IDisposable>? _subscribeNetwork;
     private readonly SlotMetricsService _slotMetrics;
@@ -56,12 +57,12 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     internal TerminalWindowHost(TerminalRegistry registry, StorageTerminalServices storage, ITerminalViewSettings settings,
         Func<bool> testViewEnabled, ButtonIcons icons, SlotMetricsService slotMetrics) : this(registry, storage.Text, settings,
-        testViewEnabled, storage.DiagnosticsEnabled, storage.WriteDiagnostic, null, icons, slotMetrics, storage.SubscribeNetwork)
+        testViewEnabled, storage.Log, null, icons, slotMetrics, storage.SubscribeNetwork)
     {
     }
 
     internal TerminalWindowHost(TerminalRegistry registry, ModText text, ITerminalViewSettings settings,
-        Func<bool> testViewEnabled, Func<bool> diagnosticsEnabled, Action<string> writeDiagnostic,
+        Func<bool> testViewEnabled, CategoryLog log,
         Func<IReadOnlyCollection<string>>? installedModules, ButtonIcons icons, SlotMetricsService slotMetrics,
         Func<Action<NetworkChanged>, IDisposable>? subscribeNetwork = null)
     {
@@ -71,8 +72,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _text = text ?? throw new ArgumentNullException(nameof(text));
         _testViewEnabled = testViewEnabled ?? throw new ArgumentNullException(nameof(testViewEnabled));
-        _diagnosticsEnabled = diagnosticsEnabled ?? throw new ArgumentNullException(nameof(diagnosticsEnabled));
-        _writeDiagnostic = writeDiagnostic ?? throw new ArgumentNullException(nameof(writeDiagnostic));
+        _log = log ?? throw new ArgumentNullException(nameof(log));
         _moduleIdentifiers = installedModules;
         _subscribeNetwork = subscribeNetwork;
         _modulesChanged = (_, _, _) => OnModulesChanged();
@@ -126,7 +126,11 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
     internal TerminalContext? CurrentContext => _host?.Context;
 
     /// <summary>Writes one diagnostic line to the mod log.</summary>
-    internal void WriteDiagnostic(string message) => _writeDiagnostic(message);
+    /// <summary>Writes a trace of the window, at the interface log's verbose level.</summary>
+    internal void WriteDiagnostic(string message) => _log.Verbose("terminal_trace", message);
+
+    /// <summary>Writes a window problem a player may need to report.</summary>
+    internal void WriteWarning(string message) => _log.Warning("terminal_warning", message);
 
     protected virtual string HostWindowId => WindowId;
 
@@ -208,7 +212,7 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
             catch (Exception error)
             {
                 // Show is still running; keep the native window so the click still opens something.
-                WriteDiagnostic($"Digital Storage: terminal window failed to open ({error.GetType().Name}); native window kept");
+                WriteWarning($"terminal window failed to open ({error.GetType().Name}); native window kept");
             }
         };
     }
@@ -257,7 +261,8 @@ internal class TerminalWindowHost : ITerminalHostView, ITerminalViewHost
 
     private void Build()
     {
-        _diagnostics = new TerminalDiagnostics(_diagnosticsEnabled, WriteDiagnostic);
+        _diagnostics = new TerminalDiagnostics(() => _log.IsEnabled(LogVerbosity.Verbose),
+            message => _log.Verbose("terminal_interaction", message));
         // Before this window subscribes: a change found here rebuilds the other open windows, not this one.
         _slots = _slotMetrics.Refresh();
         _rows = CountRows();

@@ -59,7 +59,8 @@ public sealed class DigitalStorageMod : IMod
 
     // Patches are applied group by group so that a member missing from the running build only turns its feature off;
     // only a missing member that keeps stored items intact stops the mod. Any other failure is logged with the build
-    // before the loader stops the mod.
+    // before the loader stops the mod. These startup lines bypass the log categories on purpose: they run before the
+    // settings exist, and every player report needs them.
     private static void InstallPatches(string modId)
     {
         var build = $"game {UnityEngine.Application.version}";

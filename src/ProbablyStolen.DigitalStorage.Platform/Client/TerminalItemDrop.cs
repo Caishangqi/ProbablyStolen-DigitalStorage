@@ -6,6 +6,7 @@ using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -189,7 +190,7 @@ internal sealed class TerminalItemDrop
         }
         if (!NativeItemMove.IsSafe(source))
         {
-            Debug.LogError("Digital Storage: icon drop aborted; item ownership is unconfirmed.");
+            PlatformLogs.Current?.Transfer.Error("icon_drop_unowned", "icon drop aborted; item ownership is unconfirmed.");
             ItemMove.RequireSafeDrag(false);
         }
     }

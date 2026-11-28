@@ -6,6 +6,7 @@ using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Storage;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Api.Integration;
 
 namespace ProbablyStolen.DigitalStorage.Compat.CustomerStocking;
 
@@ -36,11 +37,15 @@ public static class StockingBridge
     /// <summary>Gets whether a stocking run is active.</summary>
     internal static bool IsRunning => _running;
 
-    /// <summary>Sets the runtime the bridge uses; null detaches it and ends a run.</summary>
-    internal static void Attach(IDigitalStorageRuntime? runtime)
+    /// <summary>Gets the compatibility log the bridge writes to, once the plugin registered.</summary>
+    internal static IIntegrationLog? Log { get; private set; }
+
+    /// <summary>Sets the runtime and log the bridge uses; null detaches it and ends a run.</summary>
+    internal static void Attach(IDigitalStorageRuntime? runtime, IIntegrationLog? log = null)
     {
         EndRun();
         _runtime = runtime;
+        if (log != null) Log = log;
     }
 
     /// <summary>
@@ -60,7 +65,7 @@ public static class StockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking run could not start ({error.GetType().Name}).");
+            Log?.Warning("stocking_run_failed", $"Customer Stocking run could not start ({error.GetType().Name}).");
             return completed;
         }
 
@@ -86,7 +91,7 @@ public static class StockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking run did not end cleanly ({error.GetType().Name}).");
+            Log?.Warning("stocking_run_unclean", $"Customer Stocking run did not end cleanly ({error.GetType().Name}).");
         }
     }
 
@@ -101,7 +106,7 @@ public static class StockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking scan could not see the network ({error.GetType().Name}).");
+            Log?.Warning("stocking_scan_failed", $"Customer Stocking scan could not see the network ({error.GetType().Name}).");
             return null;
         }
     }
@@ -115,7 +120,7 @@ public static class StockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: Customer Stocking scan did not close cleanly ({error.GetType().Name}).");
+            Log?.Warning("stocking_scan_unclean", $"Customer Stocking scan did not close cleanly ({error.GetType().Name}).");
         }
     }
 
@@ -142,7 +147,7 @@ public static class StockingBridge
         catch (Exception error)
         {
             // Nothing moved through the API when it threw before its transfer, and a transfer never half-moves a unit.
-            Debug.LogWarning($"Digital Storage: Customer Stocking move of {item.identifier} failed ({error.GetType().Name}).");
+            Log?.Warning("stocking_move_failed", $"Customer Stocking move of {item.identifier} failed ({error.GetType().Name}).");
             return requested;
         }
 
@@ -158,7 +163,7 @@ public static class StockingBridge
             .ExtractRoot(item, requested, destination, Actionable.Modulate, Source);
         if (result.Units > 0 && page != null) SourcePages[page] = node;
         if (result.Status is StorageStatus.Unavailable or StorageStatus.Rejected && result.Units == 0)
-            Debug.Log($"Digital Storage: Customer Stocking could not take {item.identifier} ({result.Status}).");
+            Log?.Info("stocking_take_refused", $"Customer Stocking could not take {item.identifier} ({result.Status}).");
         return (int)Math.Min(result.Units, requested);
     }
 
@@ -169,7 +174,7 @@ public static class StockingBridge
         if (requested != item.unitCount) return 0;
         var result = home.Grid.GetStorageService().GetInventory().Insert(item, requested, Actionable.Modulate, Source);
         if (result.Status != StorageStatus.Done)
-            Debug.Log($"Digital Storage: Customer Stocking could not return {item.identifier} to the network ({result.Status}).");
+            Log?.Info("stocking_return_refused", $"Customer Stocking could not return {item.identifier} to the network ({result.Status}).");
         return (int)Math.Min(result.Units, requested);
     }
 }

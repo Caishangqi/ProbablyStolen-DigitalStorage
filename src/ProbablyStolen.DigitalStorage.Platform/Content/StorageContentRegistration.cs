@@ -8,12 +8,13 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 
 using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
 internal sealed class StorageContentRegistration : IDisposable
 {
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly ItemContentService _service;
     private readonly RegistryManager _manager = new();
     private readonly Registry<FactoryBinding> _factories;
@@ -25,7 +26,7 @@ internal sealed class StorageContentRegistration : IDisposable
     internal StorageContentRegistration(TerminalItem terminal, DriveItem drive, StorageCellItem cell,
         ControllerItem controller, StorageComponentFactory component, MaterialItem housing,
         CellWorkbenchItem workbench, CellModuleFactory modules, TerminalModuleFactory terminalModules, IoPortItem ioPort,
-        ItemContentService service, ModLog log)
+        ItemContentService service, CategoryLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _service = service ?? throw new ArgumentNullException(nameof(service));
@@ -112,13 +113,13 @@ internal sealed class StorageContentRegistration : IDisposable
 
         if (Thread.CurrentThread.ManagedThreadId != _threadId)
         {
-            _log.Error("Digital Storage: item registration rejected outside the enabling thread.");
+            _log.Error("item_registration_rejected", "item registration rejected outside the enabling thread.");
             return;
         }
 
         if (directory == null || directory.factoryDictionary == null)
         {
-            _log.Error("Digital Storage: item directory is unavailable.");
+            _log.Error("item_directory_unavailable", "item directory is unavailable.");
             return;
         }
 
@@ -132,7 +133,7 @@ internal sealed class StorageContentRegistration : IDisposable
                  !(ownedHere && ReferenceEquals(DirectoryMaster.GetFactory<GameItem>(binding.Key), binding.Value))) ||
                 (directory.Has(binding.Key) && !ownedHere))
             {
-                _log.Error($"Digital Storage: item identifier collision: {binding.Key}.");
+                _log.Error("item_identifier_collision", $"item identifier collision: {binding.Key}.");
                 return;
             }
         }
@@ -158,7 +159,7 @@ internal sealed class StorageContentRegistration : IDisposable
             }
 
             _directory = directory;
-            _log.Log("Digital Storage: content factories registered.");
+            _log.Info("content_factories_registered", "content factories registered.");
         }
         catch (Exception error)
         {
@@ -171,7 +172,7 @@ internal sealed class StorageContentRegistration : IDisposable
                 }
             }
 
-            _log.Error($"Digital Storage: content group registration failed ({error.GetType().Name}).");
+            _log.Error("content_group_failed", $"content group registration failed ({error.GetType().Name}).");
         }
     }
 

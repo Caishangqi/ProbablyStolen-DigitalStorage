@@ -45,7 +45,7 @@ public sealed class CustomerStockingPlugin : IntegrationPlugin
             ? "the stocking transfer call was not found" : null);
         registration.Verify(() => restore != null && StockingPatches.RewrittenIn(restore) == 0
             ? "the budget rollback transfer call was not found" : null);
-        StockingBridge.Attach(registration.Runtime);
+        StockingBridge.Attach(registration.Runtime, registration.Log);
     }
 
     /// <inheritdoc />

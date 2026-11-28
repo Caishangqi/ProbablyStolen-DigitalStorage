@@ -59,7 +59,7 @@ public sealed class DsStockingPlugin : IntegrationPlugin
             ? "the stocking transfer call was not found" : null);
         registration.Verify(() => sendBack != null && DsStockingPatches.RewrittenIn(sendBack) == 0
             ? "the budget rollback transfer call was not found" : null);
-        DsStockingBridge.Attach(registration.Runtime);
+        DsStockingBridge.Attach(registration.Runtime, registration.Log);
     }
 
     /// <inheritdoc />

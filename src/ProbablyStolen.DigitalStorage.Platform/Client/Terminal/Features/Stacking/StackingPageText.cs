@@ -67,7 +67,7 @@ internal static class StackingPageText
         }
         catch (Exception error)
         {
-            window.WriteDiagnostic($"stacking_page failed=read_inventory error={error.GetType().Name}");
+            window.WriteWarning($"stacking_page failed=read_inventory error={error.GetType().Name}");
             return Array.Empty<ItemKey>();
         }
     }
@@ -95,7 +95,7 @@ internal sealed class StackingItemNames
         }
         catch (Exception error)
         {
-            window.WriteDiagnostic($"stacking_page failed=read_names error={error.GetType().Name}");
+            window.WriteWarning($"stacking_page failed=read_names error={error.GetType().Name}");
         }
     }
 

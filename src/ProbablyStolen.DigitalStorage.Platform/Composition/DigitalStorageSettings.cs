@@ -61,7 +61,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
     private readonly ConfigEntry<int> _ioPortPowerUsage;
     private readonly ConfigEntry<int> _ioPortRootsPerSecond;
     private readonly ConfigEntry<int> _ioPortRootsPerFee;
-    private readonly ConfigEntry<bool> _terminalDiagnostics;
     private readonly ConfigEntry<bool> _itemIdentityLog;
     private readonly ConfigEntry<bool> _terminalTestView;
     private readonly ConfigEntry<bool> _showCellPages;
@@ -128,8 +127,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
             () => text.Get("io_port_fee_name"), tooltip: () => text.Get("io_port_fee_desc"));
         _showCellPages = config.Define("debug_show_cell_pages", false, debug,
             () => text.Get("debug_show_cell_pages_name"), tooltip: () => text.Get("debug_show_cell_pages_desc"));
-        _terminalDiagnostics = config.Define("terminal_diagnostics", true, debug,
-            () => text.Get("terminal_diagnostics_name"), tooltip: () => text.Get("terminal_diagnostics_desc"));
         foreach (var category in _logCategories.Entries)
         {
             var setting = new LogSetting(category);
@@ -186,7 +183,7 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         {
             (_controllerPowerUsage, power), (_drivePowerUsage, power), (_terminalPowerUsage, power), (_ioPortPowerUsage, power),
             (_ioPortRootsPerSecond, ioPort), (_ioPortRootsPerFee, ioPort),
-            (_showCellPages, debug), (_terminalDiagnostics, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
+            (_showCellPages, debug), (_itemIdentityLog, debug), (_terminalTestView, debug),
             (_pinyinKeyboard, search), (_pinyinMode, search), (_zh2z, search), (_sh2s, search), (_ch2c, search),
             (_ang2an, search), (_ing2in, search), (_eng2en, search), (_u2v, search),
             (_tagSearchMode, search), (_typeSearchMode, search), (_descriptionSearchMode, search),
@@ -416,7 +413,6 @@ internal sealed class DigitalStorageSettings : IGridPowerSettingsPort, ITerminal
         () => text.Get("terminal_search_" + suffix + "_name"),
         () => text.Get("terminal_search_" + suffix + "_desc"));
 
-    internal bool GetTerminalDiagnostics() => _terminalDiagnostics.Value;
 
     internal LogCategorySettings GetLogSettings(LogCategory category)
     {

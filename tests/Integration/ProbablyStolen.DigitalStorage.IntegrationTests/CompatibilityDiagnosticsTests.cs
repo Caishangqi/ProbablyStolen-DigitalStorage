@@ -34,4 +34,26 @@ public sealed class CompatibilityDiagnosticsTests
         Assert.That(output[0], Does.Contain("reason=\"decoration_overlay_unavailable\""));
         Assert.That(output[0], Does.Contain("decoration_id=\"digital_storage:test/border\""));
     }
+
+    [Test]
+    public void PluginLog_WritesToTheCompatibilityCategoryWithThePluginId()
+    {
+        var categories = new LogCategories();
+        var category = categories.Register("log_comp", "log_comp", "Compatibility", LogVerbosity.Info, true);
+        categories.Freeze();
+        var output = new List<string>();
+        var settings = new LogCategorySettings(true, LogVerbosity.Warning);
+        var logger = new DiagnosticLogger(categories, _ => settings, (_, message) => output.Add(message));
+        var log = new CompatibilityDiagnostics(logger, category).PluginLog("digital_storage:test");
+
+        log.Info("stocking_take_refused", "could not take bread (Refused).");
+        log.Warning("Not A Token", "dropped");
+        log.Warning("stocking_move_failed", "move of bread failed (InvalidOperationException).");
+
+        Assert.That(output, Is.EqualTo(new[]
+        {
+            "category=LogComp level=warning event=stocking_move_failed plugin_id=\"digital_storage:test\" " +
+            "move of bread failed (InvalidOperationException)."
+        }));
+    }
 }

@@ -32,7 +32,7 @@ internal sealed class DrivePriorityScreen : SubScreen
         if (DrivePriorityPanel.Of(drive) is not { } priority ||
             drive.contentWindow?.childElement is not MachineryPanelRow row || row.GetPanel(DrivePriorityPanel.Role) is not { } panel)
         {
-            Window.WriteDiagnostic("drive_priority result=missing");
+            Window.WriteWarning("drive_priority result=missing");
             return false;
         }
 

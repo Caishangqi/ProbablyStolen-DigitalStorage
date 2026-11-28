@@ -21,11 +21,13 @@ internal sealed class IntegrationRegistration : ITerminalDecorationRegistration
     private readonly List<PatchRequest> _patches = new();
     private readonly List<Func<string?>> _checks = new();
 
-    internal IntegrationRegistration(string detectedModVersion, IDigitalStorageRuntime runtime, string pluginId = "")
+    internal IntegrationRegistration(string detectedModVersion, IDigitalStorageRuntime runtime, string pluginId = "",
+        IIntegrationLog? log = null)
     {
         DetectedModVersion = detectedModVersion ?? string.Empty;
         Runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _pluginId = pluginId ?? throw new ArgumentNullException(nameof(pluginId));
+        Log = log ?? SilentIntegrationLog.Instance;
     }
 
     /// <inheritdoc />
@@ -33,6 +35,9 @@ internal sealed class IntegrationRegistration : ITerminalDecorationRegistration
 
     /// <inheritdoc />
     public IDigitalStorageRuntime Runtime { get; }
+
+    /// <inheritdoc />
+    public IIntegrationLog Log { get; }
 
     /// <summary>Gets the first reason the plugin cannot work, or null.</summary>
     internal string? Failure { get; private set; }
@@ -107,5 +112,19 @@ internal sealed class IntegrationRegistration : ITerminalDecorationRegistration
         internal Action Callback { get; }
 
         public void Dispose() => _invalidate = null;
+    }
+}
+
+/// <summary>A plugin log that writes nothing, for hosts without a compatibility log.</summary>
+internal sealed class SilentIntegrationLog : IIntegrationLog
+{
+    internal static readonly SilentIntegrationLog Instance = new();
+
+    public void Warning(string eventName, string text)
+    {
+    }
+
+    public void Info(string eventName, string text)
+    {
     }
 }

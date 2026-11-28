@@ -129,6 +129,9 @@ public interface IIntegrationRegistration
     /// <summary>Gets the runtime; plugins may keep it for their patches.</summary>
     IDigitalStorageRuntime Runtime { get; }
 
+    /// <summary>Gets the compatibility log for this plugin; plugins may keep it for their patches.</summary>
+    IIntegrationLog Log { get; }
+
     /// <summary>
     /// Requests a Harmony patch. <paramref name="target"/> is null when the plugin could not find the method; the host
     /// then marks the plugin incompatible and applies none of its patches. Patch methods must be static methods of the

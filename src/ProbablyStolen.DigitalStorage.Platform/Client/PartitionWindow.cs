@@ -21,6 +21,8 @@ using ProbablyStolen.DigitalStorage.Platform.Storage;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -79,14 +81,14 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
     private object[] _messageArgs = Array.Empty<object>();
 
     private PartitionWindow(TerminalRegistry registry, ModText text, GameItem cell, ITerminalViewSettings view,
-        TerminalSearchService search, Action<string> log, ButtonIcons icons, SlotMetricsService slotMetrics)
-        : base(registry, text, view, () => false, () => false, log, null, icons, slotMetrics)
+        TerminalSearchService search, CategoryLog log, ButtonIcons icons, SlotMetricsService slotMetrics)
+        : base(registry, text, view, () => false, log, null, icons, slotMetrics)
     {
         _text = text;
         _view = view;
         _search = search;
         _cell = cell;
-        _log = log;
+        _log = log.Sink(LogVerbosity.Warning, "partition_window");
         try
         {
             _sampleView = CellPages.ReadCached(cell, CellWriteState.ExtractOnly);
@@ -100,7 +102,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
         _draft = new PartitionDraft(_opened.Config, CellTypeLimitSource.ReadOrBase(cell).PartitionRuleLimit, Columns,
             () => Guid.NewGuid().ToString("N"));
         _pictures = new ItemPictureCapture(new PictureSourceChain<GameItem>(
-            key => _dropped.TryGetValue(key, out var item) ? item : null, FindInCell), log, "partition");
+            key => _dropped.TryGetValue(key, out var item) ? item : null, FindInCell), _log, "partition");
         _pointerBack = new PartitionPointerBackCoordinator(_gestures, _pointer);
         _hoverHint = new PartitionHoverHintCoordinator(ShowRuleHint, HideRuleHint);
         _draft.Changed += Save;
@@ -110,7 +112,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
 
     /// <summary>Opens the editor for a cell, closing any other partition editor first.</summary>
     internal static void Open(ModText text, GameItem cell, ITerminalViewSettings view, TerminalSearchService search,
-        Action<string> log, ButtonIcons icons, SlotMetricsService slotMetrics)
+        CategoryLog log, ButtonIcons icons, SlotMetricsService slotMetrics)
     {
         if (CustomUIManager.Instance == null) return;
         if (!icons.Ready)
@@ -119,7 +121,7 @@ internal sealed partial class PartitionWindow : TerminalWindowHost
             return;
         }
         CloseCurrent();
-        var registry = PartitionTerminalFeature.CreateRegistry((IConfigManager)view, log,
+        var registry = PartitionTerminalFeature.CreateRegistry((IConfigManager)view, log.Sink(LogVerbosity.Verbose, "terminal_trace"),
             owner => new PartitionTerminalView((PartitionWindow)owner),
             context => ((PartitionWindow)context.Window).DraftMode,
             context => ((PartitionWindow)context.Window).ToggleMode(),

@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using ProbablyStolen.DigitalStorage.Platform.Client.Terminal;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -32,7 +33,7 @@ public static class TerminalOpenRouter
         }
         catch (Exception error)
         {
-            UnityEngine.Debug.LogError($"Digital Storage: terminal window failed to open ({error.GetType().Name}); opening the native window");
+            PlatformLogs.Current?.Ui.Error("terminal_open_failed", $"terminal window failed to open ({error.GetType().Name}); opening the native window");
             return false;
         }
     }

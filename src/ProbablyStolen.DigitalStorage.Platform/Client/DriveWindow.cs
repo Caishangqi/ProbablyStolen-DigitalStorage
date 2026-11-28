@@ -10,6 +10,8 @@ using ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Modules;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using UnityEngine;
 using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -23,8 +25,8 @@ internal sealed class DriveWindow : TerminalWindowHost
     private readonly MemoryTerminalStore _currentView = new();
 
     private DriveWindow(TerminalRegistry registry, ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        SlotMetricsService slotMetrics, Action<string> log)
-        : base(registry, text, settings, () => false, () => false, log, null, icons, slotMetrics)
+        SlotMetricsService slotMetrics, CategoryLog log)
+        : base(registry, text, settings, () => false, log, null, icons, slotMetrics)
     {
     }
 
@@ -33,9 +35,9 @@ internal sealed class DriveWindow : TerminalWindowHost
 
     /// <summary>Creates the window of one drive with its own registry.</summary>
     internal static DriveWindow Create(ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        SlotMetricsService slotMetrics, Action<string> log)
+        SlotMetricsService slotMetrics, CategoryLog log)
     {
-        var registry = DriveTerminalFeature.CreateRegistry((IConfigManager)settings, log,
+        var registry = DriveTerminalFeature.CreateRegistry((IConfigManager)settings, log.Sink(LogVerbosity.Verbose, "terminal_trace"),
             owner => new DriveTerminalView((DriveWindow)owner),
             owner => new TerminalModulesScreen((DriveWindow)owner),
             owner => new DrivePriorityScreen((DriveWindow)owner));
@@ -108,7 +110,7 @@ internal sealed class DriveTerminalView : ITerminalView
         if (_owner.Terminal.contentWindow?.childElement is not MachineryPanelRow row ||
             row.GetPanel(MachineContentWindow.CellsPanelRole) is not { } panel)
         {
-            _owner.WriteDiagnostic("drive_cells result=missing");
+            _owner.WriteWarning("drive_cells result=missing");
             return;
         }
 

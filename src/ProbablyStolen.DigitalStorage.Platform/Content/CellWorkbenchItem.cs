@@ -58,7 +58,7 @@ internal sealed class CellWorkbenchItem
     {
         if (_summaryFailureLogged) return;
         _summaryFailureLogged = true;
-        _log($"Digital Storage: workbench cannot {operation} ({error.GetType().Name}).");
+        _log($"workbench cannot {operation} ({error.GetType().Name}).");
     }
 
     internal static string? Refusal(GameItem candidate)

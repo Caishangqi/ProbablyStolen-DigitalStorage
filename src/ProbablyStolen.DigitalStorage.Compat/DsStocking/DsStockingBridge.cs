@@ -6,6 +6,7 @@ using ProbablyStolen.DigitalStorage.Api.Networking;
 using ProbablyStolen.DigitalStorage.Api.Networking.Security;
 using ProbablyStolen.DigitalStorage.Api.Storage;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Api.Integration;
 
 namespace ProbablyStolen.DigitalStorage.Compat.DsStocking;
 
@@ -36,11 +37,15 @@ public static class DsStockingBridge
 
     internal static bool IsRunning => _running;
 
-    /// <summary>Sets the runtime the bridge uses; null detaches it and ends a run.</summary>
-    internal static void Attach(IDigitalStorageRuntime? runtime)
+    /// <summary>Gets the compatibility log the bridge writes to, once the plugin registered.</summary>
+    internal static IIntegrationLog? Log { get; private set; }
+
+    /// <summary>Sets the runtime and log the bridge uses; null detaches it and ends a run.</summary>
+    internal static void Attach(IDigitalStorageRuntime? runtime, IIntegrationLog? log = null)
     {
         EndRun();
         _runtime = runtime;
+        if (log != null) Log = log;
     }
 
     /// <summary>Starts a run; without a runtime every move stays native.</summary>
@@ -54,7 +59,7 @@ public static class DsStockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper run could not see the network ({error.GetType().Name}).");
+            Log?.Warning("ds_stocking_scan_failed", $"DS Stocking Helper run could not see the network ({error.GetType().Name}).");
             return;
         }
 
@@ -75,7 +80,7 @@ public static class DsStockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper run did not end cleanly ({error.GetType().Name}).");
+            Log?.Warning("ds_stocking_run_unclean", $"DS Stocking Helper run did not end cleanly ({error.GetType().Name}).");
         }
     }
 
@@ -101,7 +106,7 @@ public static class DsStockingBridge
                 var status = grid.GetStorageService().GetInventory().GetStoredRoots(roots);
                 if (status != StorageStatus.Done)
                 {
-                    Debug.Log($"Digital Storage: DS Stocking Helper skipped a network ({status}).");
+                    Log?.Info("ds_stocking_network_skipped", $"DS Stocking Helper skipped a network ({status}).");
                     continue;
                 }
 
@@ -114,7 +119,7 @@ public static class DsStockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper could not list network goods ({error.GetType().Name}).");
+            Log?.Warning("ds_stocking_list_failed", $"DS Stocking Helper could not list network goods ({error.GetType().Name}).");
         }
 
         return goods;
@@ -149,7 +154,7 @@ public static class DsStockingBridge
         catch (Exception error)
         {
             // Nothing moved through the API when it threw before its transfer, and a transfer never half-moves a unit.
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper move of {item.identifier} failed ({error.GetType().Name}).");
+            Log?.Warning("ds_stocking_move_failed", $"DS Stocking Helper move of {item.identifier} failed ({error.GetType().Name}).");
             return requested;
         }
 
@@ -170,7 +175,7 @@ public static class DsStockingBridge
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper return of {item.identifier} failed ({error.GetType().Name}).");
+            Log?.Warning("ds_stocking_return_failed", $"DS Stocking Helper return of {item.identifier} failed ({error.GetType().Name}).");
         }
 
         return true;
@@ -191,7 +196,7 @@ public static class DsStockingBridge
         }
         else if (result.Status is StorageStatus.Unavailable or StorageStatus.Rejected)
         {
-            Debug.Log($"Digital Storage: DS Stocking Helper could not take {item.identifier} ({result.Status}).");
+            Log?.Info("ds_stocking_take_refused", $"DS Stocking Helper could not take {item.identifier} ({result.Status}).");
         }
 
         return (int)Math.Min(result.Units, int.MaxValue);
@@ -208,7 +213,7 @@ public static class DsStockingBridge
         }
 
         // The root stays on the counter, still owned by the player; DS Stocking Helper reports it as put up.
-        Debug.Log($"Digital Storage: DS Stocking Helper could not return {item.identifier} to the network ({result.Status}).");
+        Log?.Info("ds_stocking_return_refused", $"DS Stocking Helper could not return {item.identifier} to the network ({result.Status}).");
         return 0;
     }
 

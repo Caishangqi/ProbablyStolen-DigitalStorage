@@ -22,17 +22,19 @@ public sealed class StockingBridgeTests
     private GameGridInventory _page = null!;
     private GameGridInventory _counter = null!;
 
+    private RecordingIntegrationLog _log = null!;
+
     [SetUp]
     public void SetUp()
     {
         GraphUtils.NativeTransfers.Clear();
         GraphUtils.NativeRemaining = 0;
-        UnityEngine.Debug.Lines.Clear();
+        _log = new RecordingIntegrationLog();
         _page = new GameGridInventory();
         _counter = new GameGridInventory();
         _network = new FakeNetwork();
         _runtime = new FakeRuntime(_network);
-        StockingBridge.Attach(_runtime);
+        StockingBridge.Attach(_runtime, _log);
     }
 
     [TearDown]
@@ -125,7 +127,7 @@ public sealed class StockingBridgeTests
 
         Assert.That(remaining, Is.EqualTo(4));
         Assert.That(item.parentInventory, Is.SameAs(_counter));
-        Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("could not return"));
+        Assert.That(_log.Lines, Has.Some.Contains("could not return"));
     }
 
     [Test]
@@ -171,7 +173,7 @@ public sealed class StockingBridgeTests
 
         Assert.That(remaining, Is.EqualTo(3));
         Assert.That(item.parentInventory, Is.SameAs(_page));
-        Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("failed"));
+        Assert.That(_log.Lines, Has.Some.Contains("failed"));
         Assert.That(_runtime.Access.IsBatching, Is.False);
     }
 

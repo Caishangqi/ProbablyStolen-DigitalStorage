@@ -33,7 +33,9 @@ public sealed class PlatformComposition : IDisposable
 {
     private readonly ButtonIcons _buttonIcons;
     private readonly SlotMetricsService _slotMetrics;
+    // Only for the startup and shutdown status lines, which players need in every report.
     private readonly ModLog _log;
+    private readonly PlatformLogs _logs;
     private readonly StartupStatusPresenter _statusPresenter;
     private readonly string _modId;
     private readonly ItemAppearance _appearance;
@@ -70,7 +72,7 @@ public sealed class PlatformComposition : IDisposable
     private bool _isEnabled;
     private bool _isDisposed;
 
-    private PlatformComposition(ModLog log, StartupStatusPresenter statusPresenter, string modId,
+    private PlatformComposition(ModLog log, PlatformLogs logs, StartupStatusPresenter statusPresenter, string modId,
         TooltipComposition tooltip, BasicCellHandler cellHandler,
         ItemAppearance appearance,
         StorageContentRegistration content, ItemContentService itemContent, CellHealth health, CellRecovery recovery, LegacyMigration migration, StorageEventBus events,
@@ -95,8 +97,10 @@ public sealed class PlatformComposition : IDisposable
         _networkSprites = networkSprites ?? throw new ArgumentNullException(nameof(networkSprites));
         _customers = customers ?? throw new ArgumentNullException(nameof(customers));
         _search = search ?? throw new ArgumentNullException(nameof(search));
-        _typeBackfill = new ItemTypeBackfill(log);
+        _typeBackfill = new ItemTypeBackfill(logs.Storage);
+        PlatformLogs.Activate(logs);
         _log = log;
+        _logs = logs;
         _statusPresenter = statusPresenter;
         _modId = modId;
         _tooltip = tooltip;
@@ -109,7 +113,7 @@ public sealed class PlatformComposition : IDisposable
         _recovery = recovery;
         _migration = migration;
         _pinyinLifecycle = new PinyinLifecycleCoordinator(
-            locale => _settings.GetSearchConfiguration(locale, message => _log.Error(message)),
+            locale => _settings.GetSearchConfiguration(locale, _logs.Ui.Sink(LogVerbosity.Error, "search_config_invalid")),
             _search.Update, _search.Service.Configuration.PinyinEnabled);
     }
 
@@ -132,7 +136,7 @@ public sealed class PlatformComposition : IDisposable
         var plugins = IntegrationHost.Discover(pluginTypes ?? throw new ArgumentNullException(nameof(pluginTypes)), _compatibility.Report);
         _integrations = new IntegrationHost(plugins, new NativeIntegrationEnvironment(),
             new HarmonyIntegrationPatcher(_modId), _settings, _runtime, _compatibility.Report, _decorations,
-            _buttonIcons.HasOverlay, _contentApi.RegisterBatch);
+            _buttonIcons.HasOverlay, _contentApi.RegisterBatch, _compatibility.PluginLog);
         _integrations.Initialize();
     }
 
@@ -165,14 +169,8 @@ public sealed class PlatformComposition : IDisposable
 
         var statusPresenter = new StartupStatusPresenter(identity!);
         var text = new ModText(identity!);
-        var buttonIcons = new ButtonIcons(message => log.Error(message));
-        var appearance = new ItemAppearance(identity!);
-        var componentDefinition = new StorageComponent();
-        var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
-        var inventory = new DriveCellInventory(recipe);
         var categories = new BuiltinLogCategories();
         var networkPowerSettings = new DigitalStorageSettings(identity!.Id, text, categories.Registry);
-        var slotMetrics = new SlotMetricsService(networkPowerSettings, message => log.Warning(message));
         var diagnosticLogger = new DiagnosticLogger(categories.Registry, networkPowerSettings.GetLogSettings,
             (level, message) =>
             {
@@ -180,21 +178,28 @@ public sealed class PlatformComposition : IDisposable
                 else if (level == LogVerbosity.Warning) log.Warning(message);
                 else log.Log(message);
             });
+        var logs = new PlatformLogs(diagnosticLogger, categories);
+        var buttonIcons = new ButtonIcons(logs.Ui.Sink(LogVerbosity.Error, "button_icons_failed"));
+        var appearance = new ItemAppearance(identity!);
+        var componentDefinition = new StorageComponent();
+        var recipe = new StorageCellDisassemblyRecipe(componentDefinition);
+        var inventory = new DriveCellInventory(recipe);
+        var slotMetrics = new SlotMetricsService(networkPowerSettings, logs.Ui.Sink(LogVerbosity.Warning, "slot_metrics"));
         var compatibility = new CompatibilityDiagnostics(diagnosticLogger, categories.Comp);
         var decorations = new IntegrationDecorationCatalog(notificationFailed: compatibility.ReportDecorationNotificationFailure);
-        var diagnostics = new StorageDiagnostics(message => log.Error(message), () => false);
+        var diagnostics = new StorageDiagnostics(logs.Content.Sink(LogVerbosity.Error, "content_failure"), () => false);
         var cellDiagnostics = new CellDiagnostics(diagnosticLogger, categories.Storage);
         var search = new TerminalSearchComposition(identity.Id, text,
-            networkPowerSettings.GetSearchConfiguration(null, message => log.Error(message)),
-            message => log.Error(message), registerSearchAddons);
+            networkPowerSettings.GetSearchConfiguration(null, logs.Ui.Sink(LogVerbosity.Error, "search_config_invalid")),
+            logs.Ui.Sink(LogVerbosity.Error, "search_failed"), registerSearchAddons);
         var networkScanner = new NativeNetworkScanner(networkPowerSettings,
-            message => log.Error(message),
+            logs.Network.Sink(LogVerbosity.Error, "network_scan_failed"),
             drive => NativeCellResolver.Get(drive));
         var cellHealth = new CellHealth(text, cellDiagnostics);
         var migration = new LegacyMigration(cellHealth, cellDiagnostics);
         var recovery = new CellRecovery(cellHealth, cellDiagnostics);
         var transferDiagnostics = new TransferDiagnostics(diagnosticLogger, categories.Transfer);
-        var networkPower = new GridNetworkPowerCoordinator(networkScanner, message => log.Log(message),
+        var networkPower = new GridNetworkPowerCoordinator(networkScanner, logs.Transfer.Sink(LogVerbosity.Info, "store_rejected"),
             cell =>
         {
             // Migration failures during play need the same warning as failures during loading.
@@ -202,7 +207,7 @@ public sealed class PlatformComposition : IDisposable
             if (!migrated) cellHealth.WarnDoNotSave(1, "failed to migrate");
             return migrated;
         }, cellDiagnostics);
-        var eventBus = new StorageEventBus(message => log.Error(message));
+        var eventBus = new StorageEventBus(logs.Network.Sink(LogVerbosity.Error, "event_handler_failed"));
         var networkEvents = new NativeNetworkEvents(eventBus);
         var cellHandler = new BasicCellHandler(text);
         // Entry names and search text depend on the language and settings; both changes are posted as ConfigChanged.
@@ -210,60 +215,60 @@ public sealed class PlatformComposition : IDisposable
         {
             if (change.Reason == NetworkChangeReason.ConfigChanged) networkPower.Storage.ForgetEntryTexts();
         });
-        var contentApi = new DigitalStorageContentService(message => log.Warning(message), diagnostics);
+        var contentApi = new DigitalStorageContentService(logs.Content.Sink(LogVerbosity.Warning, "content_api"), diagnostics);
         var windows = new MachineContentWindow(text, networkPower, networkEvents);
         var contentSynchronization = new ItemContentSynchronization(ItemContentDefinitions.All, key => text.Get(key),
-            message => log.Error(message), (state, price) => ItemValueAdjustment.Adjust(state, price, contentApi.MaximumStage));
+            logs.Content.Sink(LogVerbosity.Error, "item_content_failed"),
+            (state, price) => ItemValueAdjustment.Adjust(state, price, contentApi.MaximumStage));
         var itemContent = new ItemContentService(contentSynchronization, () =>
         {
             search.Service.UpdateConfiguration(search.Service.Configuration);
             PartitionWindow.InvalidateSamples();
             eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged));
-        }, message => log.Error(message), diagnostics);
+        }, logs.Content.Sink(LogVerbosity.Error, "item_content_failed"), diagnostics);
         var component = new StorageComponentFactory(appearance, componentDefinition, recipe);
-        var cell = new StorageCellItem(text, appearance, recipe, log, networkPowerSettings.GetShowCellPages,
+        var cell = new StorageCellItem(text, appearance, recipe, logs.Storage, networkPowerSettings.GetShowCellPages,
             itemContent.Changed);
         var housing = new MaterialItem(cell);
         var drive = new DriveItem(appearance, windows, inventory, networkEvents, text,
-            () => DriveWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, message => log.Log(message)));
+            () => DriveWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, logs.Ui));
         var controller = new ControllerItem(appearance, windows);
-        var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, message => log.Log(message),
+        var terminalRegistry = TerminalFeatures.Create(networkPowerSettings, logs.Ui.Sink(LogVerbosity.Verbose, "terminal_trace"),
             networkPowerSettings.GetItemIdentityLog, networkPowerSettings.GetTerminalKeepOpen,
             networkPowerSettings.SetTerminalKeepOpen, () => networkPowerSettings.ExtractionPriority,
             value => networkPowerSettings.ExtractionPriority = value);
         var terminal = new TerminalItem(text, appearance, windows, networkPower,
-            networkPowerSettings.GetTerminalDiagnostics, networkPowerSettings.GetItemIdentityLog, log, networkEvents,
+            networkPowerSettings.GetItemIdentityLog, logs, networkEvents,
             search.Service,
             networkPowerSettings, terminalRegistry, networkPowerSettings.GetTerminalTestView, buttonIcons, slotMetrics,
             transferDiagnostics,
             compatibility, decorations, identity.Id);
         var workbench = new CellWorkbenchItem(text, appearance,
-            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, message => log.Log(message),
+            target => PartitionWindow.Open(text, target, networkPowerSettings, search.Service, logs.Ui,
                 buttonIcons, slotMetrics),
             PartitionWindow.CloseFor,
-            message => log.Log(message));
-        var modules = new CellModuleFactory(appearance, itemContent.Changed, text, message => log.Error(message));
+            logs.Ui.Sink(LogVerbosity.Warning, "workbench_failed"));
+        var modules = new CellModuleFactory(appearance, itemContent.Changed, text, logs.Content.Sink(LogVerbosity.Error, "module_failed"));
         itemContent.SetModulePresenter(modules.Present);
         var goods = new StorageGoods(modules);
-        var networkSprites = new NetworkSprites(log);
-        var customers = new NativeCustomerCatalog(log);
+        var networkSprites = new NetworkSprites(logs.Content);
+        var customers = new NativeCustomerCatalog(logs.Content);
         var coordinator = new IoPortCoordinator(networkScanner, networkPower.Storage, transferDiagnostics, networkEvents,
             networkPowerSettings, () => UnityEngine.Time.frameCount);
         var tooltip = new TooltipComposition(networkScanner, networkPower, text, cellHandler, workbench.FindUsage,
-            message => log.Error(message),
+            logs.Ui.Sink(LogVerbosity.Error, "tooltip_failed"),
             () => new IoPortTooltipContributor(text, networkPowerSettings, coordinator.ReadDisplay));
         var ioPort = new IoPortItem(appearance, windows,
-            _ => IoPortWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, coordinator,
-                message => log.Log(message)),
+            _ => IoPortWindow.Create(text, networkPowerSettings, buttonIcons, slotMetrics, coordinator, logs.Ui),
             coordinator, text);
         var content = new StorageContentRegistration(terminal, drive, cell, controller, component, housing, workbench,
-            modules, new TerminalModuleFactory(appearance), ioPort, itemContent, log);
-        var composition = new PlatformComposition(log, statusPresenter, identity!.Id,
+            modules, new TerminalModuleFactory(appearance), ioPort, itemContent, logs.Content);
+        var composition = new PlatformComposition(log, logs, statusPresenter, identity!.Id,
             tooltip, cellHandler, appearance, content, itemContent, cellHealth, recovery, migration, eventBus,
-            networkPowerSettings, new StorageVendors(text, log, goods, customers),
-            new DigitalStorageNetwork(identity.Id, text, goods, log), networkSprites, customers, search, workbench,
+            networkPowerSettings, new StorageVendors(text, logs.Content, goods, customers),
+            new DigitalStorageNetwork(identity.Id, text, goods, logs.Content), networkSprites, customers, search, workbench,
             contentApi,
-            new DigitalStorageRuntime(networkPower, networkScanner, slotMetrics, message => log.Warning(message),
+            new DigitalStorageRuntime(networkPower, networkScanner, slotMetrics, logs.Comp.Sink(LogVerbosity.Warning, "public_api"),
                 () => eventBus.Post(new NetworkChanged(NetworkChangeReason.ContentsChanged))), coordinator, buttonIcons,
             slotMetrics, compatibility, decorations);
         log.Log(statusPresenter.Present(ModuleStartupPhase.Initialized));
@@ -303,7 +308,8 @@ public sealed class PlatformComposition : IDisposable
             _content.Enable();
             _vendors.Enable();
             _network.Enable();
-            _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed, message => _log.Error(message));
+            _localeRegistration = LocaleSelectionBridge.RegisterSettled(OnLocaleConfirmed,
+                _logs.Ui.Sink(LogVerbosity.Error, "locale_failed"));
             ModHook.OnModAssetsLoaded += OnAssetsLoaded;
             ModHook.OnModConfigApplied += OnConfigApplied;
             SceneManager.sceneUnloaded += OnSceneUnloaded;
@@ -320,7 +326,7 @@ public sealed class PlatformComposition : IDisposable
             ModHook.OnGameLoadedLate += _itemContent.FinishLoad;
             ModHook.OnGameLoadedLate += StartIoPortRun;
             _ioPortFrames = IoPortFrameDriver.Create(_ioPortCoordinator.OnFrame,
-                error => _log.Error($"Digital Storage: IO Port frame step failed ({error.GetType().Name})."));
+                error => _logs.Transfer.Error("io_port_frame_failed", $"IO Port frame step failed ({error.GetType().Name})."));
             _storedRootChecks = new StoredRootChecks<GameItem, GameItem>(
                 check => ModHelper.RunOnMainThread(_modId, check), StoredItemChanges.StillMatches, CellInventoryCache.ForgetWithRoots,
                 () => _events.Post(new NetworkChanged(NetworkChangeReason.StoredItemChanged)));
@@ -408,6 +414,7 @@ public sealed class PlatformComposition : IDisposable
         _contentApi.Dispose();
         VolatileFeatureRules.Reset();
         StoredRootKeys.Clear();
+        if (PlatformLogs.Current == _logs) PlatformLogs.Activate(null);
         _vendors.Dispose();
         _network.Dispose();
         _networkSprites.Dispose();
@@ -429,7 +436,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Warning($"Digital Storage: the public API could not be {(runtime == null ? "withdrawn" : "exposed")} " +
+            _logs.Comp.Warning("public_api_exposure_failed", $"the public API could not be {(runtime == null ? "withdrawn" : "exposed")} " +
                 $"({error.GetType().Name}: {error.Message}).");
         }
     }
@@ -487,7 +494,7 @@ public sealed class PlatformComposition : IDisposable
                 // Open windows rebuild when a slot, margin or dock button size changed.
                 _slotMetrics.Refresh();
                 _pinyinLifecycle.OnConfigApplied();
-                _log.Log("Digital Storage: configuration applied; open network views refresh now.");
+                _logs.Ui.Info("config_applied", "configuration applied; open network views refresh now.");
                 _events.Post(new NetworkChanged(NetworkChangeReason.ConfigChanged));
             }
         }
@@ -508,7 +515,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Warning($"Digital Storage: mod integrations could not register ({error.GetType().Name}: {error.Message}).");
+            _logs.Comp.Warning("integrations_unavailable", $"mod integrations could not register ({error.GetType().Name}: {error.Message}).");
         }
 
         _networkSprites.Load(mod);
@@ -524,11 +531,11 @@ public sealed class PlatformComposition : IDisposable
         try
         {
             _contentApi.Bootstrap(builtin: true);
-            _log.Log("Digital Storage: content.v2 registries frozen.");
+            _logs.Content.Info("registries_frozen", "content.v2 registries frozen.");
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: content registries are unavailable ({error.GetType().Name}: {error.Message}).");
+            _logs.Content.Error("registries_unavailable", $"content registries are unavailable ({error.GetType().Name}: {error.Message}).");
         }
     }
 
@@ -541,7 +548,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Warning($"Digital Storage: the tooltip API could not be {(service == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
+            _logs.Comp.Warning("tooltip_api_exposure_failed", $"the tooltip API could not be {(service == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
         }
     }
     private void ExposeContent(IDigitalStorageContentApi? content)
@@ -552,7 +559,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Warning($"Digital Storage: content.v1 could not be {(content == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
+            _logs.Comp.Warning("content_api_exposure_failed", $"content.v1 could not be {(content == null ? "withdrawn" : "exposed")} ({error.GetType().Name}: {error.Message}).");
         }
     }
     private void ValidateResources()
@@ -572,7 +579,7 @@ public sealed class PlatformComposition : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: content resources are unavailable ({error.GetType().Name}: {error.Message}).");
+            _logs.Content.Error("content_resources_unavailable", $"content resources are unavailable ({error.GetType().Name}: {error.Message}).");
         }
     }
 

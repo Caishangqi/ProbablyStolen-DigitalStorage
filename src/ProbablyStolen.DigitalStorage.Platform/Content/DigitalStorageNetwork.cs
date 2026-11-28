@@ -4,6 +4,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -26,10 +27,10 @@ internal sealed class DigitalStorageNetwork : IDisposable
     private readonly string _modId;
     private readonly ModText _text;
     private readonly StorageGoods _goods;
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private bool _enabled;
 
-    internal DigitalStorageNetwork(string modId, ModText text, StorageGoods goods, ModLog log)
+    internal DigitalStorageNetwork(string modId, ModText text, StorageGoods goods, CategoryLog log)
     {
         _modId = modId ?? throw new ArgumentNullException(nameof(modId));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -86,7 +87,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: network upgrade prices were not updated ({error.GetType().Name}: {error.Message}).");
+            _log.Error("network_upgrade_prices_failed", $"network upgrade prices were not updated ({error.GetType().Name}: {error.Message}).");
         }
     }
 
@@ -94,7 +95,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
     {
         var upgrade = ModHelper.GetNetworkUpgrade(id);
         if (upgrade == null || upgrade.IsUnlocked() || upgrade.cost == cost) return;
-        _log.Log($"Digital Storage: network upgrade {id} price updated from {upgrade.cost} to {cost}.");
+        _log.Info("network_upgrade_price", $"network upgrade {id} price updated from {upgrade.cost} to {cost}.");
         upgrade.cost = cost;
     }
 
@@ -124,7 +125,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: the network upgrades could not be registered ({error.GetType().Name}: {error.Message}).");
+            _log.Error("network_upgrades_failed", $"the network upgrades could not be registered ({error.GetType().Name}: {error.Message}).");
         }
     }
 
@@ -160,7 +161,7 @@ internal sealed class DigitalStorageNetwork : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: the {name} network reward was not fully granted ({error.GetType().Name}: {error.Message}).");
+            _log.Error("network_reward_failed", $"the {name} network reward was not fully granted ({error.GetType().Name}: {error.Message}).");
         }
     }
 }

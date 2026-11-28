@@ -33,6 +33,7 @@ internal sealed class IntegrationHost : IDisposable
     private readonly IntegrationDecorationCatalog? _decorations;
     private readonly Func<string, bool>? _overlayAvailable;
     private readonly Action<string, Action<IContentRegistrationBatch>>? _registerContent;
+    private readonly Func<string, IIntegrationLog>? _pluginLog;
     private bool _initialized;
     private bool _enabled;
     private bool _registered;
@@ -43,7 +44,8 @@ internal sealed class IntegrationHost : IDisposable
         IIntegrationPatcher patcher, IIntegrationSettings settings, IDigitalStorageRuntime runtime,
         Action<IntegrationNotice> log, IntegrationDecorationCatalog? decorations = null,
         Func<string, bool>? overlayAvailable = null,
-        Action<string, Action<IContentRegistrationBatch>>? registerContent = null)
+        Action<string, Action<IContentRegistrationBatch>>? registerContent = null,
+        Func<string, IIntegrationLog>? pluginLog = null)
     {
         _entries = (plugins ?? throw new ArgumentNullException(nameof(plugins))).Select(plugin => new Entry(plugin)).ToList();
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -54,6 +56,7 @@ internal sealed class IntegrationHost : IDisposable
         _decorations = decorations;
         _overlayAvailable = overlayAvailable;
         _registerContent = registerContent;
+        _pluginLog = pluginLog;
     }
 
     /// <summary>
@@ -287,7 +290,8 @@ internal sealed class IntegrationHost : IDisposable
     {
         if (!entry.Supported || !CheckRunning(entry)) return;
 
-        var registration = new IntegrationRegistration(entry.Version, _runtime, entry.Uid ?? string.Empty);
+        var registration = new IntegrationRegistration(entry.Version, _runtime, entry.Uid ?? string.Empty,
+            _pluginLog?.Invoke(entry.Uid ?? string.Empty));
         if (!Call(entry, "register", () => entry.Plugin.Register(registration))) return;
         if (registration.Failure != null)
         {

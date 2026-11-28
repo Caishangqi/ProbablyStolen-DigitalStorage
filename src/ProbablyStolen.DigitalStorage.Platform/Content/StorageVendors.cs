@@ -9,6 +9,7 @@ using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage.Upgrades;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -28,12 +29,12 @@ internal sealed class StorageVendors : IDisposable
         CellUpgradeInventory.EqualDistributionId, StackingModule.ModuleId
     };
     private readonly ModText _text;
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly StorageGoods _goods;
     private readonly NativeCustomerCatalog _customers;
     private bool _enabled;
 
-    internal StorageVendors(ModText text, ModLog log, StorageGoods goods, NativeCustomerCatalog customers)
+    internal StorageVendors(ModText text, CategoryLog log, StorageGoods goods, NativeCustomerCatalog customers)
     {
         _text = text ?? throw new ArgumentNullException(nameof(text));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -83,7 +84,7 @@ internal sealed class StorageVendors : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: Dr. Jackson stock was not added: {error.GetType().Name}");
+            _log.Error("vendor_stock_failed", $"Dr. Jackson stock was not added: {error.GetType().Name}");
         }
     }
 
@@ -95,11 +96,11 @@ internal sealed class StorageVendors : IDisposable
             if (manager == null || !DigitalStorageOffers.ScientistVisits(StoreStation.GetDayCounter()) ||
                 !DigitalStorageNetwork.IsStarterUnlocked()) return;
             if (_customers.TryCreate(ScientistId, out var scientist)) manager.AddClient(scientist);
-            else _log.Error("Digital Storage: the data scientist is unavailable; the visit is skipped.");
+            else _log.Error("vendor_unavailable", "the data scientist is unavailable; the visit is skipped.");
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: the data scientist was not queued: {error.GetType().Name}");
+            _log.Error("vendor_queue_failed", $"the data scientist was not queued: {error.GetType().Name}");
         }
     }
 
@@ -156,7 +157,7 @@ internal sealed class StorageVendors : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: the data scientist stock was not placed: {error.GetType().Name}");
+            _log.Error("vendor_placement_failed", $"the data scientist stock was not placed: {error.GetType().Name}");
         }
     }
 
@@ -164,7 +165,7 @@ internal sealed class StorageVendors : IDisposable
     {
         var skipped = offers.Where(offer => !_goods.OfferOnCounter(offer)).Select(offer => offer.ToString()).ToList();
         if (skipped.Count > 0)
-            _log.Log($"Digital Storage: {vendor} could not place {string.Join(", ", skipped)}; the counter is full.");
+            _log.Info("vendor_counter_full", $"{vendor} could not place {string.Join(", ", skipped)}; the counter is full.");
     }
 
     private static StorageCellTier DrawTier()

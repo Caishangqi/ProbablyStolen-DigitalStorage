@@ -4,6 +4,7 @@ using System.Linq;
 using ProbablyStolen.DigitalStorage.Client.Machines;
 using ProbablyStolen.DigitalStorage.Platform.Content;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -124,7 +125,7 @@ public static class MachineBayGroupDrop
         bay.GetParentItem() is { } machine && Machines.Contains(machine.identifier);
 
     private static void Report(string stage, Exception error) =>
-        Debug.LogWarning($"Digital Storage: machine bay group {stage} skipped ({error.GetType().Name}); the native drag is unchanged.");
+        PlatformLogs.Current?.Ui.Warning("machine_bay_drop_skipped", $"machine bay group {stage} skipped ({error.GetType().Name}); the native drag is unchanged.");
 
     private sealed class Spread
     {

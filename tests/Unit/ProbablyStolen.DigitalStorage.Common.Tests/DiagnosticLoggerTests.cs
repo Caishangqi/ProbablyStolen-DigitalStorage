@@ -52,6 +52,24 @@ internal sealed class DiagnosticLoggerTests
     }
 
     [Test]
+    public void WriteText_UsesTheSameFilterAndKeepsLongTextWhole()
+    {
+        var categories = new LogCategories();
+        var category = categories.Register("log_ui", null, "Interface log", LogVerbosity.Warning, true);
+        categories.Freeze();
+        var output = new List<string>();
+        var log = new DiagnosticLogger(categories, _ => new LogCategorySettings(true, LogVerbosity.Warning),
+            (_, line) => output.Add(line));
+        var text = new string('x', 300) + "\nsecond line";
+
+        Assert.That(log.WriteText(category, LogVerbosity.Verbose, "trace", "hidden"), Is.False);
+        Assert.That(log.WriteText(category, LogVerbosity.Warning, "Bad Event", "rejected"), Is.False);
+        Assert.That(log.WriteText(category, LogVerbosity.Warning, "trace", text), Is.True);
+
+        Assert.That(output, Is.EqualTo(new[] { "category=LogUi level=warning event=trace " + text }));
+    }
+
+    [Test]
     public void Write_TempStopsAfter64RecordsAndOneNoticeWithoutUsingOtherBudgets()
     {
         var categories = new LogCategories();

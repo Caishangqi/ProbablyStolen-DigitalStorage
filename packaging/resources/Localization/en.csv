@@ -19,8 +19,6 @@ terminal_drag_reason_read_only,the cell is read-only until migrated
 terminal_drag_reason_partition_unknown,the partition match is not known yet
 terminal_drag_reason_partition_invalid,a cell partition is invalid
 terminal_storage_whole_stack_only,Drag a whole stack. The selected portion was not stored and stays where it is.
-terminal_diagnostics_name,Terminal diagnostics
-terminal_diagnostics_desc,Log UI layout and drag events to Player.log with a limit on log volume. Item names and saved state are excluded.
 debug_item_identity_log_name,Item identity log
 debug_item_identity_log_desc,"Click a terminal slot to log its items' full identities, including tags and feature values, to Player.log. The log also explains why items with the same ID stay separate under their active rule."
 terminal_storage_search_placeholder,Search items
@@ -235,6 +233,9 @@ config_section_logs,Logging
 log_category_storage,Storage log
 log_category_transfer,Transfer log
 log_category_comp,Compatibility log
+log_category_content,Content log
+log_category_network,Network log
+log_category_ui,Interface log
 log_category_temp,Temporary log
 log_category_enabled,Enabled
 log_level_error,Error

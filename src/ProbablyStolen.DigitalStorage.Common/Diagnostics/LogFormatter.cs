@@ -38,6 +38,11 @@ internal static class LogFormatter
         return line.ToString();
     }
 
+    internal static string FormatText(LogCategory category, LogVerbosity level, string eventName, string? text) =>
+        new StringBuilder().Append("category=").Append(category.Name)
+            .Append(" level=").Append(level.ToString().ToLowerInvariant()).Append(" event=").Append(eventName)
+            .Append(' ').Append(text).ToString();
+
     internal static string Quote(string? value)
     {
         var text = new StringBuilder().Append('"');

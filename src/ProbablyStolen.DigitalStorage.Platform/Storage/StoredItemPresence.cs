@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -40,7 +41,7 @@ public static class StoredItemPresence
         catch (System.Exception error)
         {
             // The nightly cycle runs on this list; it must go on even if stored items then age this night.
-            UnityEngine.Debug.LogWarning($"Digital Storage: stored items stayed visible to the game ({error.GetType().Name}).");
+            PlatformLogs.Current?.Storage.Warning("stored_presence_failed", $"stored items stayed visible to the game ({error.GetType().Name}).");
         }
     }
 
@@ -53,7 +54,7 @@ public static class StoredItemPresence
         }
         catch (System.Exception error)
         {
-            UnityEngine.Debug.LogWarning($"Digital Storage: liquid update could not check storage ownership ({error.GetType().Name}).");
+            PlatformLogs.Current?.Storage.Warning("liquid_ownership_failed", $"liquid update could not check storage ownership ({error.GetType().Name}).");
             return true;
         }
     }

@@ -19,8 +19,6 @@ terminal_drag_reason_read_only,元件迁移前只能取出
 terminal_drag_reason_partition_unknown,暂无法判断分区匹配
 terminal_drag_reason_partition_invalid,元件分区设置无效
 terminal_storage_whole_stack_only,请拖动整个堆叠。选中的部分物品未存入，仍留在原处。
-terminal_diagnostics_name,终端诊断日志
-terminal_diagnostics_desc,将界面层级和拖动操作的诊断信息写入 Player.log，并限制日志量。不记录物品名称或保存状态。
 debug_item_identity_log_name,物品身份日志
 debug_item_identity_log_desc,点击终端格子时向 Player.log 写入物品的完整身份，包括标签和特征取值。已启用堆叠规则的同 ID 物品仍分开时，日志也会记录原因。
 terminal_storage_search_placeholder,搜索物品
@@ -235,6 +233,9 @@ config_section_logs,分类日志
 log_category_storage,存储日志
 log_category_transfer,存取日志
 log_category_comp,兼容日志
+log_category_content,内容日志
+log_category_network,网络日志
+log_category_ui,界面日志
 log_category_temp,临时日志
 log_category_enabled,启用
 log_level_error,错误

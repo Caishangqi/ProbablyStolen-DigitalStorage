@@ -100,7 +100,7 @@ public static class DsStockingPatches
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: DS Stocking Helper network goods were not offered ({error.GetType().Name}).");
+            DsStockingBridge.Log?.Warning("ds_stocking_offer_failed", $"DS Stocking Helper network goods were not offered ({error.GetType().Name}).");
         }
     }
 

@@ -10,6 +10,7 @@ using ProbablyStolen.DigitalStorage.Platform.Content;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -19,7 +20,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     internal const string BayPrefix = "digital_storage.cell_bay.";
     private readonly GameItem _host;
     private readonly ItemAppearance _appearance;
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly ModText _text;
     private readonly Action<GameItem> _contentChanged;
     private readonly CellAssemblyCallbacks _callbacks;
@@ -28,7 +29,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
     internal GameSlotInventory Slot { get; }
 
     internal CellContentWindow(GameItem host, StorageCellDisassemblyRecipe recipe,
-        ItemAppearance appearance, ModText text, ModLog log, Func<bool> showPages,
+        ItemAppearance appearance, ModText text, CategoryLog log, Func<bool> showPages,
         Action<GameItem> contentChanged)
     {
         _host = host;
@@ -230,7 +231,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: empty cell reset failed ({error.GetType().Name}); reassembly is blocked.");
+            _log.Error("cell_reset_failed", $"empty cell reset failed ({error.GetType().Name}); reassembly is blocked.");
         }
     }
 
@@ -249,7 +250,7 @@ internal sealed class CellContentWindow : ICellAssemblyPort
         var valid = _callbacks.IsConsistent();
         if (!valid && !_reportedInvalid)
         {
-            _log.Error("Digital Storage: inconsistent cell assembly retained. Mounting and disassembly are unavailable.");
+            _log.Error("cell_assembly_inconsistent", "inconsistent cell assembly retained. Mounting and disassembly are unavailable.");
         }
 
         _reportedInvalid = !valid;

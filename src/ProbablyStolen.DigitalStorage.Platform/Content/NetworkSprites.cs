@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -13,12 +14,12 @@ internal sealed class NetworkSprites : IDisposable
     private const int IconSize = 36;
     // The first two upgrade tiers use the left and middle cells; the right cell is the third tier.
     private const int IconCount = 3;
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly List<string> _iconKeys = new();
     private readonly List<Sprite> _icons = new();
     private LoadedMod? _mod;
 
-    internal NetworkSprites(ModLog log)
+    internal NetworkSprites(CategoryLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
@@ -39,7 +40,7 @@ internal sealed class NetworkSprites : IDisposable
         if (!mod.Sprites.TryGetValue(SheetKey, out var sheet) || sheet == null ||
             sheet.texture.width != IconSize * 3 || sheet.texture.height != IconSize)
         {
-            _log.Error($"Digital Storage: the network icon sheet {SheetKey} is missing or not 108x36.");
+            _log.Error("network_icons_missing", $"the network icon sheet {SheetKey} is missing or not 108x36.");
             return;
         }
 

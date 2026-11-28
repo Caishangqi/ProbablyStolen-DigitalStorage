@@ -5,6 +5,7 @@ using ProbablyStolen.DigitalStorage.Platform.Client;
 using ProbablyStolen.DigitalStorage.Platform.Localization;
 using ProbablyStolen.DigitalStorage.Platform.NativeContent;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -19,12 +20,12 @@ internal sealed class StorageCellItem
     private readonly ModText _text;
     private readonly ItemAppearance _appearance;
     private readonly StorageCellDisassemblyRecipe _recipe;
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly Func<bool> _showPages;
     private readonly Action<GameItem> _contentChanged;
 
     internal StorageCellItem(ModText text, ItemAppearance appearance,
-        StorageCellDisassemblyRecipe recipe, ModLog log, Func<bool> showPages,
+        StorageCellDisassemblyRecipe recipe, CategoryLog log, Func<bool> showPages,
         Action<GameItem> contentChanged)
     {
         _showPages = showPages ?? throw new ArgumentNullException(nameof(showPages));
@@ -84,7 +85,7 @@ internal sealed class StorageCellItem
                         component.Destroy();
                     }
 
-                    _log.Error($"Digital Storage: new cell sample initialization failed ({error.GetType().Name}). The host is retained.");
+                    _log.Error("cell_sample_failed", $"new cell sample initialization failed ({error.GetType().Name}). The host is retained.");
                 }
             };
 

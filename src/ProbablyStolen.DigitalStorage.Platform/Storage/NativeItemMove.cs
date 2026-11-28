@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Common.Application.Transfers;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Storage;
 
@@ -111,9 +112,9 @@ internal sealed class NativeItemMove : IItemMovePort
             return;
         }
 
-        var message = $"Digital Storage: {operation} item={item.identifier} units={item.unitCount} " +
+        var message = $"{operation} item={item.identifier} units={item.unitCount} " +
             $"outcome={result.Outcome} error={result.Error?.GetType().Name ?? "none"}";
-        if (result.Outcome == ItemMoveOutcome.Unowned) UnityEngine.Debug.LogError(message);
-        else UnityEngine.Debug.LogWarning(message);
+        PlatformLogs.Current?.Transfer.Write(result.Outcome == ItemMoveOutcome.Unowned ? LogVerbosity.Error : LogVerbosity.Warning,
+            "native_move_failed", message);
     }
 }

@@ -85,7 +85,7 @@ internal sealed class ItemPictureCapture
         }
         catch (Exception error)
         {
-            try { _writeDiagnostic($"Digital Storage: {_owner} terminal picture unavailable ({error.GetType().Name}); using sprite fallback."); }
+            try { _writeDiagnostic($"{_owner} terminal picture unavailable ({error.GetType().Name}); using sprite fallback."); }
             catch { /* Diagnostics cannot prevent fallback display. */ }
         }
 
@@ -97,7 +97,7 @@ internal sealed class ItemPictureCapture
     {
         if (_failuresLogged.Add(key))
         {
-            try { _writeDiagnostic($"Digital Storage: {_owner} picture unavailable ({error.GetType().Name}); using sprite fallback."); }
+            try { _writeDiagnostic($"{_owner} picture unavailable ({error.GetType().Name}); using sprite fallback."); }
             catch { /* A diagnostic callback cannot block an inventory display update. */ }
         }
 

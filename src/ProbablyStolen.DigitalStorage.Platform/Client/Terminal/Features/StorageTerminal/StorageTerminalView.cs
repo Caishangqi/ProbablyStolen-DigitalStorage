@@ -21,6 +21,7 @@ using GestureButton = ProbablyStolen.DigitalStorage.Client.Interaction.Drag.Poin
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.StorageTerminal;
 
@@ -110,7 +111,7 @@ internal sealed class StorageTerminalView : ITerminalView
         _hoverTooltip = TerminalTooltipPresenter.Service?.CreateTooltip(this);
         _screen = new StorageScreen(Columns, TerminalWindowMetrics.Rows, services.Search);
         _pictureCapture = new ItemPictureCapture(new PictureSourceChain<GameItem>(services.FindSample),
-            message => services.WriteDiagnostic(message), "terminal");
+            message => services.WriteWarning(message), "terminal");
         _pictures = new TerminalSnapshotCache<ItemPicture>(entry => _pictureCapture.Capture(entry.Key, entry.SpriteKey),
             (entry, error) => _pictureCapture.Failed(entry.Key, entry.SpriteKey, error));
         _grid = new ItemSlotGrid(_pictureCapture, showBadge: true, host.SlotMetrics);
@@ -939,7 +940,7 @@ internal sealed class StorageTerminalView : ITerminalView
         ApplyWheel();
         // Releasing Shift during a drag must not reorder its source slot.
         var viewChanged = _menu.SetPaused(IsShiftHeld() || _dragController?.PausesResort == true);
-        var reason = _inventoryMonitor.BeginRefresh(Time.unscaledTime, Window.IsVisible, _services.DiagnosticsEnabled());
+        var reason = _inventoryMonitor.BeginRefresh(Time.unscaledTime, Window.IsVisible, _services.Log.IsEnabled(LogVerbosity.Verbose));
         if (reason == TerminalRefreshReason.None)
         {
             if (viewChanged) ApplyMenuView(preserveView: true);
@@ -1079,8 +1080,7 @@ internal sealed class StorageTerminalView : ITerminalView
     {
         if (!_services.IdentityLogEnabled()) return;
         foreach (var member in group.Members.Take(MaxDumpedMembers))
-            _services.WriteDiagnostic(
-                $"Digital Storage: item_identity pieces={member.Amount} units={member.TotalUnits}\n{ItemIdentityDump.ToJson(member.Key)}");
+            _services.WriteIdentity($"pieces={member.Amount} units={member.TotalUnits}\n{ItemIdentityDump.ToJson(member.Key)}");
     }
 
     private IReadOnlyList<ProjectedGroup> Project(IReadOnlyList<TerminalEntry> entries)
@@ -1340,7 +1340,7 @@ internal sealed class StorageTerminalView : ITerminalView
     private void StopDecorationRefresh(Coroutine handle)
     {
         try { ModHelper.StopCoroutine(_services.ModId, handle); }
-        catch (Exception error) { _services.WriteDiagnostic($"terminal_decoration_cancel failed={error.GetType().Name}"); }
+        catch (Exception error) { _services.WriteWarning($"terminal_decoration_cancel failed={error.GetType().Name}"); }
     }
 
     private static IEnumerator NextFrame(Action refresh)

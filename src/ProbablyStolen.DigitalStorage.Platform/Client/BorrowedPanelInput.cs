@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -114,7 +115,7 @@ public static class BorrowedPanelInput
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: borrowed panel band skipped ({error.GetType().Name}); the native band is unchanged.");
+            PlatformLogs.Current?.Ui.Warning("borrowed_panel_skipped", $"borrowed panel band skipped ({error.GetType().Name}); the native band is unchanged.");
         }
     }
 
@@ -158,7 +159,7 @@ public static class BorrowedPanelInput
         }
         catch (Exception error)
         {
-            Debug.LogWarning($"Digital Storage: borrowed panel band skipped ({error.GetType().Name}); the native band is unchanged.");
+            PlatformLogs.Current?.Ui.Warning("borrowed_panel_skipped", $"borrowed panel band skipped ({error.GetType().Name}); the native band is unchanged.");
         }
     }
 
@@ -216,7 +217,7 @@ public static class BorrowedPanelInput
     {
         if (added > 0 || candidates == 0 || Time.unscaledTime < _nextMissReport) return;
         _nextMissReport = Time.unscaledTime + 1f;
-        Debug.Log($"Digital Storage: borrowed panel band panels={panels} candidates={candidates} added=0 " +
+        PlatformLogs.Current?.Ui.Verbose("borrowed_panel_miss", $"borrowed panel band panels={panels} candidates={candidates} added=0 " +
             $"band={bandRect.width:0}x{bandRect.height:0}");
     }
 

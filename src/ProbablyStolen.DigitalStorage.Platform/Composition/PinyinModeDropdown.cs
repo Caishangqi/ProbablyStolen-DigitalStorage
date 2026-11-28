@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
@@ -49,6 +50,6 @@ public static class PinyinModeDropdown
 
     private static void LogFailure(Exception error)
     {
-        UnityEngine.Debug.LogError($"Digital Storage: could not localize pinyin mode dropdown ({error.GetType().Name}).");
+        PlatformLogs.Current?.Ui.Error("dropdown_localization_failed", $"could not localize pinyin mode dropdown ({error.GetType().Name}).");
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ProbablyStolen.DigitalStorage.Api.Content;
 using ProbablyStolen.DigitalStorage.Api.Registries;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -14,12 +15,12 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 /// </summary>
 internal sealed class NativeCustomerCatalog : IDisposable
 {
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
     private readonly Dictionary<Identifier, Bound> _bound = new();
     private readonly Dictionary<string, Sprite> _portraits = new(StringComparer.Ordinal);
     private readonly HashSet<string> _reported = new(StringComparer.Ordinal);
 
-    internal NativeCustomerCatalog(ModLog log)
+    internal NativeCustomerCatalog(CategoryLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
@@ -37,7 +38,7 @@ internal sealed class NativeCustomerCatalog : IDisposable
             var nativeId = CustomerIdentity.ToNativeId(entry.Key);
             if (StoreClientListDict.storeClientDict.ContainsKey(nativeId))
             {
-                _log.Warning($"Digital Storage: customer id {nativeId} is already in the game's catalog; {entry.Key} is unavailable.");
+                _log.Warning("customer_id_taken", $"customer id {nativeId} is already in the game's catalog; {entry.Key} is unavailable.");
                 continue;
             }
 
@@ -47,7 +48,7 @@ internal sealed class NativeCustomerCatalog : IDisposable
             _bound.Add(entry.Key, new Bound(nativeId, definition, factory));
         }
 
-        _log.Log($"Digital Storage: {_bound.Count} customer(s) added to the game's catalog.");
+        _log.Info("customers_added", $"{_bound.Count} customer(s) added to the game's catalog.");
     }
 
     /// <summary>Creates a bound customer for a visit the registering mod schedules; false when it cannot be created.</summary>
@@ -62,7 +63,7 @@ internal sealed class NativeCustomerCatalog : IDisposable
         }
         catch (Exception error)
         {
-            _log.Error($"Digital Storage: customer {id} was not created ({error.GetType().Name}: {error.Message}).");
+            _log.Error("customer_failed", $"customer {id} was not created ({error.GetType().Name}: {error.Message}).");
             return false;
         }
     }
@@ -117,7 +118,7 @@ internal sealed class NativeCustomerCatalog : IDisposable
             var mod = ModLoader.Mods.Find(candidate => candidate.Manifest.ID == modId);
             if (mod == null || !mod.Sprites.TryGetValue(key.Substring(separator + 1), out sprite) || sprite == null)
             {
-                if (_reported.Add(key)) _log.Error($"Digital Storage: customer portrait {key} is not loaded.");
+                if (_reported.Add(key)) _log.Error("customer_portrait_missing", $"customer portrait {key} is not loaded.");
                 throw new InvalidOperationException("Customer portrait is not loaded: " + key);
             }
 

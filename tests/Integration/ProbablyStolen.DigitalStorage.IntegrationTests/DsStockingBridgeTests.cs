@@ -24,12 +24,14 @@ public sealed class DsStockingBridgeTests
     private GameItem _drive = null!;
     private GameGridInventory _store = null!;
 
+    private RecordingIntegrationLog _log = null!;
+
     [SetUp]
     public void SetUp()
     {
         GraphUtils.NativeTransfers.Clear();
         GraphUtils.NativeRemaining = 0;
-        UnityEngine.Debug.Lines.Clear();
+        _log = new RecordingIntegrationLog();
         _drive = new GameItem("digital_storage.storage_drive");
         var cell = new GameItem("digital_storage.cell_1k");
         new GameGridInventory { Owner = _drive }.Place(cell);
@@ -38,7 +40,7 @@ public sealed class DsStockingBridgeTests
         _store = new GameGridInventory();
         _network = new FakeNetwork(_drive);
         _runtime = new FakeRuntime(_network);
-        DsStockingBridge.Attach(_runtime);
+        DsStockingBridge.Attach(_runtime, _log);
     }
 
     [TearDown]
@@ -122,7 +124,7 @@ public sealed class DsStockingBridgeTests
         DsStockingBridge.EndRun();
 
         Assert.That(goods, Is.Empty);
-        Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("Unavailable"));
+        Assert.That(_log.Lines, Has.Some.Contains("Unavailable"));
     }
 
     [Test]
@@ -223,7 +225,7 @@ public sealed class DsStockingBridgeTests
         Assert.That(remaining, Is.EqualTo(1));
         Assert.That(item.parentInventory, Is.SameAs(_counter));
         Assert.That(GraphUtils.NativeTransfers, Is.Empty);
-        Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("could not return"));
+        Assert.That(_log.Lines, Has.Some.Contains("could not return"));
     }
 
     [Test]
@@ -284,7 +286,7 @@ public sealed class DsStockingBridgeTests
 
         Assert.That(remaining, Is.EqualTo(1));
         Assert.That(item.parentInventory, Is.SameAs(_page));
-        Assert.That(UnityEngine.Debug.Lines, Has.Some.Contains("failed"));
+        Assert.That(_log.Lines, Has.Some.Contains("failed"));
         Assert.That(_runtime.Access.IsOpen, Is.False);
     }
 

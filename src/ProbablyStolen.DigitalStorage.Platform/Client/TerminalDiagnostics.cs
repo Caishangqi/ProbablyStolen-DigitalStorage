@@ -28,8 +28,8 @@ internal sealed class TerminalDiagnostics
 
             _count++;
             _write(_count > Limit
-                ? "[DS.Terminal] limit reached; reopen the terminal to start a new diagnostic session."
-                : $"[DS.Terminal] #{_count} {eventCode} {details}");
+                ? "limit reached; reopen the terminal to start a new diagnostic session."
+                : $"#{_count} {eventCode} {details}");
         }
         catch
         {

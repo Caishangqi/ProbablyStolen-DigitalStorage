@@ -43,32 +43,43 @@ internal sealed class DiagnosticLogger
     }
 
     internal bool Write(LogCategory category, LogVerbosity level, string eventName, string message,
-        Func<IReadOnlyList<LogField>>? fields = null, long? operationId = null, string? exceptionType = null)
+        Func<IReadOnlyList<LogField>>? fields = null, long? operationId = null, string? exceptionType = null) =>
+        Emit(category, level, eventName,
+            () => LogFormatter.Format(category, level, eventName, message, fields?.Invoke(), operationId, exceptionType));
+
+    /// <summary>
+    /// Writes free text after the category, level and event, without the length limit of a message. For multi-line
+    /// detail such as diagnostic traces and item dumps; the caller decides what the text may contain.
+    /// </summary>
+    internal bool WriteText(LogCategory category, LogVerbosity level, string eventName, string text) =>
+        Emit(category, level, eventName, () => LogFormatter.FormatText(category, level, eventName, text));
+
+    private bool Emit(LogCategory category, LogVerbosity level, string eventName, Func<string> format)
     {
         if (!IsEnabled(category, level) || !LogFormatter.IsToken(eventName)) return false;
-        if (category.Id != "log_temp") return Emit(category, level, eventName, message, fields, operationId, exceptionType);
+        if (category.Id != "log_temp") return Sink(level, format);
         lock (_tempLock)
         {
             if (_temporaryWrites < MaximumTemporaryWrites)
             {
                 ++_temporaryWrites;
-                return Emit(category, level, eventName, message, fields, operationId, exceptionType);
+                return Sink(level, format);
             }
             if (!_temporarySuppressed)
             {
                 _temporarySuppressed = true;
-                Emit(category, level, "temporary_log_suppressed", "Temporary log limit reached.", null, null, null);
+                Sink(level, () => LogFormatter.Format(category, level, "temporary_log_suppressed",
+                    "Temporary log limit reached.", null, null, null));
             }
             return false;
         }
     }
 
-    private bool Emit(LogCategory category, LogVerbosity level, string eventName, string message,
-        Func<IReadOnlyList<LogField>>? fields, long? operationId, string? exceptionType)
+    private bool Sink(LogVerbosity level, Func<string> format)
     {
         try
         {
-            _sink(level, LogFormatter.Format(category, level, eventName, message, fields?.Invoke(), operationId, exceptionType));
+            _sink(level, format());
             return true;
         }
         catch { return false; }

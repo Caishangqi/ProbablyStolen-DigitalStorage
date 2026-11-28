@@ -16,6 +16,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -37,17 +39,17 @@ internal sealed class IoPortWindow : TerminalWindowHost
     internal IoPortTerminalView? View { get; set; }
 
     private IoPortWindow(TerminalRegistry registry, ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, Action<string> log)
-        : base(registry, text, settings, () => false, () => false, log, null, icons, slotMetrics)
+        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, CategoryLog log)
+        : base(registry, text, settings, () => false, log, null, icons, slotMetrics)
     {
         _coordinator = coordinator;
     }
 
     /// <summary>Creates the window of one machine with its own registry.</summary>
     internal static IoPortWindow Create(ModText text, ITerminalViewSettings settings, ButtonIcons icons,
-        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, Action<string> log)
+        SlotMetricsService slotMetrics, IoPortCoordinator coordinator, CategoryLog log)
     {
-        var registry = IoPortTerminalFeature.CreateRegistry((IConfigManager)settings, log,
+        var registry = IoPortTerminalFeature.CreateRegistry((IConfigManager)settings, log.Sink(LogVerbosity.Verbose, "terminal_trace"),
             owner => new IoPortTerminalView((IoPortWindow)owner),
             owner => new TerminalModulesScreen((IoPortWindow)owner),
             context => ((IoPortWindow)context.Window).ReadSettings()?.CompletionMode,
@@ -224,7 +226,7 @@ internal sealed class IoPortTerminalView : ITerminalView
         if (holder == null) return;
         if (_owner.Machine.contentWindow?.childElement is not MachineryPanelRow row || row.GetPanel(role) is not { } panel)
         {
-            _owner.WriteDiagnostic($"io_port_bank role={role} result=missing");
+            _owner.WriteWarning($"io_port_bank role={role} result=missing");
             return;
         }
         MachineryContainerUtils.TryResize(panel.content, 0, 0);

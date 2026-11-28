@@ -16,6 +16,7 @@ using ProbablyStolen.DigitalStorage.Platform.Network;
 using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 using ProbablyStolen.DigitalStorage.Platform.Integration;
 using ProbablyStolen.DigitalStorage.Platform.Storage;
+using ProbablyStolen.DigitalStorage.Common.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -40,9 +41,8 @@ internal sealed class TerminalItem
     private readonly ItemAppearance _appearance;
     private readonly MachineContentWindow _windows;
     private readonly GridNetworkPowerCoordinator _networkPower;
-    private readonly Func<bool> _diagnosticsEnabled;
     private readonly Func<bool> _identityLogEnabled;
-    private readonly ModLog _log;
+    private readonly PlatformLogs _logs;
     private readonly NativeNetworkEvents _events;
     private readonly TerminalSearchService _search;
     private readonly ITerminalViewSettings _view;
@@ -50,7 +50,7 @@ internal sealed class TerminalItem
     private readonly Func<bool> _testViewEnabled;
 
     internal TerminalItem(ModText text, ItemAppearance appearance, MachineContentWindow windows,
-        GridNetworkPowerCoordinator networkPower, Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled, ModLog log,
+        GridNetworkPowerCoordinator networkPower, Func<bool> identityLogEnabled, PlatformLogs logs,
         NativeNetworkEvents events,
         TerminalSearchService search, ITerminalViewSettings view, TerminalRegistry registry, Func<bool> testViewEnabled,
         ButtonIcons icons, SlotMetricsService slotMetrics, TransferDiagnostics transfers,
@@ -71,9 +71,8 @@ internal sealed class TerminalItem
         _appearance = appearance;
         _windows = windows;
         _networkPower = networkPower ?? throw new System.ArgumentNullException(nameof(networkPower));
-        _diagnosticsEnabled = diagnosticsEnabled;
         _identityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
-        _log = log;
+        _logs = logs ?? throw new ArgumentNullException(nameof(logs));
     }
 
     // Tooltip code of the game and other mods may rewrite the item it describes; the stored root stays as stored.
@@ -102,11 +101,12 @@ internal sealed class TerminalItem
                 (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
                 key => _networkPower.FindStoredSample(item, key),
                 key => _networkPower.Storage.FindPreviewSample(item, key), RenderStoredTooltip,
-                _diagnosticsEnabled, _identityLogEnabled, message => _log.Log(message), _events.Subscribe, _search, _transfers,
+                _logs.Ui, _identityLogEnabled, _logs.Storage, _events.Subscribe, _search, _transfers,
                 _decorations, _modId);
             new TerminalWindow(_registry, storage, _view, _testViewEnabled, _icons, _slotMetrics).Attach(item);
             new TerminalItemDrop(item, (sources, amount) => _networkPower.StoreRefusals(item, sources, amount),
-                (source, amount) => _networkPower.StoreSingle(item, source, amount), _text, message => _log.Log(message)).Attach();
+                (source, amount) => _networkPower.StoreSingle(item, source, amount), _text,
+                _logs.Ui.Sink(LogVerbosity.Warning, "terminal_drop")).Attach();
             return item;
         }
         catch

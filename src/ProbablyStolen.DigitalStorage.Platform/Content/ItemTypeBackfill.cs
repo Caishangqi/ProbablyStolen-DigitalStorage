@@ -1,6 +1,7 @@
 using System;
 using ProbablyStolen.DigitalStorage.Common.Domain.Storage;
 using ProbablyStolen.DigitalStorage.Common.Domain.Recipes;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Content;
 
@@ -11,9 +12,9 @@ namespace ProbablyStolen.DigitalStorage.Platform.Content;
 /// </summary>
 internal sealed class ItemTypeBackfill
 {
-    private readonly ModLog _log;
+    private readonly CategoryLog _log;
 
-    internal ItemTypeBackfill(ModLog log)
+    internal ItemTypeBackfill(CategoryLog log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
@@ -27,7 +28,7 @@ internal sealed class ItemTypeBackfill
             if (item != null && Apply(item)) updated++;
         }
 
-        if (updated > 0) _log.Log($"Digital Storage: item types added to {updated} item(s) from an older save.");
+        if (updated > 0) _log.Info("item_types_backfilled", $"item types added to {updated} item(s) from an older save.");
     }
 
     private static bool Apply(GameItem item)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProbablyStolen.DigitalStorage.Client.Terminal.Features.DisplaySettings;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Composition;
 
@@ -80,6 +81,6 @@ public static class TerminalViewDropdowns
     {
         if (_failureLogged) return;
         _failureLogged = true;
-        UnityEngine.Debug.LogError($"Digital Storage: could not localize terminal view dropdowns ({error.GetType().Name}).");
+        PlatformLogs.Current?.Ui.Error("dropdown_localization_failed", $"could not localize terminal view dropdowns ({error.GetType().Name}).");
     }
 }

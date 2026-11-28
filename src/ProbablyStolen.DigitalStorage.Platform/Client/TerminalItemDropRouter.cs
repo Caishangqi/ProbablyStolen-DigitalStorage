@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using ProbablyStolen.DigitalStorage.Platform.Diagnostics;
 
 namespace ProbablyStolen.DigitalStorage.Platform.Client;
 
@@ -203,7 +204,7 @@ public static class TerminalItemDropRouter
     }
 
     private static void Report(string step, Exception error) =>
-        Debug.LogWarning($"Digital Storage: terminal {step} skipped ({error.GetType().Name}); the native drag is unchanged.");
+        PlatformLogs.Current?.Ui.Warning("terminal_drop_skipped", $"terminal {step} skipped ({error.GetType().Name}); the native drag is unchanged.");
 
     private sealed class PendingDrop
     {

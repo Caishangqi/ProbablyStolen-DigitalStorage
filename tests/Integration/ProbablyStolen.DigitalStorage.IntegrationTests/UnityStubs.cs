@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-
-// Linked Compat sources log through Unity; the tests record the lines instead.
+// Unity members the linked sources touch; the tests need no engine.
 namespace UnityEngine
 {
     internal readonly struct Vector2
@@ -11,17 +9,6 @@ namespace UnityEngine
     internal static class Object
     {
         internal static void Destroy(object gameObject) { }
-    }
-
-    internal static class Debug
-    {
-        internal static readonly List<string> Lines = new();
-
-        internal static void Log(object message) => Lines.Add(message?.ToString() ?? string.Empty);
-
-        internal static void LogWarning(object message) => Lines.Add(message?.ToString() ?? string.Empty);
-
-        internal static void LogError(object message) => Lines.Add(message?.ToString() ?? string.Empty);
     }
 }
 

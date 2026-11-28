@@ -17,6 +17,8 @@ namespace ProbablyStolen.DigitalStorage.Platform.Client.Terminal.Features.Storag
 /// </summary>
 internal sealed class StorageTerminalServices
 {
+    private readonly CategoryLog _identityLog;
+
     internal StorageTerminalServices(ModText text, ITerminalViewSettings settings,
         Func<TerminalInventorySnapshot> readSnapshot, Func<TerminalEntry, long, TransferOperation, TerminalExtractionResult> extract,
         Func<TerminalDragBatch, InventoryDropTarget, TransferOperation, TerminalExtractionResult> extractBatch,
@@ -25,8 +27,7 @@ internal sealed class StorageTerminalServices
         Func<GameItem, int, TransferOperation, TerminalInsertionResult> storeSingle,
         Func<IReadOnlyList<GameItem>, int?, IReadOnlyList<string?>> storeRefusals, Func<ItemKey, GameItem?> findSample,
         Func<ItemKey, GameItem?> findPreviewSample, Func<GameItemElement, RichText> renderStoredTooltip,
-        Func<bool> diagnosticsEnabled, Func<bool> identityLogEnabled,
-        Action<string> writeDiagnostic,
+        CategoryLog log, Func<bool> identityLogEnabled, CategoryLog identityLog,
         Func<Action<NetworkChanged>, IDisposable> subscribeNetwork, TerminalSearchService search, TransferDiagnostics transfers,
         IntegrationDecorationCatalog decorations, string modId)
     {
@@ -44,9 +45,9 @@ internal sealed class StorageTerminalServices
         FindSample = findSample ?? throw new ArgumentNullException(nameof(findSample));
         FindPreviewSample = findPreviewSample ?? throw new ArgumentNullException(nameof(findPreviewSample));
         RenderStoredTooltip = renderStoredTooltip ?? throw new ArgumentNullException(nameof(renderStoredTooltip));
-        DiagnosticsEnabled = diagnosticsEnabled ?? throw new ArgumentNullException(nameof(diagnosticsEnabled));
+        Log = log ?? throw new ArgumentNullException(nameof(log));
         IdentityLogEnabled = identityLogEnabled ?? throw new ArgumentNullException(nameof(identityLogEnabled));
-        WriteDiagnostic = writeDiagnostic ?? throw new ArgumentNullException(nameof(writeDiagnostic));
+        _identityLog = identityLog ?? throw new ArgumentNullException(nameof(identityLog));
         SubscribeNetwork = subscribeNetwork ?? throw new ArgumentNullException(nameof(subscribeNetwork));
         Search = search ?? throw new ArgumentNullException(nameof(search));
         Decorations = decorations ?? throw new ArgumentNullException(nameof(decorations));
@@ -73,11 +74,23 @@ internal sealed class StorageTerminalServices
     internal Func<ItemKey, GameItem?> FindSample { get; }
     internal Func<ItemKey, GameItem?> FindPreviewSample { get; }
     internal Func<GameItemElement, RichText> RenderStoredTooltip { get; }
-    internal Func<bool> DiagnosticsEnabled { get; }
+    /// <summary>Gets the interface log the terminal windows write to.</summary>
+    internal CategoryLog Log { get; }
 
     /// <summary>Gets whether clicked slots write their full item identity to the log.</summary>
     internal Func<bool> IdentityLogEnabled { get; }
-    internal Action<string> WriteDiagnostic { get; }
+
+    /// <summary>Writes a trace of the terminal, at the interface log's verbose level.</summary>
+    internal void WriteDiagnostic(string message) => Log.Verbose("terminal_trace", message);
+
+    /// <summary>Writes a terminal problem a player may need to report.</summary>
+    internal void WriteWarning(string message) => Log.Warning("terminal_warning", message);
+
+    /// <summary>
+    /// Writes a full item identity, values included, to the storage log at its verbose level. Callers check the
+    /// identity log setting first: ordinary logs never carry item data.
+    /// </summary>
+    internal void WriteIdentity(string text) => _identityLog.Verbose("item_identity", text);
     internal Func<Action<NetworkChanged>, IDisposable> SubscribeNetwork { get; }
     internal TerminalSearchService Search { get; }
     internal IntegrationDecorationCatalog Decorations { get; }

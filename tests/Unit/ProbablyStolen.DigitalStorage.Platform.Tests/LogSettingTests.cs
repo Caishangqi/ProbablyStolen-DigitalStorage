@@ -13,14 +13,22 @@ internal sealed class LogSettingTests
     public void Register_BuiltinsHaveStableKeysDefaultsAndDeclarationOrder()
     {
         var categories = new BuiltinLogCategories();
-        Assert.That(categories.Registry.Entries, Is.EqualTo(new[] { categories.Storage, categories.Transfer, categories.Comp, categories.Temp }));
+        Assert.That(categories.Registry.Entries, Is.EqualTo(new[]
+        {
+            categories.Storage, categories.Transfer, categories.Comp, categories.Content, categories.Network,
+            categories.Ui, categories.Temp
+        }));
         Assert.That(categories.Registry.Entries.Select(category => category.Name),
-            Is.EqualTo(new[] { "LogStorage", "LogTransfer", "LogComp", "LogTemp" }));
+            Is.EqualTo(new[] { "LogStorage", "LogTransfer", "LogComp", "LogContent", "LogNetwork", "LogUi", "LogTemp" }));
         Assert.That(categories.Comp.DefaultEnabled, Is.True);
         Assert.That(categories.Comp.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
         Assert.That(categories.Storage.DefaultEnabled && categories.Transfer.DefaultEnabled, Is.True);
         Assert.That(categories.Storage.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
         Assert.That(categories.Transfer.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
+        Assert.That(categories.Content.DefaultEnabled && categories.Network.DefaultEnabled && categories.Ui.DefaultEnabled, Is.True);
+        Assert.That(categories.Content.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
+        Assert.That(categories.Network.DefaultVerbosity, Is.EqualTo(LogVerbosity.Info));
+        Assert.That(categories.Ui.DefaultVerbosity, Is.EqualTo(LogVerbosity.Warning), "Window traces are verbose.");
         Assert.That(categories.Temp.DefaultEnabled, Is.False);
         Assert.That(categories.Temp.DefaultVerbosity, Is.EqualTo(LogVerbosity.Verbose));
         var setting = new LogSetting(categories.Transfer);
